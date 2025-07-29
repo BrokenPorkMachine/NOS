@@ -6,6 +6,8 @@
 
 #define NITRFS_MAX_FILES 16
 #define NITRFS_NAME_LEN  32
+#define NITRFS_BLOCK_SIZE 512
+#define NITRFS_MAGIC      0x4652544E /* 'NTRF' */
 
 #define NITRFS_PERM_READ  0x1
 #define NITRFS_PERM_WRITE 0x2
@@ -30,5 +32,10 @@ int  nitrfs_write(nitrfs_fs_t *fs, int handle, uint32_t offset, const void *buf,
 int  nitrfs_read(nitrfs_fs_t *fs, int handle, uint32_t offset, void *buf, uint32_t len);
 int  nitrfs_compute_crc(nitrfs_fs_t *fs, int handle);
 int  nitrfs_verify(nitrfs_fs_t *fs, int handle);
+int  nitrfs_delete(nitrfs_fs_t *fs, int handle);
+size_t nitrfs_list(nitrfs_fs_t *fs, char names[][NITRFS_NAME_LEN], size_t max);
+/* Export/import the entire filesystem as a simple block image. */
+int  nitrfs_save_blocks(nitrfs_fs_t *fs, uint8_t *blocks, size_t max_blocks);
+int  nitrfs_load_blocks(nitrfs_fs_t *fs, const uint8_t *blocks, size_t blocks);
 
 #endif // NITRFS_H
