@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "../IDT/idt.h"
 #include "../VM/paging.h"
+#i#include "../Task/thread.h"
 
 #define VGA_TEXT_BUF 0xB8000
 
@@ -16,8 +17,17 @@ void vga_write(const char* s) {
 void kernel_main(void) {
     vga_write("Mach Microkernel: Boot OK");
     idt_install();
+    pic_remap();
+    pit_init(100);
     paging_init();
+    threads_init();
 
-    // Paging is now enabled! Try to access RAM and VGA normally.
+    // Start first thread
+    asm volatile(
+        "mov %0, %%rsp\n"
+        "call *%1\n"
+        : : "r"(current->rsp), "r"(current->func)
+    );
+
     while (1) __asm__ volatile ("hlt");
 }
