@@ -1,5 +1,6 @@
 #include <stdint.h>
-#include <io.h> // You'll implement port I/O here
+#include "io.h"
+#include "pic.h"
 
 #define PIC1 0x20
 #define PIC2 0xA0

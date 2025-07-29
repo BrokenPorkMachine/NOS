@@ -20,3 +20,14 @@ isr_syscall_stub:
     call isr_syscall_handler
     leave
     iretq
+
+global isr_default_stub
+isr_default_stub:
+    push rbp
+    mov rbp, rsp
+    cli
+    mov rdi, rsp
+    extern isr_default_handler
+    call isr_default_handler
+    leave
+    iretq

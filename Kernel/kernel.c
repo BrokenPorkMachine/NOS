@@ -3,6 +3,8 @@
 #include "../VM/paging.h"
 #include "../Task/thread.h"
 #include "../GDT/gdt.h"
+#include "../IO/pic.h"
+#include "../IO/pit.h"
 
 #define VGA_TEXT_BUF 0xB8000
 extern void user_task(void);
