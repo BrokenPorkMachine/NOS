@@ -2,7 +2,7 @@ CC = x86_64-elf-gcc
 LD = x86_64-elf-ld
 NASM = nasm
 
-CFLAGS  = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib
+CFLAGS  = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -fstack-protector-strong -D_FORTIFY_SOURCE=2
 LDFLAGS = -T kernel.ld -nostdlib
 
 # List all your object files here

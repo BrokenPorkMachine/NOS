@@ -1,5 +1,6 @@
 #include <efi.h>
 #include <efilib.h>
+#include "sha256.h"
 
 // ---- Configurable parameters ----
 #define KERNEL_PATH L"\\EFI\\BOOT\\kernel.bin"
@@ -77,6 +78,52 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         goto fail;
     }
 
+    // --- Verify kernel integrity via SHA-256 ---
+    EFI_FILE_HANDLE HashFile = NULL;
+    CHAR16 hash_path[] = L"\\EFI\\BOOT\\kernel.sha256";
+    status = uefi_call_wrapper(RootFS->Open, 5, RootFS, &HashFile, hash_path, EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(status) || !HashFile) {
+        Print(L"[ERR] Missing kernel.sha256\n");
+        goto fail;
+    }
+    CHAR8 hash_hex[65];
+    UINTN hash_size = sizeof(hash_hex) - 1;
+    status = uefi_call_wrapper(HashFile->Read, 3, HashFile, &hash_size, hash_hex);
+    uefi_call_wrapper(HashFile->Close, 1, HashFile);
+    if (EFI_ERROR(status) || hash_size < 64) {
+        Print(L"[ERR] Hash file read error\n");
+        goto fail;
+    }
+    hash_hex[64] = '\0';
+
+    UINT8 expected[32];
+    for (int i = 0; i < 32; ++i) {
+        UINT8 hi, lo;
+        CHAR8 c1 = hash_hex[i*2];
+        CHAR8 c2 = hash_hex[i*2+1];
+        if (c1 >= '0' && c1 <= '9') hi = c1 - '0';
+        else if (c1 >= 'a' && c1 <= 'f') hi = c1 - 'a' + 10;
+        else if (c1 >= 'A' && c1 <= 'F') hi = c1 - 'A' + 10;
+        else { Print(L"[ERR] Invalid hash format\n"); goto fail; }
+        if (c2 >= '0' && c2 <= '9') lo = c2 - '0';
+        else if (c2 >= 'a' && c2 <= 'f') lo = c2 - 'a' + 10;
+        else if (c2 >= 'A' && c2 <= 'F') lo = c2 - 'A' + 10;
+        else { Print(L"[ERR] Invalid hash format\n"); goto fail; }
+        expected[i] = (hi << 4) | lo;
+    }
+
+    UINT8 digest[32];
+    SHA256_CTX ctx;
+    sha256_init(&ctx);
+    sha256_update(&ctx, (UINT8 *)KernelAddr, KernelSize);
+    sha256_final(&ctx, digest);
+    for (int i = 0; i < 32; ++i) {
+        if (digest[i] != expected[i]) {
+            Print(L"[ERR] Kernel hash mismatch\n");
+            goto fail;
+        }
+    }
+
     // --- Clean up handles and buffers ---
     uefi_call_wrapper(KernelFile->Close, 1, KernelFile);
     uefi_call_wrapper(RootFS->Close, 1, RootFS);
@@ -85,7 +132,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         FreePool(FileInfo);
     }
 
-    // --- Optionally: signature/hash check (TODO for next level security) ---
+    // --- Integrity check complete ---
 
     // --- Prepare memory map ---
     UINTN mmap_size = 0, mmap_key = 0, desc_size = 0;
