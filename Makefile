@@ -1,5 +1,6 @@
-CC = x86_64-linux-gnu-gcc
-LD = x86_64-linux-gnu-ld
+CC = x86_64-elf-gcc
+LD = x86_64-elf-ld
+
 NASM = nasm
 
 	CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib
