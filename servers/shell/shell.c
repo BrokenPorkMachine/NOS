@@ -2,9 +2,12 @@
 #include "../../src/libc.h"
 #include "../nitrfs/nitrfs.h"
 #include "../nitrfs/server.h"
-#include "../../Task/thread.h"
 #include "../../IO/keyboard.h"
 #include <stdint.h>
+
+static inline void sys_yield(void) {
+    asm volatile("mov $0, %%rax; int $0x80" ::: "rax");
+}
 
 #define VGA_TEXT_BUF 0xB8000
 static int row = 12;
@@ -47,12 +50,12 @@ static char getchar_block(void) {
         if (sc >= 0 && !(sc & 0x80))
             c = scancode_to_ascii(sc);
         if (!c)
-            thread_yield();
+            sys_yield();
     }
     return c;
 }
 
-void shell_main(ipc_queue_t *q) {
+void shell_main(ipc_queue_t *q, uint32_t self_id) {
     ipc_message_t msg, reply;
     int handle = -1;
 
@@ -72,8 +75,8 @@ void shell_main(ipc_queue_t *q) {
             msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
             strncpy((char *)msg.data, "file.txt", IPC_MSG_DATA_MAX);
             msg.len = strlen("file.txt");
-            ipc_send(q, &msg);
-            ipc_receive(q, &reply);
+            ipc_send(q, self_id, &msg);
+            ipc_receive(q, self_id, &reply);
             handle = reply.arg1;
             puts_vga("created\n");
             break;
@@ -84,8 +87,8 @@ void shell_main(ipc_queue_t *q) {
             strncpy((char *)msg.data, "data", IPC_MSG_DATA_MAX);
             msg.arg2 = 4;
             msg.len  = 4;
-            ipc_send(q, &msg);
-            ipc_receive(q, &reply);
+            ipc_send(q, self_id, &msg);
+            ipc_receive(q, self_id, &reply);
             puts_vga("wrote\n");
             break;
         case '3':
@@ -94,8 +97,8 @@ void shell_main(ipc_queue_t *q) {
             msg.arg1 = handle;
             msg.arg2 = IPC_MSG_DATA_MAX;
             msg.len  = 0;
-            ipc_send(q, &msg);
-            ipc_receive(q, &reply);
+            ipc_send(q, self_id, &msg);
+            ipc_receive(q, self_id, &reply);
             if (reply.arg1 == 0) {
                 reply.data[reply.len] = '\0';
                 puts_vga((char *)reply.data);
@@ -105,8 +108,8 @@ void shell_main(ipc_queue_t *q) {
         case '4':
             msg.type = NITRFS_MSG_LIST;
             msg.len  = 0;
-            ipc_send(q, &msg);
-            ipc_receive(q, &reply);
+            ipc_send(q, self_id, &msg);
+            ipc_receive(q, self_id, &reply);
             for (int i=0;i<reply.arg1;i++) {
                 puts_vga((char *)reply.data + i*NITRFS_NAME_LEN);
                 putc_vga('\n');
@@ -117,8 +120,8 @@ void shell_main(ipc_queue_t *q) {
             msg.type = NITRFS_MSG_CRC;
             msg.arg1 = handle;
             msg.len  = 0;
-            ipc_send(q, &msg);
-            ipc_receive(q, &reply);
+            ipc_send(q, self_id, &msg);
+            ipc_receive(q, self_id, &reply);
             if (reply.arg1==0) {
                 puts_vga("crc ok\n");
             } else {
@@ -130,8 +133,8 @@ void shell_main(ipc_queue_t *q) {
             msg.type = NITRFS_MSG_VERIFY;
             msg.arg1 = handle;
             msg.len  = 0;
-            ipc_send(q, &msg);
-            ipc_receive(q, &reply);
+            ipc_send(q, self_id, &msg);
+            ipc_receive(q, self_id, &reply);
             puts_vga(reply.arg1==0?"verify ok\n":"verify bad\n");
             break;
         default:
