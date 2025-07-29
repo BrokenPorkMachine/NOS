@@ -68,6 +68,34 @@
 
 ---
 
+## User Environment
+
+NitrOS boots directly into a minimal set of user-mode services. A small
+shell task communicates with the **NitrFS** filesystem server purely
+through IPC to showcase how higher level applications will interact with
+the kernel and each other.
+
+### Shell Commands
+
+When the shell starts it prints:
+
+```
+NOS shell ready
+1:create 2:write 3:read 4:list 5:crc 6:verify
+```
+
+The single-character commands provide a very small interface for testing
+NitrFS:
+
+1. `1` – create a file called `file.txt` with read/write permissions
+2. `2` – write the string `data` to the file
+3. `3` – read back the file contents
+4. `4` – list all files stored in NitrFS
+5. `5` – compute and store a CRC32 checksum for the file
+6. `6` – verify the stored checksum against the file data
+
+---
+
 ## How It Works
 
 1. **UEFI bootloader** loads the kernel from `/EFI/BOOT/kernel.bin` into RAM and jumps to its entry point in long mode.

@@ -73,6 +73,7 @@ This file is intended as a high-level guide and technical reference for all cont
 * **Examples:**
 
   * **NitrFS server:** Secure in-memory filesystem via IPC
+  * **Shell server:** Simple command interpreter using IPC
   * **Device driver server:** Handles input/output to actual hardware, passes events/data to other agents
   * **Demo tasks:** Print to VGA, test syscalls, simple multi-threaded demos
 * **Interactions:**
