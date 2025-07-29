@@ -94,6 +94,17 @@ NitrFS:
 5. `5` – compute and store a CRC32 checksum for the file
 6. `6` – verify the stored checksum against the file data
 
+To make the environment more familiar, a full command set is planned with
+standard names:
+
+* `cd` – change the working directory
+* `ls` or `dir` – list directory contents
+* `mkdir` – create a new directory
+* `mv` – move or rename a file
+* `rm` – remove a file or directory
+* `cat` – display file contents
+* `help` – show available commands
+
 ---
 
 ## How It Works
