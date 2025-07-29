@@ -3,7 +3,7 @@ LD      = ld
 ARCH    = x86_64
 EFIINC  = /usr/include/efi
 EFILIB  = /usr/lib
-CFLAGS  = -O2 -fpic -fshort-wchar -mno-red-zone -Wall \
+CFLAGS  = -O2 -fpic -fshort-wchar -Wall \
           -I$(EFIINC) -I$(EFIINC)/$(ARCH) -DEFI_FUNCTION_WRAPPER
 LDFLAGS = -nostdlib -znocombreloc -T $(EFILIB)/elf_$(ARCH)_efi.lds -shared -Bsymbolic
 
