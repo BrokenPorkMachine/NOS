@@ -11,6 +11,8 @@ void nitrfs_server(ipc_queue_t *q) {
     for (;;) {
         if (ipc_receive(q, &msg) != 0)
             continue;
+        if (msg.len > IPC_MSG_DATA_MAX)
+            continue; /* ignore bogus message */
         int handle;
         int ret;
         switch (msg.type) {
@@ -18,6 +20,7 @@ void nitrfs_server(ipc_queue_t *q) {
             ret = nitrfs_create(&fs, (const char*)msg.data, msg.arg1, msg.arg2);
             reply.type = msg.type;
             reply.arg1 = ret;
+            reply.len  = 0;
             ipc_send(q, &reply);
             break;
         case NITRFS_MSG_WRITE:
@@ -25,6 +28,7 @@ void nitrfs_server(ipc_queue_t *q) {
             ret = nitrfs_write(&fs, handle, 0, msg.data, msg.arg2);
             reply.type = msg.type;
             reply.arg1 = ret;
+            reply.len  = 0;
             ipc_send(q, &reply);
             break;
         case NITRFS_MSG_READ:
@@ -33,6 +37,7 @@ void nitrfs_server(ipc_queue_t *q) {
             reply.type = msg.type;
             reply.arg1 = ret;
             reply.arg2 = msg.arg2;
+            reply.len  = (ret==0)? msg.arg2 : 0;
             ipc_send(q, &reply);
             break;
         case NITRFS_MSG_DELETE:
@@ -40,12 +45,14 @@ void nitrfs_server(ipc_queue_t *q) {
             ret = nitrfs_delete(&fs, handle);
             reply.type = msg.type;
             reply.arg1 = ret;
+            reply.len  = 0;
             ipc_send(q, &reply);
             break;
         case NITRFS_MSG_LIST:
             reply.arg1 = nitrfs_list(&fs, (char (*)[NITRFS_NAME_LEN])reply.data,
                                      IPC_MSG_DATA_MAX / NITRFS_NAME_LEN);
             reply.type = msg.type;
+            reply.len  = reply.arg1 * NITRFS_NAME_LEN;
             ipc_send(q, &reply);
             break;
         case NITRFS_MSG_CRC:
@@ -55,6 +62,7 @@ void nitrfs_server(ipc_queue_t *q) {
             reply.arg1 = ret;
             if (ret == 0)
                 reply.arg2 = fs.files[handle].crc32;
+            reply.len  = 0;
             ipc_send(q, &reply);
             break;
         case NITRFS_MSG_VERIFY:
@@ -62,6 +70,7 @@ void nitrfs_server(ipc_queue_t *q) {
             ret = nitrfs_verify(&fs, handle);
             reply.type = msg.type;
             reply.arg1 = ret;
+            reply.len  = 0;
             ipc_send(q, &reply);
             break;
         default:
