@@ -14,11 +14,11 @@ static int next_id = 1;
 ipc_queue_t fs_queue;
 
 static void thread_fs_func(void) {
-    nitrfs_server(&fs_queue);
+    nitrfs_server(&fs_queue, current->id);
 }
 
 static void thread_shell_func(void) {
-    shell_main(&fs_queue);
+    shell_main(&fs_queue, current->id);
 }
 
 thread_t *thread_create(void (*func)(void)) {

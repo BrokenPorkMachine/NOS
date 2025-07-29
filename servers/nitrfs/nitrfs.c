@@ -1,6 +1,5 @@
 #include "nitrfs.h"
-#include <string.h>
-#include <stdlib.h>
+#include "../../src/libc.h"
 
 static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
     uint32_t crc = ~0u;

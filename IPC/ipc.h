@@ -25,7 +25,7 @@ typedef struct {
 } ipc_queue_t;
 
 void ipc_init(ipc_queue_t *q, uint32_t send_mask, uint32_t recv_mask);
-int  ipc_send(ipc_queue_t *q, ipc_message_t *msg);
-int  ipc_receive(ipc_queue_t *q, ipc_message_t *msg);
+int  ipc_send(ipc_queue_t *q, uint32_t sender_id, ipc_message_t *msg);
+int  ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg);
 
 #endif // IPC_H

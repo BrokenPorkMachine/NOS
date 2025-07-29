@@ -12,5 +12,5 @@ enum {
     NITRFS_MSG_VERIFY
 };
 
-void nitrfs_server(ipc_queue_t *q);
+void nitrfs_server(ipc_queue_t *q, uint32_t self_id);
 #endif
