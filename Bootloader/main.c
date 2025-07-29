@@ -135,6 +135,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
 
 fail:
     Print(L"[Bootloader] HALT\n");
-    while (1) { __asm__ __volatile__ ("hlt"); }
+    while (1) { __asm__ __volatile__ ("hlt" ::: "memory"); }
     return EFI_LOAD_ERROR;
 }
