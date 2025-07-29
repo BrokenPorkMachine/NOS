@@ -3,7 +3,10 @@
 NitrFS is the reference filesystem server for NitrOS. It aims to provide a
 small but secure storage implementation for early user space. The current
 implementation is a simple RAM-based filesystem that demonstrates the
-message-passing design.
+message-passing design. The API now includes helpers to list and delete files so
+that higher level servers can manage storage without directly accessing the file
+table. In addition, NitrFS can export and import its contents as a block image,
+laying the groundwork for persistent storage.
 
 ## Design Goals
 
