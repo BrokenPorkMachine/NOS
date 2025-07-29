@@ -7,3 +7,12 @@ void isr_default_handler(uint64_t *rsp) {
         vga[i*2] = msg[i];
     while (1) __asm__ volatile ("hlt");
 }
+
+void isr_timer_handler(void) {
+    static int ticks = 0;
+    ++ticks;
+    // Write a clock value to VGA
+    volatile char* vga = (char*)0xB8000 + 160;
+    vga[0] = '0' + (ticks % 10);
+    // TODO: Add scheduling/context switch logic here!
+}
