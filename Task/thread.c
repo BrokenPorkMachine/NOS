@@ -13,6 +13,7 @@ void thread_func1(void) {
         volatile char *vga = (char*)0xB8000 + 320; // 3rd line
         vga[0] = 'A';
         for (volatile int i = 0; i < 1000000; ++i); // delay
+        schedule();
     }
 }
 void thread_func2(void) {
@@ -20,6 +21,7 @@ void thread_func2(void) {
         volatile char *vga = (char*)0xB8000 + 324; // 4th line
         vga[0] = 'B';
         for (volatile int i = 0; i < 1000000; ++i);
+        schedule();
     }
 }
 
@@ -39,4 +41,10 @@ void threads_init(void) {
     thread2.id = 2;
     thread2.next = &thread1;
     *(uint64_t*)(&stack2[STACK_SIZE-16]) = (uint64_t)thread_func2;
+}
+
+void schedule(void) {
+    thread_t *prev = current;
+    current = current->next;
+    context_switch(&prev->rsp, current->rsp);
 }
