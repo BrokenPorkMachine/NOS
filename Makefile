@@ -20,6 +20,9 @@ OBJS = \
   GDT/gdt.o \
   GDT/gdt_flush.o \
   GDT/user.o \
+  servers/nitrfs/nitrfs.o \
+  servers/nitrfs/server.o \
+  servers/shell/shell.o \
   IPC/ipc.o \
   libc.o
 
@@ -66,10 +69,19 @@ GDT/gdt.o: GDT/gdt.c
 
 GDT/gdt_flush.o: GDT/gdt.asm
 	$(NASM) -f elf64 $< -o $@
-
+	
 GDT/user.o: GDT/user.c
 	$(CC) $(CFLAGS) -c $< -o $@
-
+	
+servers/nitrfs/nitrfs.o: servers/nitrfs/nitrfs.c servers/nitrfs/nitrfs.h
+	$(CC) $(CFLAGS) -c $< -o $@
+	
+servers/nitrfs/server.o: servers/nitrfs/server.c servers/nitrfs/nitrfs.h IPC/ipc.h
+	$(CC) $(CFLAGS) -IIPC -Isrc -c $< -o $@
+	
+servers/shell/shell.o: servers/shell/shell.c servers/nitrfs/nitrfs.h IPC/ipc.h
+	$(CC) $(CFLAGS) -IIPC -Isrc -c $< -o $@
+	
 IPC/ipc.o: IPC/ipc.c IPC/ipc.h
 	$(CC) $(CFLAGS) -c $< -o $@
 

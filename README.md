@@ -58,6 +58,7 @@
 /Bootloader    # UEFI bootloader source (main.c, Makefile)
 /kernel        # Kernel sources (kernel.c, idt.c, gdt.c, ...)
 /servers/nitrfs # NitrFS filesystem server
+/servers/shell  # Simple demonstration shell
 /agents        # Reference docs and AGENTS.md
 /              # Root: Makefile, linker scripts, README.md
 ```
@@ -88,7 +89,7 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 * [x] Basic IPC primitives (prototype)
 * [x] NitrFS filesystem server (block storage capable)
 * [ ] Window server and networking agents
-* [ ] Shell and developer tools
+* [x] Shell and developer tools (prototype shell)
 
 ---
 
