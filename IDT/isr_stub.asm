@@ -11,6 +11,18 @@ isr_timer_stub:
     leave
     iretq
 
+global isr_default_stub
+isr_default_stub:
+    push rbp
+    mov rbp, rsp
+    cli
+    extern isr_default_handler
+    call isr_default_handler
+    mov al, 0x20
+    out 0x20, al
+    leave
+    iretq
+
 global isr_syscall_stub
 isr_syscall_stub:
     push rbp

@@ -24,11 +24,14 @@ void paging_init(void) {
     // Enable paging and write-protect kernel
     uint64_t cr0, cr4, efer;
     asm volatile("mov %%cr4, %0" : "=r"(cr4));
-    cr4 |= (1 << 5); // PAE
+    cr4 |= (1 << 5);  // PAE
+    cr4 |= (1 << 20); // SMEP
+    cr4 |= (1 << 21); // SMAP
     asm volatile("mov %0, %%cr4" : : "r"(cr4));
 
     asm volatile("mov $0xC0000080, %%ecx; rdmsr" : "=a"(efer) : : "ecx", "edx");
-    efer |= (1 << 8); // LME (Long mode enable)
+    efer |= (1 << 8);  // LME (Long mode enable)
+    efer |= (1 << 11); // NXE (Enable NX bit)
     asm volatile("mov $0xC0000080, %%ecx; wrmsr" : : "a"(efer), "d"(0) : "ecx");
 
     asm volatile("mov %%cr0, %0" : "=r"(cr0));
