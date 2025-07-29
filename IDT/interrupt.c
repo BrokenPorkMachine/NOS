@@ -16,5 +16,5 @@ void isr_timer_handler(void) {
     volatile char* vga = (char*)0xB8000 + 160;
     vga[0] = '0' + (ticks % 10);
     // Preempt current thread on each timer tick
-    schedule();
+    thread_yield();
 }
