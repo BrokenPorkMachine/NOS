@@ -1,46 +1,46 @@
 #include "thread.h"
+#include "../IPC/ipc.h"
+#include "../servers/nitrfs/server.h"
+#include "../servers/shell/shell.h"
+
+// Shell and filesystem server run as cooperative threads
+
 #define STACK_SIZE 4096
 
-thread_t thread1, thread2;
-thread_t *current = &thread1;
+thread_t thread_fs, thread_shell;
+thread_t *current = &thread_fs;
 
-// Thread stacks
-char stack1[STACK_SIZE], stack2[STACK_SIZE];
+ipc_queue_t fs_queue;
 
-void thread_func1(void) {
-    while (1) {
-        // Print something on the screen, or update a variable
-        volatile char *vga = (char*)0xB8000 + 320; // 3rd line
-        vga[0] = 'A';
-        for (volatile int i = 0; i < 1000000; ++i); // delay
-        schedule();
-    }
+static char stack_fs[STACK_SIZE];
+static char stack_shell[STACK_SIZE];
+
+static void thread_fs_func(void) {
+    nitrfs_server(&fs_queue);
 }
-void thread_func2(void) {
-    while (1) {
-        volatile char *vga = (char*)0xB8000 + 324; // 4th line
-        vga[0] = 'B';
-        for (volatile int i = 0; i < 1000000; ++i);
-        schedule();
-    }
+
+static void thread_shell_func(void) {
+    shell_main(&fs_queue);
 }
 
 void threads_init(void) {
-    // Set up thread1
-    thread1.stack = stack1;
-    thread1.rsp = (uint64_t)&stack1[STACK_SIZE-16];
-    thread1.func = thread_func1;
-    thread1.id = 1;
-    thread1.next = &thread2;
-    *(uint64_t*)(&stack1[STACK_SIZE-16]) = (uint64_t)thread_func1;
+    ipc_init(&fs_queue);
 
-    // Set up thread2
-    thread2.stack = stack2;
-    thread2.rsp = (uint64_t)&stack2[STACK_SIZE-16];
-    thread2.func = thread_func2;
-    thread2.id = 2;
-    thread2.next = &thread1;
-    *(uint64_t*)(&stack2[STACK_SIZE-16]) = (uint64_t)thread_func2;
+    // Filesystem server thread
+    thread_fs.stack = stack_fs;
+    thread_fs.rsp = (uint64_t)&stack_fs[STACK_SIZE-16];
+    thread_fs.func = thread_fs_func;
+    thread_fs.id = 1;
+    thread_fs.next = &thread_shell;
+    *(uint64_t*)(&stack_fs[STACK_SIZE-16]) = (uint64_t)thread_fs_func;
+
+    // Shell thread
+    thread_shell.stack = stack_shell;
+    thread_shell.rsp = (uint64_t)&stack_shell[STACK_SIZE-16];
+    thread_shell.func = thread_shell_func;
+    thread_shell.id = 2;
+    thread_shell.next = &thread_fs;
+    *(uint64_t*)(&stack_shell[STACK_SIZE-16]) = (uint64_t)thread_shell_func;
 }
 
 void schedule(void) {
