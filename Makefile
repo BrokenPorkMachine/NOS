@@ -1,26 +1,26 @@
-CC = x86_64-elf-gcc
-LD = x86_64-elf-ld
+CC      = /opt/cross/bin/x86_64-elf-gcc
+LD      = /opt/cross/bin/x86_64-elf-ld
+NASM    = nasm
 
-NASM = nasm
-
-	CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib
+CFLAGS  = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib
 LDFLAGS = -T Kernel/kernel.ld -nostdlib
 
 OBJS = \
-Kernel/kernel_entry.o \
-Kernel/kernel.o \
-IDT/idt.o \
-IDT/interrupt.o \
-IDT/isr_stub.o \
-IO/pic.o \
-IO/pit.o \
-VM/paging.o \
-Task/thread.o \
-Task/context_switch.o \
-Task/user_mode.o \
-GDT/gdt.o \
-GDT/gdt_flush.o \
-GDT/user.o
+  Kernel/kernel_entry.o \
+  Kernel/kernel.o \
+  IDT/idt.o \
+  IDT/interrupt.o \
+  IDT/isr_stub.o \
+  IO/pic.o \
+  IO/pit.o \
+  VM/paging.o \
+  Task/thread.o \
+  Task/context_switch.o \
+  Task/user_mode.o \
+  GDT/gdt.o \
+  GDT/gdt_flush.o \
+  GDT/user.o \
+  libc.o
 
 all: kernel.bin bootloader
 
@@ -67,6 +67,9 @@ GDT/gdt_flush.o: GDT/gdt.asm
 	$(NASM) -f elf64 $< -o $@
 
 GDT/user.o: GDT/user.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/libc.o: src/ibc.c src/libc.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 kernel.bin: $(OBJS)
