@@ -69,7 +69,7 @@ GDT/gdt_flush.o: GDT/gdt.asm
 GDT/user.o: GDT/user.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-libc.o: src/ibc.c src/libc.h
+libc.o: src/libc.c src/libc.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 kernel.bin: $(OBJS)
