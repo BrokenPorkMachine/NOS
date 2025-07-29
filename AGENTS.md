@@ -17,7 +17,7 @@ This file is intended as a high-level guide and technical reference for all cont
 | Bootloader           | Ring 0    | UEFI app    | Loads kernel, passes boot info, exits      |
 | Mach Microkernel     | Ring 0    | Kernel      | Scheduling, memory, IPC, trap/syscall, IRQ |
 | User Task/Thread     | Ring 3    | User proc   | Runs app/server code, uses syscalls, IPC   |
-| Filesystem Server    | Ring 3    | User server | Implements filesystem via IPC              |
+| NitrFS Server       | Ring 3    | User server | Secure in-memory filesystem              |
 | Device Driver Server | Ring 3    | User server | Handles hardware via IPC (keyboard, disk)  |
 | Window Server        | Ring 3    | User server | (Planned) Manages GUI, display, input      |
 | IPC Subsystem        | Kernel    | Logic/Abstr | Manages message passing, port rights       |
@@ -72,7 +72,7 @@ This file is intended as a high-level guide and technical reference for all cont
   * Serve as Mach “servers”: file system, device drivers, networking, GUI, etc.
 * **Examples:**
 
-  * **Filesystem server:** Responds to file read/write/open requests from user processes via IPC
+  * **NitrFS server:** Secure in-memory filesystem via IPC
   * **Device driver server:** Handles input/output to actual hardware, passes events/data to other agents
   * **Demo tasks:** Print to VGA, test syscalls, simple multi-threaded demos
 * **Interactions:**
@@ -147,6 +147,7 @@ This file is intended as a high-level guide and technical reference for all cont
 * **User Tasks:** All application logic, servers, drivers, networking, GUI
 * **IPC Subsystem:** Messaging/port framework binding the whole OS
 * **Servers:** (FS, device, network, display, etc) implemented as user agents
+* **NitrFS:** Initial secure in-memory filesystem server
 
 ---
 
