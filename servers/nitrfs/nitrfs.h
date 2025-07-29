@@ -36,6 +36,7 @@ int  nitrfs_delete(nitrfs_fs_t *fs, int handle);
 size_t nitrfs_list(nitrfs_fs_t *fs, char names[][NITRFS_NAME_LEN], size_t max);
 /* Export/import the entire filesystem as a simple block image. */
 int  nitrfs_save_blocks(nitrfs_fs_t *fs, uint8_t *blocks, size_t max_blocks);
-int  nitrfs_load_blocks(nitrfs_fs_t *fs, const uint8_t *blocks, size_t blocks);
+int  nitrfs_load_blocks(nitrfs_fs_t *fs, const uint8_t *blocks,
+                        size_t blocks_cnt);
 
 #endif // NITRFS_H

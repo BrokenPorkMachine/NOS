@@ -17,6 +17,7 @@
 * Basic thread and task abstractions
 * Mach-style IPC message passing (prototype queue implementation)
 * NitrFS secure in-memory filesystem server with optional block storage
+* Simple secure heap allocator for user-space memory
 * All device drivers, filesystems, and networking to run as user-mode agents
 
 ---
@@ -87,7 +88,7 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 
 * [ ] User/kernel context switching (done)
 * [ ] System call interface (done)
-* [ ] Minimal user task/server demo (done)
+* [ ] Interactive user task/server framework (done)
 * [x] Basic IPC primitives (prototype)
 * [x] NitrFS filesystem server (block storage capable)
 * [ ] Window server and networking agents

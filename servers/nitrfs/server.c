@@ -1,14 +1,7 @@
 #include "nitrfs.h"
 #include "../../IPC/ipc.h"
 #include "../../src/libc.h"
-
-enum {
-    NITRFS_MSG_CREATE = 1,
-    NITRFS_MSG_WRITE,
-    NITRFS_MSG_READ,
-    NITRFS_MSG_DELETE,
-    NITRFS_MSG_LIST
-};
+#include "server.h"
 
 void nitrfs_server(ipc_queue_t *q) {
     nitrfs_fs_t fs;
@@ -53,6 +46,22 @@ void nitrfs_server(ipc_queue_t *q) {
             reply.arg1 = nitrfs_list(&fs, (char (*)[NITRFS_NAME_LEN])reply.data,
                                      IPC_MSG_DATA_MAX / NITRFS_NAME_LEN);
             reply.type = msg.type;
+            ipc_send(q, &reply);
+            break;
+        case NITRFS_MSG_CRC:
+            handle = msg.arg1;
+            ret = nitrfs_compute_crc(&fs, handle);
+            reply.type = msg.type;
+            reply.arg1 = ret;
+            if (ret == 0)
+                reply.arg2 = fs.files[handle].crc32;
+            ipc_send(q, &reply);
+            break;
+        case NITRFS_MSG_VERIFY:
+            handle = msg.arg1;
+            ret = nitrfs_verify(&fs, handle);
+            reply.type = msg.type;
+            reply.arg1 = ret;
             ipc_send(q, &reply);
             break;
         default:
