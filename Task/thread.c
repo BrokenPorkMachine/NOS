@@ -40,3 +40,9 @@ void threads_init(void) {
     thread2.next = &thread1;
     *(uint64_t*)(&stack2[STACK_SIZE-16]) = (uint64_t)thread_func2;
 }
+
+void schedule(void) {
+    thread_t *prev = current;
+    current = current->next;
+    context_switch(&prev->rsp, current->rsp);
+}

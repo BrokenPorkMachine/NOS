@@ -5,9 +5,9 @@
 #include "../GDT/gdt.h"
 #include "../IO/pic.h"
 #include "../IO/pit.h"
+#include "syscall.h"
 
 #define VGA_TEXT_BUF 0xB8000
-extern void user_task(void);
 
 void vga_write(const char* s) {
     volatile uint16_t* vga = (uint16_t*)VGA_TEXT_BUF;
@@ -20,9 +20,9 @@ void vga_write(const char* s) {
 
 // Setup a minimal handler for int $0x80 (IDT vector 0x80)
 void isr_syscall_handler(void) {
-    // Print to VGA to prove kernel is back
-    volatile char* vga = (char*)0xB8000 + 160;
-    vga[0] = 'K';
+    uint64_t num;
+    asm volatile("mov %%rax, %0" : "=r"(num));
+    syscall_handle(num);
 }
 
 void kernel_main(void) {
@@ -36,15 +36,6 @@ void kernel_main(void) {
 
     // --- Setup IDT, paging, PIT, etc. here ---
     // Install int 0x80 handler in IDT (pointing to isr_syscall_stub, not shown)
-
-    // Allocate a user stack
-    static uint8_t user_stack[4096];
-    uint64_t user_stack_top = (uint64_t)&user_stack[4096];
-
-    // Jump to user mode!
-    enter_user_mode((uint64_t)user_task, user_stack_top);
-
-    while (1) __asm__ volatile ("hlt");
 
     // Start first thread
     asm volatile(

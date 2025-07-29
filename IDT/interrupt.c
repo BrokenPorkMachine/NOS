@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "../Task/thread.h"
 void isr_default_handler(uint64_t *rsp) {
     // You could output to serial here or VGA
     volatile char *vga = (char*)0xB8000 + 160; // Line 2
@@ -14,5 +15,5 @@ void isr_timer_handler(void) {
     // Write a clock value to VGA
     volatile char* vga = (char*)0xB8000 + 160;
     vga[0] = '0' + (ticks % 10);
-    // TODO: Add scheduling/context switch logic here!
+    schedule();
 }

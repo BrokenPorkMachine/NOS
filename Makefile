@@ -19,7 +19,8 @@ Task/context_switch.o \
 Task/user_mode.o \
 GDT/gdt.o \
 GDT/gdt_flush.o \
-GDT/user.o
+GDT/user.o \
+Kernel/syscall.o
 
 all: kernel.bin bootloader
 
@@ -31,6 +32,9 @@ Kernel/kernel_entry.o: Kernel/kernel_entry.asm
 
 Kernel/kernel.o: Kernel/kernel.c
 	$(CC) $(CFLAGS) -c $< -o $@
+Kernel/syscall.o: Kernel/syscall.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
 
 IDT/idt.o: IDT/idt.c
 	$(CC) $(CFLAGS) -c $< -o $@
