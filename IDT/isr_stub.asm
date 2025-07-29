@@ -32,3 +32,27 @@ isr_default_stub:
     call isr_default_handler
     leave
     iretq
+
+global isr_keyboard_stub
+isr_keyboard_stub:
+    push rbp
+    mov rbp, rsp
+    cli
+    extern isr_keyboard_handler
+    call isr_keyboard_handler
+    mov al, 0x20
+    out 0x20, al
+    leave
+    iretq
+
+global isr_mouse_stub
+isr_mouse_stub:
+    push rbp
+    mov rbp, rsp
+    cli
+    extern isr_mouse_handler
+    call isr_mouse_handler
+    mov al, 0x20
+    out 0x20, al
+    leave
+    iretq
