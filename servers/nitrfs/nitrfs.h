@@ -1,0 +1,34 @@
+#ifndef NITRFS_H
+#define NITRFS_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+#define NITRFS_MAX_FILES 16
+#define NITRFS_NAME_LEN  32
+
+#define NITRFS_PERM_READ  0x1
+#define NITRFS_PERM_WRITE 0x2
+
+typedef struct {
+    char     name[NITRFS_NAME_LEN];
+    uint8_t *data;
+    uint32_t size;
+    uint32_t capacity;
+    uint32_t perm;
+    uint32_t crc32;
+} nitrfs_file_t;
+
+typedef struct {
+    nitrfs_file_t files[NITRFS_MAX_FILES];
+    size_t file_count;
+} nitrfs_fs_t;
+
+void nitrfs_init(nitrfs_fs_t *fs);
+int  nitrfs_create(nitrfs_fs_t *fs, const char *name, uint32_t capacity, uint32_t perm);
+int  nitrfs_write(nitrfs_fs_t *fs, int handle, uint32_t offset, const void *buf, uint32_t len);
+int  nitrfs_read(nitrfs_fs_t *fs, int handle, uint32_t offset, void *buf, uint32_t len);
+int  nitrfs_compute_crc(nitrfs_fs_t *fs, int handle);
+int  nitrfs_verify(nitrfs_fs_t *fs, int handle);
+
+#endif // NITRFS_H

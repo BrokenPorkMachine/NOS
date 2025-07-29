@@ -16,6 +16,7 @@
 * Interrupt handling (IDT, PIT, PIC)
 * Basic thread and task abstractions
 * Mach-style IPC message passing (foundation for future servers)
+* NitrFS secure in-memory filesystem server
 * All device drivers, filesystems, and networking to run as user-mode agents
 
 ---
@@ -56,7 +57,7 @@
 ```
 /Bootloader    # UEFI bootloader source (main.c, Makefile)
 /kernel        # Kernel sources (kernel.c, idt.c, gdt.c, ...)
-/servers       # Planned: User-mode servers (fs, drivers, etc)
+/servers/nitrfs # NitrFS filesystem server
 /agents        # Reference docs and AGENTS.md
 /              # Root: Makefile, linker scripts, README.md
 ```
@@ -85,7 +86,7 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 * [ ] System call interface (done)
 * [ ] Minimal user task/server demo (done)
 * [ ] Basic IPC primitives (in progress)
-* [ ] User-mode filesystem/driver servers
+* [ ] NitrFS filesystem server (in progress)
 * [ ] Window server and networking agents
 * [ ] Shell and developer tools
 
