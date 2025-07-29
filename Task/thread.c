@@ -2,6 +2,7 @@
 #include "../IPC/ipc.h"
 #include "../servers/nitrfs/server.h"
 #include "../servers/shell/shell.h"
+#include <stdint.h>
 
 // Shell and filesystem server run as cooperative threads
 
@@ -29,19 +30,33 @@ void threads_init(void) {
 
     // Filesystem server thread
     thread_fs.stack = stack_fs;
-    thread_fs.rsp = (uint64_t)&stack_fs[STACK_SIZE-16];
+    uint64_t *sp = (uint64_t *)&stack_fs[STACK_SIZE];
+    *--sp = 0; // rbp
+    *--sp = 0; // rbx
+    *--sp = 0; // r12
+    *--sp = 0; // r13
+    *--sp = 0; // r14
+    *--sp = 0; // r15
+    *--sp = (uint64_t)thread_fs_func; // return address
+    thread_fs.rsp = (uint64_t)sp;
     thread_fs.func = thread_fs_func;
     thread_fs.id = 1;
     thread_fs.next = &thread_shell;
-    *(uint64_t*)(&stack_fs[STACK_SIZE-16]) = (uint64_t)thread_fs_func;
 
     // Shell thread
     thread_shell.stack = stack_shell;
-    thread_shell.rsp = (uint64_t)&stack_shell[STACK_SIZE-16];
+    sp = (uint64_t *)&stack_shell[STACK_SIZE];
+    *--sp = 0; // rbp
+    *--sp = 0; // rbx
+    *--sp = 0; // r12
+    *--sp = 0; // r13
+    *--sp = 0; // r14
+    *--sp = 0; // r15
+    *--sp = (uint64_t)thread_shell_func;
+    thread_shell.rsp = (uint64_t)sp;
     thread_shell.func = thread_shell_func;
     thread_shell.id = 2;
     thread_shell.next = &thread_fs;
-    *(uint64_t*)(&stack_shell[STACK_SIZE-16]) = (uint64_t)thread_shell_func;
 }
 
 void schedule(void) {

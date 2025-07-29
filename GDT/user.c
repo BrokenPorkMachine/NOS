@@ -2,13 +2,14 @@
 
 void __attribute__((naked)) user_task(void) {
     asm volatile(
-        "mov $'U', %%al\n"
-        "mov $0xB8000, %%rbx\n"
-        "mov %%al, (%%rbx)\n"
-        "mov $0, %%rax\n"    // syscall: yield
-        "int $0x80\n"       // Trap back to kernel
+        "lea message(%%rip), %%rdi\n"
+        "mov $1, %%rax\n"  // SYS_WRITE_VGA
+        "int $0x80\n"
+        "mov $0, %%rax\n"  // SYS_YIELD
+        "int $0x80\n"
         "1: hlt\n"
         "jmp 1b\n"
-        :::"rbx", "al"
+        "message: .asciz \"U-task\n\""
+        : : : "rdi", "rax"
     );
 }

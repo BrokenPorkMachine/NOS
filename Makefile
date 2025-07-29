@@ -25,6 +25,7 @@ OBJS = \
   GDT/gdt.o \
   GDT/gdt_flush.o \
   GDT/user.o \
+  Kernel/syscall.o \
   servers/nitrfs/nitrfs.o \
   servers/nitrfs/server.o \
   servers/shell/shell.o \
@@ -40,6 +41,9 @@ Kernel/kernel_entry.o: Kernel/kernel_entry.asm
 	$(NASM) -f elf64 $< -o $@
 
 Kernel/kernel.o: Kernel/kernel.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+Kernel/syscall.o: Kernel/syscall.c Kernel/syscall.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 IDT/idt.o: IDT/idt.c

@@ -8,6 +8,7 @@
 #include "../IO/keyboard.h"
 #include "../IO/mouse.h"
 #include "../Net/e1000.h"
+#include "syscall.h"
 
 #define VGA_TEXT_BUF 0xB8000
 
@@ -20,13 +21,15 @@ void vga_write(const char* s) {
     }
 }
 
-// Setup a minimal handler for int $0x80 (IDT vector 0x80)
-// syscall 0 -> cooperative yield
+// System call dispatcher for int $0x80
 void isr_syscall_handler(void) {
-    uint64_t num;
+    uint64_t num, a1, a2, a3, ret;
     asm volatile("mov %%rax, %0" : "=r"(num));
-    if (num == 0)
-        schedule();
+    asm volatile("mov %%rdi, %0" : "=r"(a1));
+    asm volatile("mov %%rsi, %0" : "=r"(a2));
+    asm volatile("mov %%rdx, %0" : "=r"(a3));
+    ret = syscall_handle(num, a1, a2, a3);
+    asm volatile("mov %0, %%rax" :: "r"(ret));
 }
 
 void kernel_main(void) {
