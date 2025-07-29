@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "../IDT/idt.h"
 
 #define VGA_TEXT_BUF 0xB8000
 
@@ -13,8 +14,11 @@ void vga_write(const char* s) {
 
 void kernel_main(void) {
     vga_write("Mach Microkernel: Boot OK");
+    idt_install();
 
-    // TODO: paging, IDT, timer IRQ, kernel threads, IPC, etc.
+    // Now, if any interrupt or exception occurs, you'll see "INTERRUPT!" on screen
+    // Try triggering an exception (e.g. divide by zero):
+    int x = 1 / 0;
 
     while (1) __asm__ volatile ("hlt");
 }
