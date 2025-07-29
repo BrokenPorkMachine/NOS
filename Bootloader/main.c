@@ -135,6 +135,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
 
 fail:
     Print(L"[Bootloader] HALT\n");
-    while (1) { __asm__ __volatile__ ("hlt" ::: "memory"); }
+    // Option 1 (UEFI standard): just return error, don't hang the CPU!
     return EFI_LOAD_ERROR;
+
+    // Option 2 (if you really want to loop forever, but NO hlt):
+    // while (1) { } // Don't use 'hlt' in UEFI bootloader
 }
