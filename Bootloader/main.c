@@ -85,7 +85,17 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         FreePool(FileInfo);
     }
 
-    // --- Optionally: signature/hash check (TODO for next level security) ---
+    // --- Compute and output CRC32 for integrity check ---
+    UINT32 crc32 = 0;
+    status = uefi_call_wrapper(BS->CalculateCrc32, 3,
+                               (void *)KernelAddr, KernelSize, &crc32);
+    if (EFI_ERROR(status)) {
+        Print(L"[ERR] CalculateCrc32: %r\n", status);
+        goto fail;
+    }
+    Print(L"[Bootloader] Kernel CRC32: %08x\n", crc32);
+
+    // --- Optionally: signature/hash verification could be added here ---
 
     // --- Prepare memory map ---
     UINTN mmap_size = 0, mmap_key = 0, desc_size = 0;
