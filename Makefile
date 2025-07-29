@@ -20,6 +20,7 @@ OBJS = \
   GDT/gdt.o \
   GDT/gdt_flush.o \
   GDT/user.o \
+  IPC/ipc.o \
   libc.o
 
 all: kernel.bin bootloader
@@ -67,6 +68,9 @@ GDT/gdt_flush.o: GDT/gdt.asm
 	$(NASM) -f elf64 $< -o $@
 
 GDT/user.o: GDT/user.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+IPC/ipc.o: IPC/ipc.c IPC/ipc.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 libc.o: src/libc.c src/libc.h

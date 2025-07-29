@@ -18,3 +18,10 @@ laying the groundwork for persistent storage.
 
 Future versions may support persistent block devices and a hierarchical
 on-disk layout, but the initial focus is a minimal, auditable core.
+
+## Server Usage
+
+The `server.c` file implements a minimal message-driven server built on top of
+the generic IPC queue. Each request is delivered as an `ipc_message_t` and the
+server replies on the same queue. This design is extremely small and intended
+only as a demonstration of how future user-mode services might operate.
