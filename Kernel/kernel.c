@@ -5,6 +5,9 @@
 #include "../GDT/gdt.h"
 #include "../IO/pic.h"
 #include "../IO/pit.h"
+#include "../IO/keyboard.h"
+#include "../IO/mouse.h"
+#include "../Net/e1000.h"
 
 #define VGA_TEXT_BUF 0xB8000
 
@@ -31,6 +34,9 @@ void kernel_main(void) {
     idt_install();
     pic_remap();
     pit_init(100);
+    keyboard_init();
+    mouse_init();
+    e1000_init();
     paging_init();
     threads_init();
     gdt_install();

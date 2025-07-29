@@ -13,6 +13,10 @@ OBJS = \
   IDT/isr_stub.o \
   IO/pic.o \
   IO/pit.o \
+  IO/keyboard.o \
+  IO/mouse.o \
+  IO/pci.o \
+  Net/e1000.o \
   VM/paging.o \
   Task/thread.o \
   Task/context_switch.o \
@@ -50,6 +54,18 @@ IO/pic.o: IO/pic.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 IO/pit.o: IO/pit.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+IO/keyboard.o: IO/keyboard.c IO/keyboard.h IO/io.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+IO/mouse.o: IO/mouse.c IO/mouse.h IO/io.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+IO/pci.o: IO/pci.c IO/pci.h IO/io.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+Net/e1000.o: Net/e1000.c Net/e1000.h IO/pci.h src/libc.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 VM/paging.o: VM/paging.c
