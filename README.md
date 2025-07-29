@@ -28,10 +28,12 @@
    * `x86_64-elf-gcc`, `nasm`, `qemu`, `make`, `mtools`
    * For UEFI boot: FAT image tools (`mkfs.vfat`, `mcopy`)
    * For gnu-efi bootloader: `gnu-efi` (for bootloader only)
+   * Optionally set the `CROSS_COMPILE` environment variable if your
+     cross compiler prefix differs from the default `/opt/cross/bin/x86_64-elf-`.
 2. **Build the kernel:**
 
    ```sh
-   make
+   make        # use CROSS_COMPILE if your toolchain uses a different prefix
    ```
 3. **Prepare boot image:**
 

@@ -1,4 +1,5 @@
-CC      = /opt/cross/bin/x86_64-elf-gcc
+CROSS_COMPILE ?= /opt/cross/bin/x86_64-elf-
+CC      = $(CROSS_COMPILE)gcc
 CFLAGS  = -ffreestanding -O2 -Wall -Wextra -nostdlib -mno-red-zone
 OBJS    = nitrfs.o server.o ../../IPC/ipc.o ../../src/libc.o
 
