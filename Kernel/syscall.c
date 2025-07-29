@@ -14,7 +14,7 @@ uint64_t syscall_handle(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg
     (void)arg2; (void)arg3;
     switch (num) {
     case SYS_YIELD:
-        schedule();
+        thread_yield();
         return 0;
     case SYS_WRITE_VGA:
         return sys_write_vga((const char *)arg1);

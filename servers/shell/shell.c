@@ -47,7 +47,7 @@ static char getchar_block(void) {
         if (sc >= 0 && !(sc & 0x80))
             c = scancode_to_ascii(sc);
         if (!c)
-            schedule();
+            thread_yield();
     }
     return c;
 }

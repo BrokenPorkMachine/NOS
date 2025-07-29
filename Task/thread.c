@@ -62,6 +62,10 @@ void thread_unblock(thread_t *t) {
     t->state = THREAD_READY;
 }
 
+void thread_yield(void) {
+    schedule();
+}
+
 void threads_init(void) {
     uint32_t mask = (1u << 1) | (1u << 2);
     ipc_init(&fs_queue, mask, mask);
