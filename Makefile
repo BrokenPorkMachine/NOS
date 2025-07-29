@@ -1,5 +1,6 @@
-CC      = /opt/cross/bin/x86_64-elf-gcc
-LD      = /opt/cross/bin/x86_64-elf-ld
+CROSS_COMPILE ?= /opt/cross/bin/x86_64-elf-
+CC      = $(CROSS_COMPILE)gcc
+LD      = $(CROSS_COMPILE)ld
 NASM    = nasm
 
 CFLAGS  = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib
