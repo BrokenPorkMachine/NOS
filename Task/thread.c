@@ -24,7 +24,8 @@ static void thread_shell_func(void) {
 }
 
 void threads_init(void) {
-    ipc_init(&fs_queue);
+    uint32_t mask = (1u << 1) | (1u << 2);
+    ipc_init(&fs_queue, mask, mask);
 
     // Filesystem server thread
     thread_fs.stack = stack_fs;

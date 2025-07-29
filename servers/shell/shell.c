@@ -63,6 +63,7 @@ void shell_main(ipc_queue_t *q) {
         putc_vga('>'); putc_vga(' ');
         char cmd = getchar_block();
         putc_vga(cmd); putc_vga('\n');
+        msg.len = 0;
 
         switch (cmd) {
         case '1':
@@ -70,6 +71,7 @@ void shell_main(ipc_queue_t *q) {
             msg.arg1 = 128;
             msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
             strncpy((char *)msg.data, "file.txt", IPC_MSG_DATA_MAX);
+            msg.len = strlen("file.txt");
             ipc_send(q, &msg);
             ipc_receive(q, &reply);
             handle = reply.arg1;
@@ -81,6 +83,7 @@ void shell_main(ipc_queue_t *q) {
             msg.arg1 = handle;
             strncpy((char *)msg.data, "data", IPC_MSG_DATA_MAX);
             msg.arg2 = 4;
+            msg.len  = 4;
             ipc_send(q, &msg);
             ipc_receive(q, &reply);
             puts_vga("wrote\n");
@@ -90,16 +93,18 @@ void shell_main(ipc_queue_t *q) {
             msg.type = NITRFS_MSG_READ;
             msg.arg1 = handle;
             msg.arg2 = IPC_MSG_DATA_MAX;
+            msg.len  = 0;
             ipc_send(q, &msg);
             ipc_receive(q, &reply);
             if (reply.arg1 == 0) {
-                reply.data[reply.arg2] = '\0';
+                reply.data[reply.len] = '\0';
                 puts_vga((char *)reply.data);
                 putc_vga('\n');
             }
             break;
         case '4':
             msg.type = NITRFS_MSG_LIST;
+            msg.len  = 0;
             ipc_send(q, &msg);
             ipc_receive(q, &reply);
             for (int i=0;i<reply.arg1;i++) {
@@ -111,6 +116,7 @@ void shell_main(ipc_queue_t *q) {
             if (handle < 0) { puts_vga("no file\n"); break; }
             msg.type = NITRFS_MSG_CRC;
             msg.arg1 = handle;
+            msg.len  = 0;
             ipc_send(q, &msg);
             ipc_receive(q, &reply);
             if (reply.arg1==0) {
@@ -123,6 +129,7 @@ void shell_main(ipc_queue_t *q) {
             if (handle < 0) { puts_vga("no file\n"); break; }
             msg.type = NITRFS_MSG_VERIFY;
             msg.arg1 = handle;
+            msg.len  = 0;
             ipc_send(q, &msg);
             ipc_receive(q, &reply);
             puts_vga(reply.arg1==0?"verify ok\n":"verify bad\n");
