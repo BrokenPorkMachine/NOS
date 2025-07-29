@@ -1,3 +1,5 @@
+CC = x86_64-linux-gnu-gcc
+LD = x86_64-linux-gnu-ld
 ARCH = x86_64
 EFIINC = /usr/include/efi
 EFILIB = /usr/lib
@@ -9,7 +11,7 @@ all: bootx64.efi
 
 bootloader.so: main.c
 	$(CC) $(CFLAGS) -c $< -o main.o
-	ld $(LDFLAGS) main.o -o bootloader.so
+	    $(LD) $(LDFLAGS) main.o -o bootloader.so
 
 bootx64.efi: bootloader.so
 	objcopy -j .text -j .sdata -j .data -j .dynamic \

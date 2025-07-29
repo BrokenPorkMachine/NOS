@@ -1,5 +1,6 @@
 #include <stdint.h>
-#include <io.h>
+#include "io.h"
+#include "pit.h"
 
 #define PIT_FREQ 1193182
 #define PIT_CMD 0x43
