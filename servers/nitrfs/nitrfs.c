@@ -157,7 +157,7 @@ int nitrfs_load_blocks(nitrfs_fs_t *fs, const uint8_t *blocks, size_t blocks_cnt
         fs->files[h].crc32 = e.crc32;
     }
     for (size_t i = 0; i < fs->file_count; ++i) {
-        if ((p - blocks) + fs->files[i].size > bytes)
+        if ((size_t)(p - blocks) + fs->files[i].size > bytes)
             return -1;
         memcpy(fs->files[i].data, p, fs->files[i].size);
         p += fs->files[i].size;
