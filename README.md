@@ -86,8 +86,8 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 
 ## Roadmap
 
-* [ ] User/kernel context switching (done)
-* [ ] System call interface (done)
+* [x] User/kernel context switching (improved register save/restore)
+* [x] System call interface with dispatcher and validation
 * [ ] Interactive user task/server framework (done)
 * [x] Basic IPC primitives (prototype)
 * [x] NitrFS filesystem server (block storage capable)

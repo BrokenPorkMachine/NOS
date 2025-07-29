@@ -14,12 +14,34 @@ isr_timer_stub:
 
 global isr_syscall_stub
 isr_syscall_stub:
+    cli
+    push rax
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    push r11
     push rbp
     mov rbp, rsp
-    cli
     extern isr_syscall_handler
     call isr_syscall_handler
-    leave
+    mov rsp, rbp
+    pop rbp
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    add rsp, 8 ; discard saved rax
+    sti
     iretq
 
 global isr_default_stub
