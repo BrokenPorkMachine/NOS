@@ -36,6 +36,7 @@ echo "[*] Boot image ready: $IMG"
 echo
 read -p "Run in QEMU now? (y/N): " runqemu
 if [[ "$runqemu" =~ ^[Yy]$ ]]; then
-    qemu-system-x86_64 -bios /usr/share/OVMF/OVMF_CODE.fd \
+    qemu-system-x86_64 -bios /home/failbr34k/NOS/edk2/Build/OvmfX64/DEBUG_GCC5/FV/OVMF_CODE.fd
+ \
         -drive format=raw,file=$IMG
 fi
