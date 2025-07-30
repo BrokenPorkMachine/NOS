@@ -81,29 +81,55 @@ When the shell starts it prints:
 
 ```
 NOS shell ready
-1:create 2:write 3:read 4:list 5:crc 6:verify
+type 'help' for commands
 ```
 
-The single-character commands provide a very small interface for testing
-NitrFS:
+The shell understands a handful of simple text commands. Examples:
 
-1. `1` – create a file called `file.txt` with read/write permissions
-2. `2` – write the string `data` to the file
-3. `3` – read back the file contents
-4. `4` – list all files stored in NitrFS
-5. `5` – compute and store a CRC32 checksum for the file
-6. `6` – verify the stored checksum against the file data
+```
+> create hello.txt
+> write hello.txt hello
+> ls
+> cat hello.txt
+> rm hello.txt
+```
 
-To make the environment more familiar, a full command set is planned with
-standard names:
+Available commands include:
 
-* `cd` – change the working directory
+* `cd` – change the working directory (not yet implemented)
 * `ls` or `dir` – list directory contents
-* `mkdir` – create a new directory
+* `mkdir` – create a new directory (not yet implemented)
 * `mv` – move or rename a file
 * `rm` – remove a file or directory
 * `cat` – display file contents
+* `create` – create a new empty file
+* `write` – write data to a file
 * `help` – show available commands
+
+
+
+### File System Navigation
+
+Once the shell exposes these common commands you can move around the
+NitrFS directory structure similarly to a regular Unix environment. A
+typical session might look like:
+
+```sh
+# list the current directory
+ls
+
+# create and enter a new folder
+mkdir demo
+cd demo
+
+# display a file and return to the parent directory
+cat ../README.md
+cd ..
+
+# rename then remove the folder
+mv demo testdemo
+rm -r testdemo
+```
 
 ---
 

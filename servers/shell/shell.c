@@ -55,89 +55,199 @@ static char getchar_block(void) {
     return c;
 }
 
-void shell_main(ipc_queue_t *q, uint32_t self_id) {
+static void read_line(char *buf, size_t len) {
+    size_t pos = 0;
+    while (1) {
+        char c = getchar_block();
+        if (c == '\n' || c == '\r') {
+            putc_vga('\n');
+            break;
+        }
+        if (pos + 1 < len) {
+            buf[pos++] = c;
+            putc_vga(c);
+        }
+    }
+    buf[pos] = '\0';
+}
+
+static int tokenize(char *line, char *argv[], int max) {
+    int argc = 0;
+    char *p = line;
+    while (*p && argc < max) {
+        while (*p == ' ')
+            p++;
+        if (!*p)
+            break;
+        argv[argc++] = p;
+        while (*p && *p != ' ')
+            p++;
+        if (*p) {
+            *p = '\0';
+            p++;
+        }
+    }
+    return argc;
+}
+
+static int find_handle(ipc_queue_t *q, uint32_t self_id, const char *name) {
     ipc_message_t msg, reply;
-    int handle = -1;
+    msg.type = NITRFS_MSG_LIST;
+    msg.len = 0;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    for (int i = 0; i < (int)reply.arg1; i++) {
+        char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
+        if (strncmp(n, name, NITRFS_NAME_LEN) == 0)
+            return i;
+    }
+    return -1;
+}
 
+static void cmd_ls(ipc_queue_t *q, uint32_t self_id) {
+    ipc_message_t msg, reply;
+    msg.type = NITRFS_MSG_LIST;
+    msg.len = 0;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    for (int i = 0; i < (int)reply.arg1; i++) {
+        puts_vga((char *)reply.data + i * NITRFS_NAME_LEN);
+        putc_vga('\n');
+    }
+}
+
+static void cmd_cat(ipc_queue_t *q, uint32_t self_id, const char *name) {
+    int h = find_handle(q, self_id, name);
+    if (h < 0) { puts_vga("not found\n"); return; }
+    ipc_message_t msg, reply;
+    msg.type = NITRFS_MSG_READ;
+    msg.arg1 = h;
+    msg.arg2 = IPC_MSG_DATA_MAX;
+    msg.len  = 0;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    if (reply.arg1 != 0) { puts_vga("read error\n"); return; }
+    reply.data[reply.len] = '\0';
+    puts_vga((char *)reply.data);
+    putc_vga('\n');
+}
+
+static void cmd_create(ipc_queue_t *q, uint32_t self_id, const char *name) {
+    ipc_message_t msg, reply;
+    msg.type = NITRFS_MSG_CREATE;
+    msg.arg1 = IPC_MSG_DATA_MAX;
+    msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
+    strncpy((char *)msg.data, name, IPC_MSG_DATA_MAX);
+    msg.len = strlen(name);
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    puts_vga(reply.arg1 >= 0 ? "created\n" : "error\n");
+}
+
+static void cmd_write(ipc_queue_t *q, uint32_t self_id, const char *name, const char *data) {
+    int h = find_handle(q, self_id, name);
+    if (h < 0) { puts_vga("not found\n"); return; }
+    ipc_message_t msg, reply;
+    size_t len = strlen(data);
+    if (len > IPC_MSG_DATA_MAX) len = IPC_MSG_DATA_MAX;
+    msg.type = NITRFS_MSG_WRITE;
+    msg.arg1 = h;
+    msg.arg2 = len;
+    memcpy(msg.data, data, len);
+    msg.len = len;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    puts_vga(reply.arg1 == 0 ? "ok\n" : "error\n");
+}
+
+static void cmd_rm(ipc_queue_t *q, uint32_t self_id, const char *name) {
+    int h = find_handle(q, self_id, name);
+    if (h < 0) { puts_vga("not found\n"); return; }
+    ipc_message_t msg, reply;
+    msg.type = NITRFS_MSG_DELETE;
+    msg.arg1 = h;
+    msg.len = 0;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    puts_vga(reply.arg1 == 0 ? "deleted\n" : "error\n");
+}
+
+static void cmd_mv(ipc_queue_t *q, uint32_t self_id, const char *old, const char *new) {
+    int h = find_handle(q, self_id, old);
+    if (h < 0) { puts_vga("not found\n"); return; }
+    ipc_message_t msg, reply;
+    msg.type = NITRFS_MSG_CREATE;
+    msg.arg1 = IPC_MSG_DATA_MAX;
+    msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
+    strncpy((char *)msg.data, new, IPC_MSG_DATA_MAX);
+    msg.len = strlen(new);
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    int new_h = reply.arg1;
+    if (new_h < 0) { puts_vga("error\n"); return; }
+    msg.type = NITRFS_MSG_READ;
+    msg.arg1 = h;
+    msg.arg2 = IPC_MSG_DATA_MAX;
+    msg.len = 0;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    if (reply.arg1 != 0) { puts_vga("error\n"); return; }
+    uint32_t len = reply.len;
+    msg.type = NITRFS_MSG_WRITE;
+    msg.arg1 = new_h;
+    msg.arg2 = len;
+    memcpy(msg.data, reply.data, len);
+    msg.len = len;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    msg.type = NITRFS_MSG_DELETE;
+    msg.arg1 = h;
+    msg.len = 0;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    puts_vga("moved\n");
+}
+
+static void cmd_help(void) {
+    puts_vga("Available commands:\n");
+    puts_vga("  ls        - list files\n");
+    puts_vga("  cat FILE  - display file contents\n");
+    puts_vga("  create FILE - create a new file\n");
+    puts_vga("  write FILE DATA - write data to file\n");
+    puts_vga("  rm FILE   - delete a file\n");
+    puts_vga("  mv OLD NEW - rename file\n");
+    puts_vga("  cd DIR    - change directory (not implemented)\n");
+    puts_vga("  mkdir DIR - make directory (not implemented)\n");
+    puts_vga("  help      - show this message\n");
+}
+
+void shell_main(ipc_queue_t *q, uint32_t self_id) {
     puts_vga("NOS shell ready\n");
-    puts_vga("1:create 2:write 3:read 4:list 5:crc 6:verify\n");
-
+    puts_vga("type 'help' for commands\n");
+    char line[80];
+    char *argv[3];
     while (1) {
         putc_vga('>'); putc_vga(' ');
-        char cmd = getchar_block();
-        putc_vga(cmd); putc_vga('\n');
-        msg.len = 0;
-
-        switch (cmd) {
-        case '1':
-            msg.type = NITRFS_MSG_CREATE;
-            msg.arg1 = 128;
-            msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
-            strncpy((char *)msg.data, "file.txt", IPC_MSG_DATA_MAX);
-            msg.len = strlen("file.txt");
-            ipc_send(q, self_id, &msg);
-            ipc_receive(q, self_id, &reply);
-            handle = reply.arg1;
-            puts_vga("created\n");
-            break;
-        case '2':
-            if (handle < 0) { puts_vga("no file\n"); break; }
-            msg.type = NITRFS_MSG_WRITE;
-            msg.arg1 = handle;
-            strncpy((char *)msg.data, "data", IPC_MSG_DATA_MAX);
-            msg.arg2 = 4;
-            msg.len  = 4;
-            ipc_send(q, self_id, &msg);
-            ipc_receive(q, self_id, &reply);
-            puts_vga("wrote\n");
-            break;
-        case '3':
-            if (handle < 0) { puts_vga("no file\n"); break; }
-            msg.type = NITRFS_MSG_READ;
-            msg.arg1 = handle;
-            msg.arg2 = IPC_MSG_DATA_MAX;
-            msg.len  = 0;
-            ipc_send(q, self_id, &msg);
-            ipc_receive(q, self_id, &reply);
-            if (reply.arg1 == 0) {
-                reply.data[reply.len] = '\0';
-                puts_vga((char *)reply.data);
-                putc_vga('\n');
-            }
-            break;
-        case '4':
-            msg.type = NITRFS_MSG_LIST;
-            msg.len  = 0;
-            ipc_send(q, self_id, &msg);
-            ipc_receive(q, self_id, &reply);
-            for (int i=0;i<reply.arg1;i++) {
-                puts_vga((char *)reply.data + i*NITRFS_NAME_LEN);
-                putc_vga('\n');
-            }
-            break;
-        case '5':
-            if (handle < 0) { puts_vga("no file\n"); break; }
-            msg.type = NITRFS_MSG_CRC;
-            msg.arg1 = handle;
-            msg.len  = 0;
-            ipc_send(q, self_id, &msg);
-            ipc_receive(q, self_id, &reply);
-            if (reply.arg1==0) {
-                puts_vga("crc ok\n");
-            } else {
-                puts_vga("crc fail\n");
-            }
-            break;
-        case '6':
-            if (handle < 0) { puts_vga("no file\n"); break; }
-            msg.type = NITRFS_MSG_VERIFY;
-            msg.arg1 = handle;
-            msg.len  = 0;
-            ipc_send(q, self_id, &msg);
-            ipc_receive(q, self_id, &reply);
-            puts_vga(reply.arg1==0?"verify ok\n":"verify bad\n");
-            break;
-        default:
+        read_line(line, sizeof(line));
+        int argc = tokenize(line, argv, 3);
+        if (argc == 0) continue;
+        if (!strcmp(argv[0], "ls") || !strcmp(argv[0], "dir")) {
+            cmd_ls(q, self_id);
+        } else if (!strcmp(argv[0], "cat") && argc > 1) {
+            cmd_cat(q, self_id, argv[1]);
+        } else if (!strcmp(argv[0], "create") && argc > 1) {
+            cmd_create(q, self_id, argv[1]);
+        } else if (!strcmp(argv[0], "write") && argc > 2) {
+            cmd_write(q, self_id, argv[1], argv[2]);
+        } else if (!strcmp(argv[0], "rm") && argc > 1) {
+            cmd_rm(q, self_id, argv[1]);
+        } else if (!strcmp(argv[0], "mv") && argc > 2) {
+            cmd_mv(q, self_id, argv[1], argv[2]);
+        } else if (!strcmp(argv[0], "cd") || !strcmp(argv[0], "mkdir")) {
+            puts_vga("not implemented\n");
+        } else if (!strcmp(argv[0], "help")) {
+            cmd_help();
+        } else {
             puts_vga("?\n");
         }
     }
