@@ -1,4 +1,4 @@
-CROSS_COMPILE ?= x86_64-elf-
+CROSS_COMPILE ?= x86_64-linux-gnu-
 CC      = $(CROSS_COMPILE)gcc
 LD      = $(CROSS_COMPILE)ld
 NASM    = nasm
@@ -34,8 +34,10 @@ OBJS = \
 
 all: kernel.bin bootloader
 
+.PHONY: bootloader clean
+
 bootloader:
-	$(MAKE) -C Bootloader
+	$(MAKE) -C bootloader CROSS_COMPILE=$(CROSS_COMPILE)
 
 Kernel/kernel_entry.o: Kernel/kernel_entry.asm
 	$(NASM) -f elf64 $< -o $@
@@ -113,5 +115,5 @@ kernel.bin: $(OBJS)
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
 clean:
-	$(MAKE) -C Bootloader clean
+	$(MAKE) -C bootloader CROSS_COMPILE=$(CROSS_COMPILE) clean
 	rm -f $(OBJS) kernel.bin
