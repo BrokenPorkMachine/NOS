@@ -4,7 +4,7 @@ set -e
 # 1. Install dependencies
 echo "[*] Installing EDK2/OVMF dependencies..."
 sudo apt update
-sudo apt install -y git python3 python3-pip python3-distutils python3-venv \
+sudo apt install -y git python3 python3-pip python3-distutils-extra python3-venv \
     build-essential uuid-dev iasl nasm gcc make
 
 # 2. Create workspace
