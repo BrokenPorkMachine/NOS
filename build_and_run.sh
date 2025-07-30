@@ -5,12 +5,12 @@ set -e
 IMG=disk.img
 IMG_MB=16
 EFI_DIR=EFI/BOOT
-BOOTLOADER=Bootloader/bootx64.efi
+BOOTLOADER=bootloader/bootx64.efi
 KERNEL=kernel.bin
 
 # 1. Clean and build everything
 echo "[*] Building bootloader..."
-make -C Bootloader clean && make -C Bootloader
+make -C bootloader clean && make -C bootloader
 echo "[*] Building kernel..."
 make clean && make
 
@@ -37,8 +37,8 @@ echo
 read -p "Run in QEMU now? (y/N): " runqemu
 if [[ "$runqemu" =~ ^[Yy]$ ]]; then
 qemu-system-x86_64 \
-  -drive if=pflash,format=raw,readonly=on,file=/home/failbr34k/NOS/edk2/Build/OvmfX64/DEBUG_GCC5/FV/OVMF_CODE.fd \
-  -drive if=pflash,format=raw,file=/home/failbr34k/NOS/edk2/Build/OvmfX64/DEBUG_GCC5/FV/OVMF_VARS.fd \
+  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+  -drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_VARS_4M.fd \
   -drive format=raw,file=disk.img
   
 fi
