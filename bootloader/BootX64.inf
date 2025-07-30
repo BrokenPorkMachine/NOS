@@ -1,0 +1,18 @@
+[Defines]
+  INF_VERSION                    = 0x00010006
+  BASE_NAME                      = BootX64
+  FILE_GUID                      = 01234567-89ab-cdef-0123-456789abcdef
+  MODULE_TYPE                    = UEFI_APPLICATION
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  BootX64.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+
+[LibraryClasses]
+  UefiLib
+  UefiBootServicesTableLib
+  PrintLib
+  MemoryAllocationLib
