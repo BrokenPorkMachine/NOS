@@ -164,6 +164,16 @@ struct EFI_FILE_PROTOCOL {
 
 #define EFI_FILE_MODE_READ 0x0000000000000001ULL
 
+struct EFI_BOOT_SERVICES {
+    char _pad1[24+8];
+    EFI_STATUS (*AllocatePages)(...);
+    // ... existing fields ...
+    EFI_STATUS (*HandleProtocol)(EFI_HANDLE, EFI_GUID*, VOID**);
+    // Add this line:
+    EFI_STATUS (*LocateProtocol)(EFI_GUID*, VOID*, VOID**);
+    // ... rest of struct ...
+    EFI_STATUS (*ExitBootServices)(EFI_HANDLE, UINTN);
+};
 // ----------------------------------------------------------------------
 // 11. EFI System Table (minimal subset)
 // ----------------------------------------------------------------------
