@@ -1,5 +1,13 @@
 #include <stdint.h>
 #include "../bootloader/include/bootinfo.h"
+#include "../GDT/gdt.h"
+#include "../IDT/idt.h"
+#include "../IO/pic.h"
+#include "../IO/pit.h"
+#include "../IO/keyboard.h"
+#include "../IO/mouse.h"
+#include "../VM/paging.h"
+#include "../Task/thread.h"
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
 #define VGA_ROWS 25
@@ -118,6 +126,22 @@ void kernel_main(bootinfo_t *bootinfo) {
     vga_clear();
     log_good("Mach Microkernel: Boot OK");
     log_line("");
+
+    gdt_install();
+    paging_init();
+    idt_install();
+    pic_remap();
+    pit_init(1000);
+    keyboard_init();
+    mouse_init();
+    threads_init();
+
     print_bootinfo(bootinfo);
-    for (;;) __asm__ volatile("cli; hlt");
+    asm volatile("sti");
+
+    uint64_t kernel_sp = 0;
+    context_switch(&kernel_sp, current->rsp);
+
+    for (;;)
+        asm volatile("hlt");
 }
