@@ -56,7 +56,7 @@ typedef struct {
 // --- Standalone ELF64 loader: returns 0 on success, nonzero on error ---
 static int load_elf64_kernel(
     EFI_FILE_PROTOCOL *KernelFile,
-    EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut,
+    struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut,
     EFI_BOOT_SERVICES *BS,
     void (**entry_out)(bootinfo_t *))
 {
