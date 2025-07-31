@@ -104,6 +104,10 @@ static void fb_demo_bar(const bootinfo_framebuffer_t *fb) {
 static void print_bootinfo(const bootinfo_t *bi) {
     char buf[80];
     if (!bi) { log_warn("No bootinfo struct."); return; }
+    ptoa((uint64_t)bi, buf); log_line("[boot] bootinfo ptr:"); log_line(buf);
+    ptoa((uint64_t)bi->mmap, buf); log_line("[boot] mmap ptr:"); log_line(buf);
+    utoa(bi->mmap_entries, buf, 10); log_line("[boot] mmap entries:"); log_line(buf);
+    ptoa((uint64_t)bi->framebuffer, buf); log_line("[boot] framebuffer ptr:"); log_line(buf);
     if (bi->magic == BOOTINFO_MAGIC_UEFI) log_good("[boot] UEFI detected.");
     else if (bi->magic == BOOTINFO_MAGIC_MB2) log_good("[boot] Multiboot2 detected.");
     else log_warn("[boot] Unknown boot magic!");
@@ -138,6 +142,9 @@ void kernel_main(bootinfo_t *bootinfo) {
     vga_clear();
     log_good("Mach Microkernel: Boot OK");
     log_line("");
+    if (!bootinfo || !bootinfo->framebuffer) log_line("No framebuffer!");
+    if (!bootinfo || !bootinfo->mmap) log_line("No mmap!");
+    if (bootinfo && bootinfo->mmap_entries > 64) log_warn("Warning: suspiciously large mmap_entries");
     print_bootinfo(bootinfo);
     // Initialize core subsystems and start userland services
     gdt_install();
