@@ -211,6 +211,17 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     KernelFile->Close(KernelFile);
     if (elf_status != 0 || !kernel_entry) { ConOut->OutputString(ConOut, L"Kernel load failed.\r\n"); for(;;); }
 
+    // --- Allocate a stack for the kernel ---
+    EFI_PHYSICAL_ADDRESS stack_base = 0;
+    UINTN stack_pages = 8; // 32 KiB
+    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData,
+                               stack_pages, &stack_base);
+    if (status != EFI_SUCCESS) {
+        ConOut->OutputString(ConOut, L"Kernel stack alloc failed.\r\n");
+        for(;;);
+    }
+    UINT64 stack_top = stack_base + stack_pages * 4096ULL;
+
     // --- 7. Final memory map and ExitBootServices ---
     status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
     if (status == EFI_BUFFER_TOO_SMALL) {
@@ -226,7 +237,14 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
 
     // --- 8. Handoff to kernel (bootinfo pointer) ---
-    kernel_entry(info);
+    __asm__ __volatile__(
+        "mov %0, %%rdi\n"
+        "mov %1, %%rsp\n"
+        "xor %%rbp, %%rbp\n"
+        "jmp *%2\n"
+        :
+        : "r"(info), "r"(stack_top), "r"(kernel_entry)
+        : "rdi", "rsp", "rbp");
 
     for(;;);
     return EFI_SUCCESS;
