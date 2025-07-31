@@ -14,6 +14,7 @@
 * Full paging and memory protection
 * Modular, timer-driven preemptive multitasking
 * Interrupt handling (IDT, PIT, PIC)
+* Early ACPI table parsing for basic hardware enumeration
 * Basic thread and task abstractions
 * Mach-style IPC message passing (prototype queue implementation)
 * NitrFS secure in-memory filesystem server with optional block storage

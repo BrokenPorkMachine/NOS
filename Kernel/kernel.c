@@ -10,6 +10,7 @@
 #include "../VM/pmm.h"
 #include "../VM/paging.h"
 #include "../CPU/cpu.h"
+#include "../ACPI/acpi.h"
 
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
@@ -189,6 +190,7 @@ void kernel_main(bootinfo_t *bootinfo) {
         bootinfo->cpus[0].flags = 1;
     }
     print_bootinfo(bootinfo);
+    acpi_init(bootinfo);
     log_line("[Stage 2] Init memory management");
     pmm_init(bootinfo);
     paging_init();
