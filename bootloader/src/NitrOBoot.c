@@ -5,7 +5,6 @@
 
 #define KERNEL_PATH L"\\kernel.bin"
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
-#define BOOTINFO_MAX_MMAP 128
 
 // --- Minimal Hex Printer for CHAR16 (prints 0x...64bit) ---
 static void uefi_hex16(CHAR16 *buf, uint64_t val) {
@@ -144,16 +143,19 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap read failed.\r\n"); for(;;); }
 
+    UINTN desc_count = mmap_size / desc_size;
+
     bootinfo_memory_t *mmap = NULL;
-    UINTN mmap_pages = (BOOTINFO_MAX_MMAP * sizeof(bootinfo_memory_t) + 4095) / 4096;
+    UINTN mmap_pages = (desc_count * sizeof(bootinfo_memory_t) + 4095) / 4096;
     status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, mmap_pages,
                                (EFI_PHYSICAL_ADDRESS*)&mmap);
     if (status != EFI_SUCCESS) {
         ConOut->OutputString(ConOut, L"Bootinfo mmap alloc failed.\r\n");
         for(;;);
     }
-    memset(mmap, 0, sizeof(bootinfo_memory_t) * BOOTINFO_MAX_MMAP);
-    uint32_t mmap_count = 0;
+    memset(mmap, 0, desc_count * sizeof(bootinfo_memory_t));
+
+    UINTN mmap_count = 0;
     for (UINT8 *p = (UINT8*)efi_mmap; p < (UINT8*)efi_mmap + mmap_size; p += desc_size) {
         EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR*)p;
         mmap[mmap_count].addr = d->PhysicalStart;
@@ -163,10 +165,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         print_hex(ConOut, L"Mem Start: ", d->PhysicalStart);
         print_hex(ConOut, L"Mem End  : ", d->PhysicalStart + d->NumberOfPages * 4096);
         mmap_count++;
-        if (mmap_count >= BOOTINFO_MAX_MMAP) break;
     }
     info->mmap = mmap;
-    info->mmap_entries = mmap_count;
+    info->mmap_entries = (uint32_t)mmap_count;
     print_hex(ConOut, L"mmap struct ptr: ", (UINTN)mmap);
     print_hex(ConOut, L"mmap entries : ", mmap_count);
 
