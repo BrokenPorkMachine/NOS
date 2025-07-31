@@ -1,27 +1,32 @@
 CC=clang
-CFLAGS=--target=x86_64-pc-win32-coff -ffreestanding -fshort-wchar \
-       -mno-red-zone -fno-stack-protector -fno-exceptions \
-       -fno-asynchronous-unwind-tables -Iinclude -Wall -Wextra -Werror
+LD=lld-link
+
+CFLAGS=--target=x86_64-pc-win32-coff \
+       -ffreestanding -fshort-wchar -mno-red-zone \
+       -fno-stack-protector -fno-exceptions -fno-asynchronous-unwind-tables \
+       -Wall -Wextra -Werror \
+       -Iinclude
 
 LDFLAGS=/entry:efi_main \
         /subsystem:efi_application \
+        /nodefaultlib \
+        /base:0x100000 \
         /align:32 \
         /filealign:32 \
-        /base:0x100000 \
-        /NODEFAULTLIB
+        /out:NitrOBoot.efi
 
 SRC=src/NitrOBoot.c
-OBJ=src/NitrOBoot.o
+OBJ=src/NitrOBoot.obj
 
 all: NitrOBoot.efi
 
 NitrOBoot.efi: $(OBJ)
-	lld-link $(LDFLAGS) /out:$@ $^
+	$(LD) $(LDFLAGS) $(OBJ)
 
-%.o: %.c
+%.obj: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f src/*.o *.efi
+	rm -f src/*.obj *.efi
 
 .PHONY: all clean
