@@ -9,6 +9,7 @@
 #include "../Task/thread.h"
 #include "../VM/pmm.h"
 #include "../VM/paging.h"
+#include "../CPU/cpu.h"
 
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
@@ -179,8 +180,14 @@ void kernel_main(bootinfo_t *bootinfo) {
         log_err("BUG: mmap_entries too high, halting.");
         for(;;) __asm__("hlt");
     }
-    if (bootinfo && bootinfo->mmap_entries > 64)
+    if (bootinfo && bootinfo->mmap_entries >= BOOTINFO_MAX_MMAP)
         log_warn("Warning: suspiciously large mmap_entries");
+    if (bootinfo && bootinfo->cpu_count == 0) {
+        bootinfo->cpu_count = cpu_detect_logical_count();
+        bootinfo->cpus[0].processor_id = 0;
+        bootinfo->cpus[0].apic_id = 0;
+        bootinfo->cpus[0].flags = 1;
+    }
     print_bootinfo(bootinfo);
     pmm_init(bootinfo);
     paging_init();
