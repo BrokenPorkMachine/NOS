@@ -6,6 +6,15 @@
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
 #define BOOTINFO_MAX_MMAP 128
 
+// Minimal hex printer for UEFI CHAR16
+static void uefi_hex16(CHAR16 *buf, uint64_t val) {
+    buf[0] = L'0'; buf[1] = L'x';
+    int shift = 60;
+    for (int i = 0; i < 16; ++i, shift -= 4)
+        buf[2 + i] = L"0123456789ABCDEF"[(val >> shift) & 0xF];
+    buf[18] = 0;
+}
+
 typedef struct {
     unsigned char e_ident[16];
     uint16_t e_type, e_machine;
