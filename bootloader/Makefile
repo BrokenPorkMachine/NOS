@@ -1,9 +1,9 @@
 # Makefile
 
-TARGET = NitrOBoot.efi
+TARGET = bootx64.efi
 OBJS = src/NitrOBoot.o
 
-CC ?= clang
+CC = clang
 
 CFLAGS = \
         -target x86_64-pc-win32-coff \
@@ -38,4 +38,4 @@ $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS)
 
 clean:
-		rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS)

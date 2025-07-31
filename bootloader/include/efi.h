@@ -16,6 +16,17 @@ typedef VOID*               EFI_HANDLE;
 typedef UINT64              EFI_PHYSICAL_ADDRESS;
 typedef UINT64              EFI_VIRTUAL_ADDRESS;
 
+#ifndef NULL
+#define NULL ((void *)0)
+#endif
+
+typedef struct {
+    UINT32  Data1;
+    UINT16  Data2;
+    UINT16  Data3;
+    UINT8   Data4[8];
+} EFI_GUID;
+
 // UEFI Status Codes
 #define EFI_SUCCESS               0
 #define EFI_LOAD_ERROR            (EFI_STATUS)(1ULL | (1ULL << 63))
@@ -49,6 +60,8 @@ typedef UINT64              EFI_VIRTUAL_ADDRESS;
 typedef struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 typedef struct EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
 typedef struct EFI_MEMORY_DESCRIPTOR EFI_MEMORY_DESCRIPTOR;
+typedef struct EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
+typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 
 // EFI Simple Text Output Protocol
 struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
@@ -128,8 +141,13 @@ struct EFI_BOOT_SERVICES {
     // Event & Timer services (ignored here)
     char _pad3[24];
 
-    // Protocol Handler Services (ignored here)
-    char _pad4[72];
+    // Protocol Handler Services (partial)
+    EFI_STATUS (*HandleProtocol)(
+        EFI_HANDLE Handle,
+        const EFI_GUID *Protocol,
+        VOID **Interface
+    );
+    char _pad4[64];
 
     // Image Services (ignored here)
     char _pad5[40];
@@ -145,6 +163,31 @@ struct EFI_BOOT_SERVICES {
 
     // UEFI 2.0 Extensions (ignored here)
 };
+
+// Simple File System Protocol
+struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
+    UINT64 Revision;
+    EFI_STATUS (*OpenVolume)(
+        EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This,
+        EFI_FILE_PROTOCOL **Root
+    );
+};
+
+// File Protocol (minimal subset)
+struct EFI_FILE_PROTOCOL {
+    UINT64 Revision;
+    EFI_STATUS (*Open)(
+        EFI_FILE_PROTOCOL *This,
+        EFI_FILE_PROTOCOL **NewHandle,
+        CHAR16 *FileName,
+        UINT64 OpenMode,
+        UINT64 Attributes
+    );
+    EFI_STATUS (*Close)(EFI_FILE_PROTOCOL *This);
+    EFI_STATUS (*Read)(EFI_FILE_PROTOCOL *This, UINTN *BufferSize, VOID *Buffer);
+};
+
+#define EFI_FILE_MODE_READ 0x0000000000000001ULL
 
 // EFI Memory Descriptor
 struct EFI_MEMORY_DESCRIPTOR {
@@ -163,5 +206,10 @@ typedef struct {
     char _pad2[8];  // Ignore ConIn for simplicity
     EFI_BOOT_SERVICES *BootServices;
 } EFI_SYSTEM_TABLE;
+
+static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = {
+    0x964e5b21, 0x6459, 0x11d2,
+    {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}
+};
 
 #endif // EFI_H
