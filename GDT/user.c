@@ -9,7 +9,7 @@ void __attribute__((naked)) user_task(void) {
         "int $0x80\n"
         "1: hlt\n"
         "jmp 1b\n"
-        "message: .asciz \"U-task\n\""
+        "message: .asciz \"U-task\\n\"\n"
         : : : "rdi", "rax"
     );
 }
