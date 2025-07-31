@@ -108,19 +108,39 @@ static void print_bootinfo(const bootinfo_t *bi) {
     ptoa((uint64_t)bi->mmap, buf); log_line("[boot] mmap ptr:"); log_line(buf);
     utoa(bi->mmap_entries, buf, 10); log_line("[boot] mmap entries:"); log_line(buf);
     ptoa((uint64_t)bi->framebuffer, buf); log_line("[boot] framebuffer ptr:"); log_line(buf);
+    utoa(sizeof(bootinfo_memory_t), buf, 10); log_line("[boot] bootinfo_memory_t size:"); log_line(buf);
     if (bi->magic == BOOTINFO_MAGIC_UEFI) log_good("[boot] UEFI detected.");
     else if (bi->magic == BOOTINFO_MAGIC_MB2) log_good("[boot] Multiboot2 detected.");
     else log_warn("[boot] Unknown boot magic!");
 
     uint32_t count = bi->mmap_entries;
     log_info("[boot] RAM regions:");
-    for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t i = 0; i < count && i < 2; ++i) {
         const bootinfo_memory_t *m = &bi->mmap[i];
         log_line("-------------------------------");
         utoa(i, buf, 10); log_line_color(buf, COLOR(0xC, 0x0));
         ptoa((uint64_t)m->addr, buf); log_line_color(buf, COLOR(0x7, 0x0));
         ptoa((uint64_t)m->len, buf);  log_line_color(buf, COLOR(0x7, 0x0));
         log_line_color(efi_memtype(m->type), COLOR(0xB, 0x0));
+    }
+    if (count > 4) {
+        for (uint32_t i = count - 2; i < count; ++i) {
+            const bootinfo_memory_t *m = &bi->mmap[i];
+            log_line("-------------------------------");
+            utoa(i, buf, 10); log_line_color(buf, COLOR(0xC, 0x0));
+            ptoa((uint64_t)m->addr, buf); log_line_color(buf, COLOR(0x7, 0x0));
+            ptoa((uint64_t)m->len, buf);  log_line_color(buf, COLOR(0x7, 0x0));
+            log_line_color(efi_memtype(m->type), COLOR(0xB, 0x0));
+        }
+    } else {
+        for (uint32_t i = 2; i < count; ++i) {
+            const bootinfo_memory_t *m = &bi->mmap[i];
+            log_line("-------------------------------");
+            utoa(i, buf, 10); log_line_color(buf, COLOR(0xC, 0x0));
+            ptoa((uint64_t)m->addr, buf); log_line_color(buf, COLOR(0x7, 0x0));
+            ptoa((uint64_t)m->len, buf);  log_line_color(buf, COLOR(0x7, 0x0));
+            log_line_color(efi_memtype(m->type), COLOR(0xB, 0x0));
+        }
     }
 
     if (bi->framebuffer) {
@@ -145,7 +165,12 @@ void kernel_main(bootinfo_t *bootinfo) {
     log_line("");
     if (!bootinfo || !bootinfo->framebuffer) log_line("No framebuffer!");
     if (!bootinfo || !bootinfo->mmap) log_line("No mmap!");
-    if (bootinfo && bootinfo->mmap_entries > 64) log_warn("Warning: suspiciously large mmap_entries");
+    if (bootinfo && bootinfo->mmap_entries > 128) {
+        log_err("BUG: mmap_entries too high, halting.");
+        for(;;) __asm__("hlt");
+    }
+    if (bootinfo && bootinfo->mmap_entries > 64)
+        log_warn("Warning: suspiciously large mmap_entries");
     print_bootinfo(bootinfo);
     // Initialize core subsystems and start userland services
     gdt_install();
