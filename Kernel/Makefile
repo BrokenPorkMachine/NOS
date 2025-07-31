@@ -17,6 +17,7 @@ OBJS = \
     ../IO/keyboard.o \
     ../IO/mouse.o \
     ../IO/pci.o \
+    ../IO/serial.o \
     ../Net/e1000.o \
     ../VM/paging.o \
     ../VM/pmm.o \

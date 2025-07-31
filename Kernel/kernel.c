@@ -5,6 +5,7 @@
 #include "../IO/pic.h"
 #include "../IO/pit.h"
 #include "../IO/keyboard.h"
+#include "../IO/serial.h"
 #include "../Task/thread.h"
 #include "../VM/pmm.h"
 #include "../VM/paging.h"
@@ -51,6 +52,8 @@ static void log_line_color(const char *s, int color) {
     }
     vga_puts(s, log_row, color);
     log_row++;
+    serial_puts(s);
+    serial_puts("\n");
 }
 
 #define log_line(s)   log_line_color((s), COLOR(0xF, 0x0))
@@ -162,6 +165,7 @@ static void print_bootinfo(const bootinfo_t *bi) {
 }
 
 void kernel_main(bootinfo_t *bootinfo) {
+    serial_init();
     vga_clear();
     log_good("Mach Microkernel: Boot OK");
     log_line("");

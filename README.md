@@ -50,8 +50,13 @@
 4. **Run in QEMU:**
 
    ```sh
-   qemu-system-x86_64 -drive format=raw,file=disk.img -bios /usr/share/OVMF/OVMF_CODE.fd
+   qemu-system-x86_64 -drive format=raw,file=disk.img \
+     -bios /usr/share/OVMF/OVMF_CODE.fd -serial stdio -display none
    ```
+
+   The `-serial stdio` option attaches COM1 to your terminal so early boot
+   logs appear even before the framebuffer is initialized. See
+   [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details.
 
 ---
 
