@@ -1,5 +1,6 @@
 #include "../include/efi.h"
 #include "../include/bootinfo.h"
+#include "kernel_loader.h"
 
 #define KERNEL_PATH L"\\EFI\\BOOT\\kernel.bin"
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
