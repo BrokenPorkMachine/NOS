@@ -15,7 +15,9 @@ SECTIONS
     }
 
     .bss : {
+        __bss_start = .;
         *(.bss*)
+        __bss_end = .;
     }
 
     /DISCARD/ : { *(.note.gnu.*) *(.eh_frame*) }
