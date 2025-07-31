@@ -185,7 +185,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
     status = BS->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"FS protocol failed.\r\n"); for(;;); }
-    EFI_FILE_PROTOCOL *Root;
+    struct EFI_FILE_PROTOCOL *Root;
     status = FileSystem->OpenVolume(FileSystem, &Root);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"OpenVolume failed.\r\n"); for(;;); }
     struct EFI_FILE_PROTOCOL *KernelFile;
