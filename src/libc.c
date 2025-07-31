@@ -154,3 +154,10 @@ void free(void *ptr) {
         cur = cur->next;
     }
 }
+void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen) {
+    // Simply ignore destlen and call memcpy
+    return memcpy(dest, src, n);
+}
+char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
+    return strncpy(dest, src, n);
+}
