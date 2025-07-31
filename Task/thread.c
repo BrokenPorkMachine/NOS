@@ -13,33 +13,47 @@ static int next_id = 1;
 
 ipc_queue_t fs_queue;
 
-static void thread_fs_func(void) {
-    nitrfs_server(&fs_queue, current->id);
+// --- THREAD START HELPERS ---
+
+static void thread_entry(void (*f)(void)) {
+    f();
+    // Thread returns: mark as exited, yield
+    current->state = THREAD_EXITED;
+    thread_yield();
+    for (;;) __asm__ volatile("hlt");
 }
 
-static void thread_shell_func(void) {
-    shell_main(&fs_queue, current->id);
-}
+// --- THREAD FUNCTIONS ---
+
+static void thread_fs_func(void)   { nitrfs_server(&fs_queue, current->id); }
+static void thread_shell_func(void){ shell_main(&fs_queue, current->id); }
+
+// --- THREAD CREATION ---
 
 thread_t *thread_create(void (*func)(void)) {
     thread_t *t = malloc(sizeof(thread_t));
-    if (!t)
-        return NULL;
+    if (!t) return NULL;
     t->stack = malloc(STACK_SIZE);
-    if (!t->stack)
-        return NULL;
+    if (!t->stack) { free(t); return NULL; }
+
+    // Setup stack for context_switch: rbp/rbx/r12-r15/ret
     uint64_t *sp = (uint64_t *)(t->stack + STACK_SIZE);
+
     *--sp = 0; // rbp
     *--sp = 0; // rbx
     *--sp = 0; // r12
     *--sp = 0; // r13
     *--sp = 0; // r14
     *--sp = 0; // r15
-    *--sp = (uint64_t)func; // return address
+    *--sp = (uint64_t)thread_entry; // return address
+    *--sp = (uint64_t)func;         // argument for thread_entry
+
     t->rsp = (uint64_t)sp;
     t->func = func;
     t->id = next_id++;
     t->state = THREAD_READY;
+
+    // Insert into round-robin ring
     if (!current) {
         current = t;
         t->next = t;
@@ -51,6 +65,8 @@ thread_t *thread_create(void (*func)(void)) {
     }
     return t;
 }
+
+// --- THREAD CONTROL ---
 
 void thread_block(thread_t *t) {
     t->state = THREAD_BLOCKED;
@@ -66,6 +82,8 @@ void thread_yield(void) {
     schedule();
 }
 
+// --- THREAD SYSTEM INIT ---
+
 void threads_init(void) {
     uint32_t mask = (1u << 1) | (1u << 2);
     ipc_init(&fs_queue, mask, mask);
@@ -74,13 +92,26 @@ void threads_init(void) {
     current->state = THREAD_RUNNING;
 }
 
+// --- SCHEDULER: simple round-robin, skips non-ready threads ---
+
 void schedule(void) {
     thread_t *prev = current;
     if (prev->state == THREAD_RUNNING)
         prev->state = THREAD_READY;
+
+    int found = 0;
+    thread_t *start = current;
     do {
         current = current->next;
-    } while (current->state != THREAD_READY);
+        if (current->state == THREAD_READY) { found = 1; break; }
+    } while (current != start);
+
+    if (!found) {
+        // Deadlock! All threads blocked/exited: halt system
+        for (;;)
+            __asm__ volatile("cli; hlt");
+    }
     current->state = THREAD_RUNNING;
     context_switch(&prev->rsp, current->rsp);
 }
+
