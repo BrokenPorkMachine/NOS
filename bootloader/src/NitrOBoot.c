@@ -15,7 +15,7 @@ static void uefi_hex16(CHAR16 *buf, uint64_t val) {
     buf[18] = 0;
 }
 
-static void print_hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *prefix, uint64_t val) {
+static void print_hex(struct 0EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *prefix, uint64_t val) {
     CHAR16 buf[64];
     int idx = 0;
     if (prefix) while (prefix[idx]) { buf[idx] = prefix[idx]; idx++; }
