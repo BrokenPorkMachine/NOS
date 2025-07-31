@@ -4,7 +4,7 @@
 
 #define KERNEL_PATH L"\\EFI\\BOOT\\kernel.bin"
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
-#define MAX_MMAP_ENTRIES 128
+#define BOOTINFO_MAX_MMAP 128
 
 typedef struct {
     unsigned char e_ident[16];
@@ -20,7 +20,7 @@ typedef struct {
     uint64_t p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_align;
 } __attribute__((packed)) Elf64_Phdr;
 
-// Local memory functions
+// Simple memcpy/setmem for boot context
 VOID *EFIAPI CopyMem(VOID *d, const VOID *s, UINTN l) {
     UINT8 *dst = (UINT8*)d; const UINT8 *src = (const UINT8*)s;
     for (UINTN i = 0; i < l; ++i) dst[i] = src[i];
@@ -30,10 +30,27 @@ VOID *EFIAPI SetMem(VOID *b, UINTN l, UINT8 v) {
     UINT8 *buf = (UINT8*)b; for (UINTN i = 0; i < l; ++i) buf[i] = v; return b;
 }
 
+// SPrint for UEFI logging
+static void PrintUefiHex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *prefix, UINT64 val) {
+    static const CHAR16 digits[] = L"0123456789ABCDEF";
+    CHAR16 buf[64]; int idx = 0;
+    while (prefix && prefix[idx]) { buf[idx] = prefix[idx]; idx++; }
+    buf[idx++] = L'0'; buf[idx++] = L'x';
+    int sh = 60, start = idx;
+    for (; sh >= 0; sh -= 4) buf[idx++] = digits[(val >> sh) & 0xF];
+    buf[idx++] = L'\r'; buf[idx++] = L'\n'; buf[idx] = 0;
+    ConOut->OutputString(ConOut, buf + start); // Skip prefix for alignment
+}
+
+// --------- UEFI Bootloader Main Entry ----------
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     EFI_STATUS status;
     EFI_BOOT_SERVICES *BS = SystemTable->BootServices;
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut = SystemTable->ConOut;
+    ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLUE));
+    ConOut->ClearScreen(ConOut);
+    ConOut->OutputString(ConOut, L"NitrOBoot UEFI Loader starting...\r\n");
+    ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
 
     // --- 1. Bootinfo struct ---
     bootinfo_t *info = NULL;
@@ -43,7 +60,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     info->size = sizeof(bootinfo_t);
     info->bootloader_name = "NitrOBoot UEFI";
 
-    // --- 2. Memory map (also print to UEFI console) ---
+    // --- 2. Memory map & Print ---
     UINTN mmap_size = 0, map_key, desc_size;
     UINT32 desc_ver;
     BS->GetMemoryMap(&mmap_size, NULL, &map_key, &desc_size, &desc_ver);
@@ -52,7 +69,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, (mmap_size + 4095) / 4096, (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
     status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
 
-    // Copy and print regions
     bootinfo_memory_t *mmap = NULL;
     BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1, (EFI_PHYSICAL_ADDRESS*)&mmap);
     uint32_t mmap_count = 0;
@@ -63,10 +79,13 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         mmap[mmap_count].type = d->Type;
         mmap[mmap_count].reserved = 0;
 
-        // Print region
-        CHAR16 buf[128];
-        SPrint(buf, sizeof(buf), L"RAM: %lx-%lx type=%u\r\n",
-               d->PhysicalStart, d->PhysicalStart + d->NumberOfPages * 4096, d->Type);
+        CHAR16 buf[96];
+        // Print region, with size in MiB
+        UINT64 size_mb = mmap[mmap_count].len >> 20;
+        SPrint(buf, sizeof(buf),
+            L"RAM: %lx-%lx (%llu MiB) type=%u\r\n",
+            d->PhysicalStart, d->PhysicalStart + d->NumberOfPages * 4096,
+            size_mb, d->Type);
         ConOut->OutputString(ConOut, buf);
 
         mmap_count++;
@@ -75,7 +94,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     info->mmap = mmap;
     info->mmap_entries = mmap_count;
 
-    // --- 3. Framebuffer info ---
+    // --- 3. Framebuffer info + fill screen ---
     EFI_GUID gop_guid = {0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a}};
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
     status = BS->LocateProtocol(&gop_guid, NULL, (VOID**)&gop);
@@ -90,13 +109,15 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         fb->type    = 0;
         info->framebuffer = fb;
 
-        // Fill the screen for demo
+        // Fill framebuffer with pattern/color
         UINT32 *pixels = (UINT32*)(UINTN)fb->address;
         for (UINT32 y = 0; y < fb->height; ++y)
             for (UINT32 x = 0; x < fb->width; ++x)
                 pixels[y * (fb->pitch / 4) + x] = 0x00336699; // Dark blue
+        ConOut->OutputString(ConOut, L"Framebuffer filled with color.\r\n");
     } else {
         info->framebuffer = 0;
+        ConOut->OutputString(ConOut, L"Framebuffer NOT available.\r\n");
     }
 
     // --- 4. ACPI RSDP ---
@@ -104,11 +125,12 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     VOID *rsdp = 0;
     status = BS->LocateProtocol(&acpi2_guid, NULL, &rsdp);
     info->acpi_rsdp = (uint64_t)rsdp;
+    if (rsdp)
+        ConOut->OutputString(ConOut, L"ACPI RSDP found and passed to kernel.\r\n");
+    else
+        ConOut->OutputString(ConOut, L"No ACPI RSDP found.\r\n");
 
-    // --- 5. SMP (Not handled here, filled by kernel's ACPI code) ---
-    info->cpu_count = 0;
-
-    // --- 6. Read ELF kernel and load segments ---
+    // --- 5. Kernel ELF load ---
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
     status = BS->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
     EFI_FILE_PROTOCOL *Root;
@@ -131,20 +153,21 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         UINT64 dest = phdrs[i].p_paddr;
         UINT64 src  = kernel_buf + phdrs[i].p_offset;
         UINTN seg_pages = (phdrs[i].p_memsz + 4095) / 4096;
-        BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, seg_pages, &dest);
+        status = BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, seg_pages, &dest);
         CopyMem((VOID *)(UINTN)dest, (VOID *)(UINTN)src, phdrs[i].p_filesz);
         if (phdrs[i].p_memsz > phdrs[i].p_filesz)
             SetMem((VOID *)(UINTN)(dest + phdrs[i].p_filesz), phdrs[i].p_memsz - phdrs[i].p_filesz, 0);
     }
 
-    // --- 7. Final memory map and exit ---
+    // --- 6. Final memory map and exit boot services ---
     BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
     status = BS->ExitBootServices(ImageHandle, map_key);
+    ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
 
-    // --- 8. Jump to kernel entry (pass bootinfo ptr) ---
+    // --- 7. Handoff to kernel, pass bootinfo pointer ---
     void (*entry)(bootinfo_t*) = (void (*)(bootinfo_t*))(UINTN)ehdr->e_entry;
     entry(info);
 
-    while (1);
+    for(;;);
     return EFI_SUCCESS;
 }
