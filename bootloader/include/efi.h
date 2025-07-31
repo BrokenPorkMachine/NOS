@@ -1,7 +1,10 @@
 #ifndef EFI_H
 #define EFI_H
 
-// Basic UEFI typedefs FIRST
+// ABI for UEFI on x86_64
+#define EFIAPI __attribute__((ms_abi))
+
+// Basic UEFI typedefs
 typedef unsigned char       UINT8;
 typedef unsigned short      UINT16;
 typedef unsigned int        UINT32;
@@ -77,7 +80,7 @@ typedef struct {
 #define EfiMemoryMappedIOPortSpace  12
 #define EfiPalCode                  13
 
-// EFI Memory Descriptor (NOW CORRECTLY DEFINED)
+// EFI Memory Descriptor
 typedef struct {
     UINT32                Type;
     UINT32                Pad;
@@ -95,52 +98,52 @@ typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 
 // EFI Simple Text Output Protocol
 struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
-    EFI_STATUS (*Reset)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, BOOLEAN);
-    EFI_STATUS (*OutputString)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, CHAR16*);
-    EFI_STATUS (*TestString)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, CHAR16*);
-    EFI_STATUS (*QueryMode)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, UINTN, UINTN*, UINTN*);
-    EFI_STATUS (*SetMode)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, UINTN);
-    EFI_STATUS (*SetAttribute)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, UINTN);
-    EFI_STATUS (*ClearScreen)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*);
-    EFI_STATUS (*SetCursorPosition)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, UINTN, UINTN);
-    EFI_STATUS (*EnableCursor)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, BOOLEAN);
+    EFI_STATUS (EFIAPI *Reset)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, BOOLEAN);
+    EFI_STATUS (EFIAPI *OutputString)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, CHAR16*);
+    EFI_STATUS (EFIAPI *TestString)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, CHAR16*);
+    EFI_STATUS (EFIAPI *QueryMode)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, UINTN, UINTN*, UINTN*);
+    EFI_STATUS (EFIAPI *SetMode)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, UINTN);
+    EFI_STATUS (EFIAPI *SetAttribute)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, UINTN);
+    EFI_STATUS (EFIAPI *ClearScreen)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*);
+    EFI_STATUS (EFIAPI *SetCursorPosition)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, UINTN, UINTN);
+    EFI_STATUS (EFIAPI *EnableCursor)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL*, BOOLEAN);
 };
 
-// EFI Boot Services (partial definition, enough to boot)
+// EFI Boot Services (partial)
 struct EFI_BOOT_SERVICES {
-    char _pad1[24+8]; // skip headers and TPL services
-    EFI_STATUS (*AllocatePages)(UINTN, UINTN, UINTN, EFI_PHYSICAL_ADDRESS*);
-    EFI_STATUS (*FreePages)(EFI_PHYSICAL_ADDRESS, UINTN);
-    EFI_STATUS (*GetMemoryMap)(UINTN*, EFI_MEMORY_DESCRIPTOR*, UINTN*, UINTN*, UINT32*);
-    EFI_STATUS (*AllocatePool)(UINTN, UINTN, VOID**);
-    EFI_STATUS (*FreePool)(VOID*);
-    char _pad2[24]; // event/timers
-    EFI_STATUS (*HandleProtocol)(EFI_HANDLE, EFI_GUID*, VOID**);
-    char _pad3[120]; // misc/image services
-    EFI_STATUS (*ExitBootServices)(EFI_HANDLE, UINTN);
+    char _pad1[32]; // skip headers and TPL
+    EFI_STATUS (EFIAPI *AllocatePages)(UINTN, UINTN, UINTN, EFI_PHYSICAL_ADDRESS*);
+    EFI_STATUS (EFIAPI *FreePages)(EFI_PHYSICAL_ADDRESS, UINTN);
+    EFI_STATUS (EFIAPI *GetMemoryMap)(UINTN*, EFI_MEMORY_DESCRIPTOR*, UINTN*, UINTN*, UINT32*);
+    EFI_STATUS (EFIAPI *AllocatePool)(UINTN, UINTN, VOID**);
+    EFI_STATUS (EFIAPI *FreePool)(VOID*);
+    char _pad2[24];
+    EFI_STATUS (EFIAPI *HandleProtocol)(EFI_HANDLE, EFI_GUID*, VOID**);
+    char _pad3[120];
+    EFI_STATUS (EFIAPI *ExitBootServices)(EFI_HANDLE, UINTN);
 };
 
 // Simple File System Protocol
 struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
     UINT64 Revision;
-    EFI_STATUS (*OpenVolume)(EFI_SIMPLE_FILE_SYSTEM_PROTOCOL*, EFI_FILE_PROTOCOL**);
+    EFI_STATUS (EFIAPI *OpenVolume)(EFI_SIMPLE_FILE_SYSTEM_PROTOCOL*, EFI_FILE_PROTOCOL**);
 };
 
 // File Protocol (minimal subset)
 struct EFI_FILE_PROTOCOL {
     UINT64 Revision;
-    EFI_STATUS (*Open)(EFI_FILE_PROTOCOL*, EFI_FILE_PROTOCOL**, CHAR16*, UINT64, UINT64);
-    EFI_STATUS (*Close)(EFI_FILE_PROTOCOL*);
-    EFI_STATUS (*Read)(EFI_FILE_PROTOCOL*, UINTN*, VOID*);
+    EFI_STATUS (EFIAPI *Open)(EFI_FILE_PROTOCOL*, EFI_FILE_PROTOCOL**, CHAR16*, UINT64, UINT64);
+    EFI_STATUS (EFIAPI *Close)(EFI_FILE_PROTOCOL*);
+    EFI_STATUS (EFIAPI *Read)(EFI_FILE_PROTOCOL*, UINTN*, VOID*);
 };
 
 #define EFI_FILE_MODE_READ 0x0000000000000001ULL
 
-// EFI System Table (minimal subset)
+// EFI System Table (minimal)
 typedef struct {
-    char _pad[44];  // EFI table header (ignored)
+    char _pad[44];
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
-    char _pad2[8];  // Ignore ConIn for simplicity
+    char _pad2[8];
     EFI_BOOT_SERVICES *BootServices;
 } EFI_SYSTEM_TABLE;
 
@@ -150,6 +153,17 @@ static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = {
     {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}
 };
 
+// Memory helpers (implemented in NitrOBoot.c, not in UEFI)
+static inline VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length) {
+    UINT8 *dst = (UINT8*)Destination;
+    const UINT8 *src = (const UINT8*)Source;
+    for (UINTN i = 0; i < Length; ++i) dst[i] = src[i];
+    return Destination;
+}
+static inline VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value) {
+    UINT8 *p = (UINT8*)Buffer;
+    for (UINTN i = 0; i < Size; ++i) p[i] = Value;
+    return Buffer;
+}
+
 #endif // EFI_H
-VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length);
-VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value);
