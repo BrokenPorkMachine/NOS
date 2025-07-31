@@ -13,7 +13,7 @@ static void uefi_hex16(CHAR16 *buf, uint64_t val) {
     for (int i = 0; i < 16; ++i, shift -= 4)
         buf[2 + i] = L"0123456789ABCDEF"[(val >> shift) & 0xF];
     buf[18] = 0;
-}
+} 
 
 static void print_hex(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *prefix, uint64_t val) {
     CHAR16 buf[64];
@@ -182,13 +182,13 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         ConOut->OutputString(ConOut, L"No ACPI RSDP found.\r\n");
 
     // --- 5. Kernel ELF load ---
-    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
+    struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
     status = BS->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"FS protocol failed.\r\n"); for(;;); }
     EFI_FILE_PROTOCOL *Root;
     status = FileSystem->OpenVolume(FileSystem, &Root);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"OpenVolume failed.\r\n"); for(;;); }
-    EFI_FILE_PROTOCOL *KernelFile;
+    struct EFI_FILE_PROTOCOL *KernelFile;
     status = Root->Open(Root, &KernelFile, KERNEL_PATH, EFI_FILE_MODE_READ, 0);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"kernel.bin open failed.\r\n"); for(;;); }
 
