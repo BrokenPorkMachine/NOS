@@ -55,9 +55,11 @@
    ```
 
    The `-serial stdio` option attaches COM1 to your terminal so early boot
-   logs appear even before the framebuffer is initialized. To interact with
-   the shell you need a graphical window, so omit the `-display none`
-   argument (or use `-display sdl`). See
+   logs appear even before the framebuffer is initialized.
+   **Important:** the shell's VGA output and PS/2 keyboard require a graphical
+   window. Remove the `-display none` argument (or explicitly use
+   `-display sdl`) otherwise no shell will appear and keyboard input will seem
+   unresponsive. See
    [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details.
 
 ---
