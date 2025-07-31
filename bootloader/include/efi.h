@@ -1,5 +1,7 @@
 #ifndef EFI_H
 #define EFI_H
+VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length);
+VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value);
 
 // === Basic Types ===
 typedef unsigned char       UINT8;
@@ -145,7 +147,5 @@ static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = {
 };
 
 // === Utility function declarations ===
-VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length);
-VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value);
 
 #endif // EFI_H
