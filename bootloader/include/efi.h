@@ -35,6 +35,26 @@ typedef struct {
 #define EFI_BUFFER_TOO_SMALL      (EFI_STATUS)(5ULL | (1ULL << 63))
 #define EFI_NOT_FOUND             (EFI_STATUS)(14ULL | (1ULL << 63))
 
+// Text output colors and attributes
+#define EFI_BLACK        0x0
+#define EFI_BLUE         0x1
+#define EFI_GREEN        0x2
+#define EFI_CYAN         0x3
+#define EFI_RED          0x4
+#define EFI_MAGENTA      0x5
+#define EFI_BROWN        0x6
+#define EFI_LIGHTGRAY    0x7
+#define EFI_DARKGRAY     0x8
+#define EFI_LIGHTBLUE    0x9
+#define EFI_LIGHTGREEN   0xA
+#define EFI_LIGHTCYAN    0xB
+#define EFI_LIGHTRED     0xC
+#define EFI_LIGHTMAGENTA 0xD
+#define EFI_YELLOW       0xE
+#define EFI_WHITE        0xF
+
+#define EFI_TEXT_ATTR(fg, bg) ((fg) | ((bg) << 4))
+
 // Page Allocation Types
 #define EFI_ALLOCATE_ANY_PAGES      0
 #define EFI_ALLOCATE_MAX_ADDRESS    1
