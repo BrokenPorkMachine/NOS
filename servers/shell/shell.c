@@ -55,14 +55,23 @@ static void putc_vga(char c) {
 
 static void puts_vga(const char *s) { while (*s) putc_vga(*s++); }
 
-static const char keymap[128] = {
-    [2]='1',[3]='2',[4]='3',[5]='4',[6]='5',[7]='6',[8]='7',[9]='8',[10]='9',[11]='0',
-    [16]='q',[17]='w',[18]='e',[19]='r',[20]='t',[21]='y',[22]='u',[23]='i',[24]='o',[25]='p',
-    [30]='a',[31]='s',[32]='d',[33]='f',[34]='g',[35]='h',[36]='j',[37]='k',[38]='l',
-    [44]='z',[45]='x',[46]='c',[47]='v',[48]='b',[49]='n',[50]='m',
-    [57]=' '
-};
-static char scancode_to_ascii(uint8_t sc) { return (sc < 128) ? keymap[sc] : 0; }
+static char cwd[NITRFS_NAME_LEN] = "";
+
+static void build_path(const char *name, char out[NITRFS_NAME_LEN]) {
+    if (name[0] == '/') {
+        strncpy(out, name + 1, NITRFS_NAME_LEN - 1);
+        out[NITRFS_NAME_LEN - 1] = '\0';
+        return;
+    }
+    size_t len = strlen(cwd);
+    strncpy(out, cwd, NITRFS_NAME_LEN - 1);
+    out[NITRFS_NAME_LEN - 1] = '\0';
+    if (len && len < NITRFS_NAME_LEN - 1)
+        out[len++] = '/';
+    strncpy(out + len, name, NITRFS_NAME_LEN - len - 1);
+    out[NITRFS_NAME_LEN - 1] = '\0';
+}
+
 
 static inline void sys_yield(void) { asm volatile("mov $0, %%rax; int $0x80" ::: "rax"); }
 
@@ -76,16 +85,13 @@ static void u32_hex(uint32_t v, char buf[9]) {
 
 // --- Input (line editing, supports backspace) ---
 static char getchar_block(void) {
-    int sc;
-    char c = 0;
-    while (!c) {
-        sc = keyboard_read_scancode();
-        if (sc >= 0 && !(sc & 0x80))
-            c = scancode_to_ascii(sc);
-        if (!c)
+    int ch = -1;
+    while (ch < 0) {
+        ch = keyboard_getchar();
+        if (ch < 0)
             sys_yield();
     }
-    return c;
+    return (char)ch;
 }
 
 static void read_line(char *buf, size_t len) {
@@ -128,6 +134,8 @@ static int tokenize(char *line, char *argv[], int max) {
 
 // --- Filesystem IPC helpers ---
 static int find_handle(ipc_queue_t *q, uint32_t self_id, const char *name) {
+    char path[NITRFS_NAME_LEN];
+    build_path(name, path);
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_LIST;
     msg.len = 0;
@@ -135,7 +143,7 @@ static int find_handle(ipc_queue_t *q, uint32_t self_id, const char *name) {
     ipc_receive(q, self_id, &reply);
     for (int i = 0; i < (int)reply.arg1; i++) {
         char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
-        if (strncmp(n, name, NITRFS_NAME_LEN) == 0)
+        if (strncmp(n, path, NITRFS_NAME_LEN) == 0)
             return i;
     }
     return -1;
@@ -148,7 +156,13 @@ static void cmd_ls(ipc_queue_t *q, uint32_t self_id) {
     ipc_send(q, self_id, &msg);
     ipc_receive(q, self_id, &reply);
     for (int i = 0; i < (int)reply.arg1; i++) {
-        puts_vga((char *)reply.data + i * NITRFS_NAME_LEN);
+        const char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
+        size_t pref = strlen(cwd);
+        if (pref && strncmp(n, cwd, pref) != 0)
+            continue;
+        if (pref && n[pref] == '/')
+            n += pref + 1;
+        puts_vga(n);
         putc_vga('\n');
     }
 }
@@ -166,13 +180,15 @@ static void cmd_cat(ipc_queue_t *q, uint32_t self_id, const char *name) {
     putc_vga('\n');
 }
 static void cmd_create(ipc_queue_t *q, uint32_t self_id, const char *name) {
+    char path[NITRFS_NAME_LEN];
+    build_path(name, path);
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_CREATE; msg.arg1 = IPC_MSG_DATA_MAX;
     msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
-    size_t len = strlen(name);
+    size_t len = strlen(path);
     if (len > IPC_MSG_DATA_MAX - 1)
         len = IPC_MSG_DATA_MAX - 1;
-    strncpy((char *)msg.data, name, len);
+    strncpy((char *)msg.data, path, len);
     msg.data[len] = '\0';
     msg.len = len;
     ipc_send(q, self_id, &msg);
@@ -204,10 +220,12 @@ static void cmd_mv(ipc_queue_t *q, uint32_t self_id, const char *old, const char
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_RENAME;
     msg.arg1 = h;
-    size_t len = strlen(new);
+    char path[NITRFS_NAME_LEN];
+    build_path(new, path);
+    size_t len = strlen(path);
     if (len > IPC_MSG_DATA_MAX - 1)
         len = IPC_MSG_DATA_MAX - 1;
-    strncpy((char *)msg.data, new, len);
+    strncpy((char *)msg.data, path, len);
     msg.data[len] = '\0';
     msg.len = len;
     ipc_send(q, self_id, &msg);
@@ -237,6 +255,39 @@ static void cmd_verify(ipc_queue_t *q, uint32_t self_id, const char *name) {
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     puts_vga(reply.arg1 == 0 ? "ok\n" : "fail\n");
 }
+
+static void cmd_cd(ipc_queue_t *q, uint32_t self_id, const char *path) {
+    (void)q; (void)self_id;
+    char new[NITRFS_NAME_LEN];
+    if (path[0] == '/' && path[1] == '\0') {
+        cwd[0] = '\0';
+        return;
+    }
+    build_path(path, new);
+    size_t len = strlen(new);
+    if (len && new[len-1] != '/') {
+        if (len >= NITRFS_NAME_LEN-1) { puts_vga("path too long\n"); return; }
+        new[len] = '/'; new[len+1] = '\0';
+    }
+    if (find_handle(q, self_id, new) < 0) { puts_vga("no such dir\n"); return; }
+    strncpy(cwd, new, sizeof(cwd)-1); cwd[sizeof(cwd)-1] = '\0';
+}
+
+static void cmd_mkdir(ipc_queue_t *q, uint32_t self_id, const char *name) {
+    char path[NITRFS_NAME_LEN];
+    build_path(name, path);
+    size_t len = strlen(path);
+    if (len >= NITRFS_NAME_LEN-1) { puts_vga("name too long\n"); return; }
+    if (path[len-1] != '/') { path[len] = '/'; path[len+1] = '\0'; }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NITRFS_MSG_CREATE; msg.arg1 = 0; // zero capacity
+    msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
+    strncpy((char *)msg.data, path, NITRFS_NAME_LEN-1);
+    msg.data[NITRFS_NAME_LEN-1] = '\0';
+    msg.len = strlen((char *)msg.data);
+    ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
+    puts_vga(reply.arg1 == 0 ? "created\n" : "error\n");
+}
 static void cmd_help(void) {
     puts_vga("Available commands:\n");
     puts_vga("  ls        - list files\n");
@@ -247,8 +298,8 @@ static void cmd_help(void) {
     puts_vga("  mv OLD NEW - rename file\n");
     puts_vga("  crc FILE  - compute CRC32\n");
     puts_vga("  verify FILE - verify CRC32\n");
-    puts_vga("  cd DIR    - change directory (not implemented)\n");
-    puts_vga("  mkdir DIR - make directory (not implemented)\n");
+    puts_vga("  cd DIR    - change directory\n");
+    puts_vga("  mkdir DIR - make directory\n");
     puts_vga("  help      - show this message\n");
 }
 
@@ -279,8 +330,10 @@ void shell_main(ipc_queue_t *q, uint32_t self_id) {
             cmd_crc(q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "verify") && argc > 1) {
             cmd_verify(q, self_id, argv[1]);
-        } else if (!strcmp(argv[0], "cd") || !strcmp(argv[0], "mkdir")) {
-            puts_vga("not implemented\n");
+        } else if (!strcmp(argv[0], "cd") && argc > 1) {
+            cmd_cd(q, self_id, argv[1]);
+        } else if (!strcmp(argv[0], "mkdir") && argc > 1) {
+            cmd_mkdir(q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "help")) {
             cmd_help();
         } else {
