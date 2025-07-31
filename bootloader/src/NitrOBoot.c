@@ -148,16 +148,18 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap read failed.\r\n"); for(;;); }
 
     UINTN desc_count = mmap_size / desc_size;
+    // Reserve extra space for final allocations made before ExitBootServices
+    UINTN reserved_entries = desc_count + 32;
 
     bootinfo_memory_t *mmap = NULL;
-    UINTN mmap_pages = (desc_count * sizeof(bootinfo_memory_t) + 4095) / 4096;
+    UINTN mmap_pages = (reserved_entries * sizeof(bootinfo_memory_t) + 4095) / 4096;
     status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, mmap_pages,
                                (EFI_PHYSICAL_ADDRESS*)&mmap);
     if (status != EFI_SUCCESS) {
         ConOut->OutputString(ConOut, L"Bootinfo mmap alloc failed.\r\n");
         for(;;);
     }
-    memset(mmap, 0, desc_count * sizeof(bootinfo_memory_t));
+    memset(mmap, 0, reserved_entries * sizeof(bootinfo_memory_t));
 
     UINTN mmap_count = 0;
     for (UINT8 *p = (UINT8*)efi_mmap; p < (UINT8*)efi_mmap + mmap_size; p += desc_size) {
@@ -252,14 +254,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     while (1) {
         status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
         if (status == EFI_BUFFER_TOO_SMALL) {
-            UINTN npages = (mmap_size + 4095) / 4096;
-            status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, npages,
-                                      (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
-            if (status != EFI_SUCCESS) {
-                ConOut->OutputString(ConOut, L"Memmap realloc failed.\r\n");
-                for(;;);
-            }
-            status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
+            // Should not allocate here as that would modify the map again
+            ConOut->OutputString(ConOut, L"Final memmap buffer too small.\r\n");
+            for(;;);
         }
         if (status != EFI_SUCCESS) {
             ConOut->OutputString(ConOut, L"GetMemoryMap before ExitBootServices failed.\r\n");
@@ -269,6 +266,20 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         status = BS->ExitBootServices(ImageHandle, map_key);
         if (status == EFI_SUCCESS)
             break;
+    }
+
+    // Copy final memory map to bootinfo (it may have changed)
+    UINTN desc_count_final = mmap_size / desc_size;
+    if (desc_count_final <= reserved_entries) {
+        memset(info->mmap, 0, desc_count_final * sizeof(bootinfo_memory_t));
+        for (UINTN i = 0; i < desc_count_final; ++i) {
+            EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)efi_mmap + i * desc_size);
+            info->mmap[i].addr = d->PhysicalStart;
+            info->mmap[i].len  = d->NumberOfPages * 4096;
+            info->mmap[i].type = d->Type;
+            info->mmap[i].reserved = 0;
+        }
+        info->mmap_entries = (uint32_t)desc_count_final;
     }
 
     g_info = info;
