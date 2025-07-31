@@ -37,7 +37,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     // (1) Locate Simple FileSystem Protocol
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
     print_step(ConOut, L"[1] Locate FileSystem protocol...");
-    status = BS->HandleProtocol(ImageHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
+    status = BS->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
     if (status != EFI_SUCCESS) {
         print_fail(ConOut, L"Error: Can't locate FileSystem protocol\r\n");
         return status;
