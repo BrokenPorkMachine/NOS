@@ -140,7 +140,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     UINTN mmap_size = 0, map_key, desc_size;
     UINT32 desc_ver;
     status = BS->GetMemoryMap(&mmap_size, NULL, &map_key, &desc_size, &desc_ver);
-    mmap_size += desc_size * 16;
+    mmap_size += desc_size * 64; // add plenty of slack for final map
     EFI_MEMORY_DESCRIPTOR *efi_mmap;
     status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, (mmap_size + 4095) / 4096, (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap alloc failed.\r\n"); for(;;); }
@@ -149,7 +149,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     UINTN desc_count = mmap_size / desc_size;
     // Reserve extra space for final allocations made before ExitBootServices
-    UINTN reserved_entries = desc_count + 32;
+    // reserve extra entries for allocations between first and final map
+    UINTN reserved_entries = desc_count + 64;
 
     bootinfo_memory_t *mmap = NULL;
     UINTN mmap_pages = (reserved_entries * sizeof(bootinfo_memory_t) + 4095) / 4096;
