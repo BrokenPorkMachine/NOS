@@ -2,24 +2,21 @@
 
 #define KERNEL_PATH L"\\EFI\\BOOT\\kernel.bin"
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
-// Put this in src/efi_mem.c or src/NitrOBoot.c (outside of efi_main)
 
-#include "../include/efi.h"
-
+// --- UEFI-safe memory functions ---
 VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length) {
     UINT8 *d = (UINT8 *)Destination;
     const UINT8 *s = (const UINT8 *)Source;
     for (UINTN i = 0; i < Length; ++i) d[i] = s[i];
     return Destination;
 }
-
 VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value) {
     UINT8 *b = (UINT8 *)Buffer;
     for (UINTN i = 0; i < Size; ++i) b[i] = Value;
     return Buffer;
 }
 
-// Minimal ELF64 structs
+// --- Minimal ELF64 structures ---
 typedef struct {
     unsigned char e_ident[16];
     UINT16 e_type;
@@ -48,18 +45,17 @@ typedef struct {
     UINT64 p_align;
 } __attribute__((packed)) Elf64_Phdr;
 
+// --- Simple UEFI console printing ---
 static void print_step(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, CHAR16 *msg) {
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_YELLOW, EFI_BLACK));
     ConOut->OutputString(ConOut, msg);
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
 }
-
 static void print_ok(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut) {
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGREEN, EFI_BLACK));
     ConOut->OutputString(ConOut, L" [OK]\r\n");
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
 }
-
 static void print_fail(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, CHAR16 *msg) {
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTRED, EFI_BLACK));
     ConOut->OutputString(ConOut, L" [FAIL]\r\n");
@@ -67,6 +63,7 @@ static void print_fail(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, CHAR16 *msg) {
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
 }
 
+// --- UEFI entry point ---
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     EFI_STATUS status;
     EFI_BOOT_SERVICES *BS = SystemTable->BootServices;
@@ -77,7 +74,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     ConOut->OutputString(ConOut, L"NitrOBoot Loader Starting...\r\n");
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
 
-    // 1. Locate Simple FileSystem
+    // 1. Locate Simple FileSystem protocol
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
     print_step(ConOut, L"[1] Locate FileSystem protocol...");
     status = BS->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
@@ -98,8 +95,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     if (status != EFI_SUCCESS) { print_fail(ConOut, L"Cannot open kernel.bin\r\n"); return status; }
     print_ok(ConOut);
 
-    // 4. Allocate buffer and read ELF file
-    EFI_PHYSICAL_ADDRESS kernel_buf = 0x200000; // temp buffer (2MB mark)
+    // 4. Allocate buffer and read ELF file into it
+    EFI_PHYSICAL_ADDRESS kernel_buf = 0x200000; // 2MB, just as temp
     UINTN buf_pages = (KERNEL_MAX_SIZE + 4095) / 4096;
     print_step(ConOut, L"[4] Allocate temp buffer...");
     status = BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, buf_pages, &kernel_buf);
@@ -119,16 +116,23 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     Elf64_Phdr *phdrs = (Elf64_Phdr *)(UINTN)(kernel_buf + ehdr->e_phoff);
     print_ok(ConOut);
 
-    // 6. Load PT_LOAD segments
+    // 6. Load each PT_LOAD segment
     print_step(ConOut, L"[7] Load ELF segments...");
     for (UINT16 i = 0; i < ehdr->e_phnum; i++) {
         if (phdrs[i].p_type != 1) continue; // PT_LOAD
         UINT64 dest = phdrs[i].p_paddr;
         UINT64 src  = kernel_buf + phdrs[i].p_offset;
         UINTN seg_pages = (phdrs[i].p_memsz + 4095) / 4096;
+
+        // Allocate at segment p_paddr (physical addr)
         status = BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, seg_pages, &dest);
         if (status != EFI_SUCCESS) { print_fail(ConOut, L"Segment alloc fail\r\n"); return status; }
-        CopyMem((VOID *)(UINTN)dest, (VOID *)(UINTN)src, phdrs[i].p_filesz);
+
+        // Copy the segment file data
+        if (phdrs[i].p_filesz > 0)
+            CopyMem((VOID *)(UINTN)dest, (VOID *)(UINTN)src, phdrs[i].p_filesz);
+
+        // Zero the bss part
         if (phdrs[i].p_memsz > phdrs[i].p_filesz)
             SetMem((VOID *)(UINTN)(dest + phdrs[i].p_filesz), phdrs[i].p_memsz - phdrs[i].p_filesz, 0);
     }
@@ -151,7 +155,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     if (status != EFI_SUCCESS) { print_fail(ConOut, L"ExitBootServices failed\r\n"); return status; }
     print_ok(ConOut);
 
-    // 8. Jump to kernel entry
+    // 8. Jump to kernel entry point
     print_step(ConOut, L"[10] Jumping to kernel...\r\n");
     void (*entry)(void *) = (void (*)(void *))(UINTN)ehdr->e_entry;
     entry(NULL);
