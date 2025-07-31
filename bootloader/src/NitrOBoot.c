@@ -2,6 +2,9 @@
 #include "../include/bootinfo.h"
 #include "kernel_loader.h"
 
+static bootinfo_t *g_info = NULL;
+static void (*g_entry)(bootinfo_t *) = NULL;
+
 
 #define KERNEL_PATH L"\\kernel.bin"
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
@@ -245,9 +248,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     UINT64 stack_top = stack_base + stack_pages * 4096ULL;
     void (*entry_fn)(bootinfo_t*) = kernel_entry;
 
-    // Switch to the new stack before leaving boot services
-    __asm__ __volatile__("mov %0, %%rsp" :: "r"(stack_top));
-
     // --- 7. Final memory map and ExitBootServices ---
     status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
     if (status == EFI_BUFFER_TOO_SMALL) {
@@ -260,16 +260,21 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"GetMemoryMap before ExitBootServices failed.\r\n"); for(;;); }
     status = BS->ExitBootServices(ImageHandle, map_key);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"ExitBootServices failed.\r\n"); for(;;); }
+
     ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
 
-    // --- 8. Handoff to kernel (bootinfo pointer) ---
+    g_info = info;
+    g_entry = entry_fn;
+
+    // --- 8. Switch stack and handoff to kernel ---
     __asm__ __volatile__(
-        "mov %0, %%rdi\n"
+        "mov %0, %%rsp\n"
+        "mov %1, %%rdi\n"
         "xor %%rbp, %%rbp\n"
-        "jmp *%1\n"
+        "jmp *%2\n"
         :
-        : "r"(info), "r"(entry_fn)
-        : "rdi", "rbp");
+        : "r"(stack_top), "r"(g_info), "r"(g_entry)
+        : "rsp", "rdi", "rbp");
 
     for(;;);
     return EFI_SUCCESS;
