@@ -125,7 +125,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     // --- 1. Allocate and zero bootinfo struct ---
     bootinfo_t *info = NULL;
-    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1, (EFI_PHYSICAL_ADDRESS*)&info);
+    EFI_PHYSICAL_ADDRESS info_addr = 0xFFFFFFFF;
+    status = BS->AllocatePages(EFI_ALLOCATE_MAX_ADDRESS, EfiLoaderData, 1,
+                               &info_addr);
+    info = (bootinfo_t *)(UINTN)info_addr;
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Bootinfo alloc failed.\r\n"); for(;;); }
     memset(info, 0, sizeof(bootinfo_t));
     info->magic = BOOTINFO_MAGIC_UEFI;
@@ -143,7 +146,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     mmap_size += desc_size * 64; // add initial slack for allocations
     EFI_MEMORY_DESCRIPTOR *efi_mmap = NULL;
     UINTN efi_mmap_pages = (mmap_size + 4095) / 4096;
-    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, efi_mmap_pages, (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
+    EFI_PHYSICAL_ADDRESS efi_mmap_addr = 0xFFFFFFFF;
+    status = BS->AllocatePages(EFI_ALLOCATE_MAX_ADDRESS, EfiLoaderData,
+                               efi_mmap_pages, &efi_mmap_addr);
+    efi_mmap = (EFI_MEMORY_DESCRIPTOR *)(UINTN)efi_mmap_addr;
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap alloc failed.\r\n"); for(;;); }
     mmap_size = efi_mmap_pages * 4096;
     while (1) {
@@ -152,7 +158,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             break;
         // allocate more space and retry
         efi_mmap_pages = (mmap_size + desc_size * 64 + 4095) / 4096;
-        status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, efi_mmap_pages, (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
+        efi_mmap_addr = 0xFFFFFFFF;
+        status = BS->AllocatePages(EFI_ALLOCATE_MAX_ADDRESS, EfiLoaderData,
+                                   efi_mmap_pages, &efi_mmap_addr);
+        efi_mmap = (EFI_MEMORY_DESCRIPTOR *)(UINTN)efi_mmap_addr;
         if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap resize failed.\r\n"); for(;;); }
         mmap_size = efi_mmap_pages * 4096;
     }
@@ -165,8 +174,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     bootinfo_memory_t *mmap = NULL;
     UINTN mmap_pages = (reserved_entries * sizeof(bootinfo_memory_t) + 4095) / 4096;
-    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, mmap_pages,
-                               (EFI_PHYSICAL_ADDRESS*)&mmap);
+    EFI_PHYSICAL_ADDRESS mmap_addr = 0xFFFFFFFF;
+    status = BS->AllocatePages(EFI_ALLOCATE_MAX_ADDRESS, EfiLoaderData,
+                               mmap_pages, &mmap_addr);
+    mmap = (bootinfo_memory_t *)(UINTN)mmap_addr;
     if (status != EFI_SUCCESS) {
         ConOut->OutputString(ConOut, L"Bootinfo mmap alloc failed.\r\n");
         for(;;);
@@ -194,8 +205,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     status = BS->LocateProtocol((EFI_GUID*)&gEfiGraphicsOutputProtocolGuid, NULL, (VOID**)&gop);
     if (status == EFI_SUCCESS && gop && gop->Mode) {
         bootinfo_framebuffer_t *fb = NULL;
-        status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1,
-                                   (EFI_PHYSICAL_ADDRESS*)&fb);
+        EFI_PHYSICAL_ADDRESS fb_addr = 0xFFFFFFFF;
+        status = BS->AllocatePages(EFI_ALLOCATE_MAX_ADDRESS, EfiLoaderData, 1,
+                                   &fb_addr);
+        fb = (bootinfo_framebuffer_t *)(UINTN)fb_addr;
         if (status == EFI_SUCCESS) {
             memset(fb, 0, sizeof(bootinfo_framebuffer_t));
             fb->address = gop->Mode->FrameBufferBase;
@@ -250,9 +263,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (elf_status != 0 || !kernel_entry) { ConOut->OutputString(ConOut, L"Kernel load failed.\r\n"); for(;;); }
 
     // --- Allocate a stack for the kernel ---
-    EFI_PHYSICAL_ADDRESS stack_base = 0;
+    EFI_PHYSICAL_ADDRESS stack_base = 0xFFFFFFFF;
     UINTN stack_pages = 8; // 32 KiB
-    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData,
+    status = BS->AllocatePages(EFI_ALLOCATE_MAX_ADDRESS, EfiLoaderData,
                                stack_pages, &stack_base);
     if (status != EFI_SUCCESS) {
         ConOut->OutputString(ConOut, L"Kernel stack alloc failed.\r\n");
@@ -268,8 +281,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         if (status == EFI_BUFFER_TOO_SMALL) {
             // Allocate a larger buffer and retry
             efi_mmap_pages = (mmap_size + desc_size * 64 + 4095) / 4096;
-            status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, efi_mmap_pages,
-                                       (EFI_PHYSICAL_ADDRESS *)&efi_mmap);
+            efi_mmap_addr = 0xFFFFFFFF;
+            status = BS->AllocatePages(EFI_ALLOCATE_MAX_ADDRESS, EfiLoaderData,
+                                       efi_mmap_pages, &efi_mmap_addr);
+            efi_mmap = (EFI_MEMORY_DESCRIPTOR *)(UINTN)efi_mmap_addr;
             if (status != EFI_SUCCESS) {
                 ConOut->OutputString(ConOut, L"Final memmap alloc failed.\r\n");
                 for(;;);
