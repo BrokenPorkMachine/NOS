@@ -1,0 +1,13 @@
+# Build artifacts
+*.o
+kernel.bin
+libc.o
+disk.img
+bootloader/*.efi
+bootloader/src/*.obj
+Kernel/*.bin
+Kernel/*.o
+qemu.log
+qemu_output.txt
+*.img
+
