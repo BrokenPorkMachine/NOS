@@ -34,7 +34,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     ConOut->OutputString(ConOut, L"NitrOBoot Loader Starting...\r\n");
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
 
-    // (1) Locate Simple FileSystem Protocol
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
     print_step(ConOut, L"[1] Locate FileSystem protocol...");
     status = BS->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
@@ -62,7 +61,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     }
     print_ok(ConOut);
 
-    // (2) Allocate pages for kernel
     EFI_PHYSICAL_ADDRESS kernel_base = KERNEL_BASE_ADDR;
     UINTN kernel_pages = (KERNEL_MAX_SIZE + 4095) / 4096;
     print_step(ConOut, L"[4] Allocate pages for kernel...");
@@ -73,7 +71,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     }
     print_ok(ConOut);
 
-    // (3) Read kernel file into memory
     UINTN kernel_size = KERNEL_MAX_SIZE;
     print_step(ConOut, L"[5] Read kernel into memory...");
     status = KernelFile->Read(KernelFile, &kernel_size, (VOID*)kernel_base);
@@ -85,7 +82,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     }
     print_ok(ConOut);
 
-    // (4) Get memory map for ExitBootServices
     UINTN mmap_size = 0, map_key, desc_size;
     UINT32 desc_ver;
     print_step(ConOut, L"[6] Obtain memory map...");
@@ -107,7 +103,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     }
     print_ok(ConOut);
 
-    // (5) Exit Boot Services
     print_step(ConOut, L"[7] Exit boot services...");
     status = BS->ExitBootServices(ImageHandle, map_key);
     if (status != EFI_SUCCESS) {
@@ -116,13 +111,12 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     }
     print_ok(ConOut);
 
-    // (6) Jump to kernel entry point
     print_step(ConOut, L"[8] Jumping to kernel...\r\n");
     void (*kernel_entry)(void *) = (void (*)(void *))kernel_base;
-    kernel_entry(NULL); // Pass a structure here if needed
+    kernel_entry(NULL);
 
-    // (7) Should never return here
     for (;;);
 
     return EFI_SUCCESS;
 }
+
