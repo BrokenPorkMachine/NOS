@@ -19,6 +19,7 @@ OBJS = \
     ../IO/pci.o \
     ../Net/e1000.o \
     ../VM/paging.o \
+    ../VM/pmm.o \
     ../Task/thread.o \
     ../Task/context_switch.o \
     ../Task/user_mode.o \

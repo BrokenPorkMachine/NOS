@@ -6,6 +6,8 @@
 #include "../IO/pit.h"
 #include "../IO/keyboard.h"
 #include "../Task/thread.h"
+#include "../VM/pmm.h"
+#include "../VM/paging.h"
 
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
@@ -176,6 +178,8 @@ void kernel_main(bootinfo_t *bootinfo) {
     if (bootinfo && bootinfo->mmap_entries > 64)
         log_warn("Warning: suspiciously large mmap_entries");
     print_bootinfo(bootinfo);
+    pmm_init(bootinfo);
+    paging_init();
     // Initialize core subsystems and start userland services
     gdt_install();
     idt_install();

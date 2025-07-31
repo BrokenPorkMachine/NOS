@@ -1,4 +1,6 @@
 #include "paging.h"
+#include "pmm.h"
+#include "../src/libc.h"
 #include <stdint.h>
 
 // Paging flags (should match paging.h)
@@ -54,4 +56,92 @@ void paging_init(void) {
     cr0 |= (1ULL << 31); // PG (Paging Enable)
     cr0 |= (1ULL << 16); // WP (Write Protect: prevents kernel from writing to RO pages)
     asm volatile("mov %0, %%cr0" : : "r"(cr0));
+}
+
+static uint64_t *alloc_table(void) {
+    void *page = alloc_page();
+    if (!page)
+        return NULL;
+    memset(page, 0, PAGE_SIZE);
+    return (uint64_t *)page;
+}
+
+static uint64_t *get_or_create(uint64_t *table, uint64_t index, uint64_t flags) {
+    if (!(table[index] & PAGE_PRESENT)) {
+        uint64_t *new = alloc_table();
+        if (!new) return NULL;
+        table[index] = ((uint64_t)new) | flags | PAGE_PRESENT | PAGE_RW;
+    }
+    return (uint64_t *)(table[index] & ~0xFFFULL);
+}
+
+void paging_map(uint64_t virt, uint64_t phys, uint64_t flags) {
+    uint64_t pml4_i = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_i = (virt >> 30) & 0x1FF;
+    uint64_t pd_i   = (virt >> 21) & 0x1FF;
+    uint64_t pt_i   = (virt >> 12) & 0x1FF;
+
+    uint64_t *pdpt_t = get_or_create(pml4, pml4_i, PAGE_USER);
+    if (!pdpt_t) return;
+    uint64_t *pd_t = get_or_create(pdpt_t, pdpt_i, PAGE_USER);
+    if (!pd_t) return;
+
+    if (flags & PAGE_SIZE_2MB) {
+        pd_t[pd_i] = (phys & ~0x1FFFFFULL) | (flags & ~PAGE_SIZE_2MB) |
+                     PAGE_PRESENT | PAGE_RW;
+        paging_flush_tlb(virt);
+        return;
+    }
+
+    uint64_t *pt_t = get_or_create(pd_t, pd_i, PAGE_USER);
+    if (!pt_t) return;
+    pt_t[pt_i] = (phys & ~0xFFFULL) | flags | PAGE_PRESENT;
+    paging_flush_tlb(virt);
+}
+
+void paging_unmap(uint64_t virt) {
+    uint64_t pml4_i = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_i = (virt >> 30) & 0x1FF;
+    uint64_t pd_i   = (virt >> 21) & 0x1FF;
+    uint64_t pt_i   = (virt >> 12) & 0x1FF;
+
+    if (!(pml4[pml4_i] & PAGE_PRESENT)) return;
+    uint64_t *pdpt_t = (uint64_t *)(pml4[pml4_i] & ~0xFFFULL);
+    if (!(pdpt_t[pdpt_i] & PAGE_PRESENT)) return;
+    uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
+    if (!(pd_t[pd_i] & PAGE_PRESENT)) return;
+
+    if (pd_t[pd_i] & PAGE_PS) {
+        pd_t[pd_i] = 0;
+        paging_flush_tlb(virt);
+        return;
+    }
+
+    uint64_t *pt_t = (uint64_t *)(pd_t[pd_i] & ~0xFFFULL);
+    pt_t[pt_i] = 0;
+    paging_flush_tlb(virt);
+}
+
+uint64_t paging_virt_to_phys(uint64_t virt) {
+    uint64_t pml4_i = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_i = (virt >> 30) & 0x1FF;
+    uint64_t pd_i   = (virt >> 21) & 0x1FF;
+    uint64_t pt_i   = (virt >> 12) & 0x1FF;
+
+    if (!(pml4[pml4_i] & PAGE_PRESENT)) return 0;
+    uint64_t *pdpt_t = (uint64_t *)(pml4[pml4_i] & ~0xFFFULL);
+    if (!(pdpt_t[pdpt_i] & PAGE_PRESENT)) return 0;
+    uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
+    if (!(pd_t[pd_i] & PAGE_PRESENT)) return 0;
+
+    if (pd_t[pd_i] & PAGE_PS)
+        return (pd_t[pd_i] & ~0x1FFFFFULL) | (virt & 0x1FFFFFULL);
+
+    uint64_t *pt_t = (uint64_t *)(pd_t[pd_i] & ~0xFFFULL);
+    if (!(pt_t[pt_i] & PAGE_PRESENT)) return 0;
+    return (pt_t[pt_i] & ~0xFFFULL) | (virt & 0xFFFULL);
+}
+
+uint64_t paging_get_pml4(void) {
+    return (uint64_t)pml4;
 }
