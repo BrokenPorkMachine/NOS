@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "bootinfo.h"
 #include "../IDT/idt.h"
 #include "../VM/paging.h"
 #include "../Task/thread.h"
@@ -10,12 +11,11 @@
 #include "../Net/e1000.h"
 #include "syscall.h"
 
-// --- VGA ---
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
 #define VGA_ROWS 25
 
-static int log_row = 1; // Start below title line
+static int log_row = 1;
 
 static void vga_clear() {
     volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
@@ -27,72 +27,68 @@ static void vga_clear() {
 static void vga_write(const char* s) {
     volatile uint16_t* vga = (uint16_t*)VGA_TEXT_BUF;
     int i = 0;
-    while (s[i]) {
+    while (s[i] && i < VGA_COLS) {
         vga[i] = (0x0F << 8) | s[i];
-        ++i;
+        i++;
     }
-}
-
-static void vga_scroll() {
-    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
-    for (int row = 1; row < VGA_ROWS - 1; ++row) {
-        for (int col = 0; col < VGA_COLS; ++col)
-            vga[row * VGA_COLS + col] = vga[(row+1) * VGA_COLS + col];
-    }
-    // Clear last line
-    for (int col = 0; col < VGA_COLS; ++col)
-        vga[(VGA_ROWS-1) * VGA_COLS + col] = (0x0F << 8) | ' ';
-    log_row = VGA_ROWS - 2;
 }
 
 static void log_line(const char *s)
 {
-    if (log_row >= VGA_ROWS-1) vga_scroll();
-    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF + log_row * VGA_COLS;
+    if (log_row >= VGA_ROWS-1) log_row = 1; // (simple scroll)
+    volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF + log_row * VGA_COLS;
     int i = 0;
-    while (s[i]) {
+    while (s[i] && i < VGA_COLS) {
         vga[i] = (0x0F << 8) | s[i];
-        ++i;
+        i++;
     }
-    ++log_row;
+    log_row++;
 }
 
-// --- PANIC macro ---
-#define PANIC(msg) do { \
-    log_line("[PANIC] " msg); \
-    for(;;) __asm__ volatile("cli; hlt"); \
-} while (0)
+static void print_bootinfo(const bootinfo_t *bi) {
+    if (!bi) { log_line("No bootinfo struct."); return; }
+    if (bi->magic == BOOTINFO_MAGIC_UEFI)
+        log_line("[boot] UEFI detected.");
+    else if (bi->magic == BOOTINFO_MAGIC_MB2)
+        log_line("[boot] Multiboot2 detected.");
+    else
+        log_line("[boot] Unknown boot magic!");
+    // Print memory map size, cpu count, etc, as needed
+}
 
-// Optionally support boot info argument:
-void kernel_main(void* bootinfo) {
+void kernel_main(bootinfo_t *bootinfo) {
     vga_clear();
     vga_write("Mach Microkernel: Boot OK");
-    log_line("Booting up...");
+    log_line("");
+    print_bootinfo(bootinfo);
 
-    // Optionally print boot info if present
-    if (bootinfo) log_line("[boot] Boot info struct detected");
+    log_line("[init] IDT");
+    idt_install();
+    log_line("[init] PIC");
+    pic_remap();
+    log_line("[init] PIT");
+    pit_init(100);
+    log_line("[init] Keyboard");
+    keyboard_init();
+    log_line("[init] Mouse");
+    mouse_init();
+    log_line("[init] NIC");
+    e1000_init();
+    log_line("[init] Paging");
+    paging_init();
+    log_line("[init] Threads");
+    threads_init();
+    log_line("[init] GDT");
+    gdt_install();
+    log_line("[init] Launch first thread");
 
-    log_line("[init] IDT");        idt_install();
-    log_line("[init] PIC");        pic_remap();
-    log_line("[init] PIT");        pit_init(100);
-    log_line("[init] Keyboard");   keyboard_init();
-    log_line("[init] Mouse");      mouse_init();
-    log_line("[init] NIC");        e1000_init();
-    log_line("[init] Paging");     paging_init();
-    log_line("[init] Threads");    threads_init();
-    log_line("[init] GDT");        gdt_install();
-    log_line("[init] Launching first thread...");
+    if (!current) { log_line("[PANIC] No thread!"); for(;;) __asm__ volatile("cli; hlt"); }
 
-    if (!current) PANIC("No initial thread!");
-
-    // --- Bootstrap into first thread ---
     __asm__ volatile(
         "mov %0, %%rsp\n"
         "jmp *%1\n"
-        :
-        : "r"(current->rsp), "r"(current->func)
-        : "memory"
+        : : "r"(current->rsp), "r"(current->func) : "memory"
     );
 
-    PANIC("kernel_main should never return!");
+    for (;;) __asm__ volatile("cli; hlt");
 }
