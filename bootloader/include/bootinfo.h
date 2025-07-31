@@ -1,93 +1,92 @@
-#ifndef BOOTINFO_H
-#define BOOTINFO_H
+#include "../include/efi.h"
+#include "../include/bootinfo.h"
 
-#include <stdint.h>
+#define KERNEL_PATH L"\\EFI\\BOOT\\kernel.bin"
+#define KERNEL_MAX_SIZE (2 * 1024 * 1024)
+#define MAX_MMAP_ENTRIES 128
 
-#define BOOTINFO_MAGIC_UEFI  0x55454649 // "UEFI"
-#define BOOTINFO_MAGIC_MB2   0x36d76289 // Multiboot2
-#define BOOTINFO_MAGIC_LIMINE 0x4C494D49 // "LIMI" (example for extensibility)
+EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
+    EFI_STATUS status;
+    EFI_BOOT_SERVICES *BS = SystemTable->BootServices;
+    EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut = SystemTable->ConOut;
 
-// -------- Memory Map Types --------
-typedef enum {
-    BOOTINFO_MMAP_USABLE = 1,
-    BOOTINFO_MMAP_RESERVED = 2,
-    BOOTINFO_MMAP_ACPI_RECLAIMABLE = 3,
-    BOOTINFO_MMAP_NVS = 4,
-    BOOTINFO_MMAP_BAD = 5,
-    BOOTINFO_MMAP_BOOTLOADER_RECLAIMABLE = 0x1000,
-    BOOTINFO_MMAP_KERNEL_AND_MODULES = 0x1001
-} bootinfo_memory_type_t;
+    // --- 1. Prepare bootinfo struct ---
+    bootinfo_t *info = NULL;
+    BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1, (EFI_PHYSICAL_ADDRESS*)&info);
+    SetMem(info, sizeof(bootinfo_t), 0);
+    info->magic = BOOTINFO_MAGIC_UEFI;
+    info->size = sizeof(bootinfo_t);
 
-typedef struct {
-    uint64_t addr;
-    uint64_t len;
-    uint32_t type; // see bootinfo_memory_type_t
-    uint32_t reserved;
-} bootinfo_memory_t;
+    // --- 2. Memory map ---
+    UINTN mmap_size = 0, map_key, desc_size;
+    UINT32 desc_ver;
+    BS->GetMemoryMap(&mmap_size, NULL, &map_key, &desc_size, &desc_ver);
+    mmap_size += desc_size * 16;
+    EFI_MEMORY_DESCRIPTOR *efi_mmap;
+    BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, (mmap_size + 4095) / 4096, (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
+    status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
 
-// -------- Framebuffer Info --------
-typedef struct {
-    uint64_t address;     // Physical address of framebuffer
-    uint32_t width;
-    uint32_t height;
-    uint32_t pitch;
-    uint8_t  bpp;         // Bits per pixel
-    uint8_t  type;        // 0 = RGB, 1 = indexed, etc
-    uint8_t  reserved[6];
-} bootinfo_framebuffer_t;
+    // Fill bootinfo memory map:
+    bootinfo_memory_t *mmap = NULL;
+    BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1, (EFI_PHYSICAL_ADDRESS*)&mmap);
+    int mmap_count = 0;
+    for (UINT8 *p = (UINT8*)efi_mmap; p < (UINT8*)efi_mmap + mmap_size; p += desc_size) {
+        EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR*)p;
+        mmap[mmap_count].addr = d->PhysicalStart;
+        mmap[mmap_count].len = d->NumberOfPages * 4096;
+        mmap[mmap_count].type = d->Type;
+        mmap[mmap_count].reserved = 0;
+        mmap_count++;
+        if (mmap_count >= MAX_MMAP_ENTRIES) break;
+    }
+    info->mmap = mmap;
+    info->mmap_entries = mmap_count;
 
-// -------- SMP / Multiprocessor Info --------
-#define MAX_CPU_COUNT 256
-typedef struct {
-    uint32_t count;
-    uint32_t bsp_lapic_id;         // Local APIC ID of the BSP
-    uint32_t lapic_ids[MAX_CPU_COUNT]; // All logical processor APIC IDs
-    uint32_t reserved[7];
-} bootinfo_smp_t;
+    // --- 3. Framebuffer ---
+    EFI_GUID gop_guid = {0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a}};
+    struct {
+        UINTN Size;
+        VOID *Buffer;
+    } gop_handle = {0};
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
+    status = BS->LocateProtocol(&gop_guid, NULL, (VOID**)&gop);
+    if (status == EFI_SUCCESS) {
+        bootinfo_framebuffer_t *fb = NULL;
+        BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1, (EFI_PHYSICAL_ADDRESS*)&fb);
+        fb->address = gop->Mode->FrameBufferBase;
+        fb->width   = gop->Mode->Info->HorizontalResolution;
+        fb->height  = gop->Mode->Info->VerticalResolution;
+        fb->pitch   = gop->Mode->Info->PixelsPerScanLine * 4;
+        fb->bpp     = 32;
+        fb->type    = 0;
+        info->framebuffer = fb;
+    } else {
+        info->framebuffer = 0;
+    }
 
-// -------- Module/Initrd --------
-#define MAX_MODULES 8
-typedef struct {
-    uint64_t begin;
-    uint64_t end;
-    char     name[64];
-} bootinfo_module_t;
+    // --- 4. ACPI RSDP detection ---
+    EFI_GUID acpi2_guid = {0x8868e871,0xe4f1,0x11d3,{0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81}};
+    VOID *rsdp = 0;
+    status = BS->LocateProtocol(&acpi2_guid, NULL, &rsdp);
+    info->acpi_rsdp = (uint64_t)rsdp;
 
-// -------- Main bootinfo struct --------
-typedef struct bootinfo {
-    // --- Bootloader flags ---
-    uint32_t magic;          // e.g. BOOTINFO_MAGIC_UEFI, _MB2, _LIMINE
-    uint32_t size;           // total struct size
-    uint64_t kernel_phys_base;
-    uint64_t kernel_phys_end;
+    // --- 5. SMP (Not provided by UEFI -- see below for Multiboot) ---
+    info->smp = 0;
 
-    // --- Memory map ---
-    bootinfo_memory_t* mmap;
-    uint32_t mmap_entries;
+    // --- 6. Modules, cmdline, loader name (populate as needed) ---
+    info->module_count = 0;
+    info->cmdline = NULL;
+    info->bootloader_name = L"NitrOBoot UEFI";
 
-    // --- Framebuffer (graphics) ---
-    bootinfo_framebuffer_t* framebuffer;
+    // --- 7. Read kernel, parse ELF, load segments as before (not repeated here) ---
 
-    // --- ACPI (RSDP pointer) ---
-    uint64_t acpi_rsdp;      // Physical pointer to ACPI RSDP, or 0
+    // --- 8. ExitBootServices ---
+    status = BS->ExitBootServices(ImageHandle, map_key);
 
-    // --- SMP info ---
-    bootinfo_smp_t* smp;
+    // --- 9. Jump to kernel ---
+    void (*entry)(bootinfo_t*) = (void (*)(bootinfo_t*))(your_kernel_entry);
+    entry(info);
+    while (1);
 
-    // --- Boot modules (initrd, etc) ---
-    bootinfo_module_t modules[MAX_MODULES];
-    uint32_t module_count;
-
-    // --- Kernel command line ---
-    char* cmdline;
-
-    // --- Bootloader name/version ---
-    char* bootloader_name;
-
-    // --- Extensibility: Custom tags, pointers, etc ---
-    void*  extra;
-
-    // --- (you can add more here as your OS grows!) ---
-} bootinfo_t;
-
-#endif
+    return EFI_SUCCESS;
+}
