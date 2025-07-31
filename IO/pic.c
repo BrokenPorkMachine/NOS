@@ -33,6 +33,8 @@ void pic_remap(void) {
     outb(PIC2_DATA, 0x01);
     io_wait();
 
-    outb(PIC1_DATA, a1);   // restore saved masks
-    outb(PIC2_DATA, a2);
+    // Unmask timer (IRQ0) and keyboard (IRQ1) while masking others
+    // This allows scheduling preemption via PIT and keyboard input
+    outb(PIC1_DATA, 0xFC); // 11111100b -> IRQ0 and IRQ1 enabled
+    outb(PIC2_DATA, 0xFF); // mask all IRQs on the slave PIC for now
 }
