@@ -17,7 +17,6 @@ typedef VOID*               EFI_HANDLE;
 typedef UINT64              EFI_PHYSICAL_ADDRESS;
 typedef UINT64              EFI_VIRTUAL_ADDRESS;
 
-// UEFI calling convention
 #ifndef EFIAPI
 #define EFIAPI
 #endif
@@ -112,6 +111,7 @@ typedef struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 typedef struct EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
 typedef struct EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
 typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
+typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL EFI_GRAPHICS_OUTPUT_PROTOCOL;
 
 // ----------------------------------------------------------------------
 // 7. Simple Text Output Protocol
@@ -132,7 +132,7 @@ struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
 // 8. EFI Boot Services (partial, enough to boot)
 // ----------------------------------------------------------------------
 struct EFI_BOOT_SERVICES {
-    char _pad1[24+8]; // skip headers and TPL services
+    char _pad1[32]; // skip headers and TPL services
     EFI_STATUS (*AllocatePages)(UINTN, UINTN, UINTN, EFI_PHYSICAL_ADDRESS*);
     EFI_STATUS (*FreePages)(EFI_PHYSICAL_ADDRESS, UINTN);
     EFI_STATUS (*GetMemoryMap)(UINTN*, EFI_MEMORY_DESCRIPTOR*, UINTN*, UINTN*, UINT32*);
@@ -140,7 +140,8 @@ struct EFI_BOOT_SERVICES {
     EFI_STATUS (*FreePool)(VOID*);
     char _pad2[24]; // event/timers
     EFI_STATUS (*HandleProtocol)(EFI_HANDLE, EFI_GUID*, VOID**);
-    char _pad3[120]; // misc/image services
+    EFI_STATUS (*LocateProtocol)(EFI_GUID*, VOID*, VOID**);
+    char _pad3[112]; // misc/image services
     EFI_STATUS (*ExitBootServices)(EFI_HANDLE, UINTN);
 };
 
@@ -164,37 +165,9 @@ struct EFI_FILE_PROTOCOL {
 
 #define EFI_FILE_MODE_READ 0x0000000000000001ULL
 
-struct EFI_BOOT_SERVICES {
-    char _pad1[24+8];
-    EFI_STATUS (*AllocatePages)(...);
-    // ... existing fields ...
-    EFI_STATUS (*HandleProtocol)(EFI_HANDLE, EFI_GUID*, VOID**);
-    // Add this line:
-    EFI_STATUS (*LocateProtocol)(EFI_GUID*, VOID*, VOID**);
-    // ... rest of struct ...
-    EFI_STATUS (*ExitBootServices)(EFI_HANDLE, UINTN);
-};
 // ----------------------------------------------------------------------
-// 11. EFI System Table (minimal subset)
+// 11. UEFI Graphics Output Protocol (GOP)
 // ----------------------------------------------------------------------
-typedef struct {
-    char _pad[44];  // EFI table header (ignored)
-    EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
-    char _pad2[8];  // Ignore ConIn for simplicity
-    EFI_BOOT_SERVICES *BootServices;
-} EFI_SYSTEM_TABLE;
-
-// ----------------------------------------------------------------------
-// 12. GUID for EFI_SIMPLE_FILE_SYSTEM_PROTOCOL
-// ----------------------------------------------------------------------
-static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = {
-    0x964e5b21, 0x6459, 0x11d2,
-    {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}
-};
-
-#endif // EFI_H
-// --- UEFI Graphics Output Protocol (GOP) ---
-
 typedef struct {
     UINT32  Version;
     UINT32  HorizontalResolution;
@@ -212,18 +185,37 @@ typedef struct {
     UINTN                          FrameBufferSize;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE;
 
-typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL EFI_GRAPHICS_OUTPUT_PROTOCOL;
 struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
     EFI_STATUS (*QueryMode)(EFI_GRAPHICS_OUTPUT_PROTOCOL*, UINT32, UINTN*, EFI_GRAPHICS_OUTPUT_MODE_INFORMATION**);
     EFI_STATUS (*SetMode)(EFI_GRAPHICS_OUTPUT_PROTOCOL*, UINT32);
     // PixelBlt skipped
     EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
 };
-    EFI_STATUS (*HandleProtocol)(EFI_HANDLE, EFI_GUID*, VOID**);
-    EFI_STATUS (*LocateProtocol)(EFI_GUID*, VOID*, VOID**); // <--- add this line
 
-// The GOP GUID
-static const EFI_GUID gEfiGraphicsOutputProtocolGuid = { 0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a} };
+// ----------------------------------------------------------------------
+// 12. EFI System Table (minimal subset)
+// ----------------------------------------------------------------------
+typedef struct {
+    char _pad[44];  // EFI table header (ignored)
+    EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
+    char _pad2[8];  // Ignore ConIn for simplicity
+    EFI_BOOT_SERVICES *BootServices;
+} EFI_SYSTEM_TABLE;
 
-// ACPI 2.0 Table GUID (for RSDP)
-static const EFI_GUID gEfiAcpi20TableGuid = {0x8868e871,0xe4f1,0x11d3,{0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81}};
+// ----------------------------------------------------------------------
+// 13. GUIDs
+// ----------------------------------------------------------------------
+static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = {
+    0x964e5b21, 0x6459, 0x11d2,
+    {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}
+};
+static const EFI_GUID gEfiGraphicsOutputProtocolGuid = {
+    0x9042a9de, 0x23dc, 0x4a38,
+    {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a}
+};
+static const EFI_GUID gEfiAcpi20TableGuid = {
+    0x8868e871, 0xe4f1, 0x11d3,
+    {0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81}
+};
+
+#endif // EFI_H
