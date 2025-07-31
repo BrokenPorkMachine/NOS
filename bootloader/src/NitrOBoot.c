@@ -13,7 +13,12 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     UINTN kernel_size = 0x200000; // 2MB max size, adjust as needed
     
     // (2) Allocate pages for kernel
-    EFI_STATUS status = BS->AllocatePages(0, 2, kernel_size / 4096, &kernel_base);
+    EFI_STATUS status = BS->AllocatePages(
+        EFI_ALLOCATE_ADDRESS,
+        EfiLoaderData,
+        (kernel_size + 4095) / 4096,
+        &kernel_base
+    );
     if (status != EFI_SUCCESS) {
         SystemTable->ConOut->OutputString(SystemTable->ConOut, L"Allocation failed\r\n");
         return status;
@@ -24,8 +29,25 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
 
     SystemTable->ConOut->OutputString(SystemTable->ConOut, L"Kernel loaded\r\n");
 
-    // (4) Get memory map and ExitBootServices (minimal example)
-    UINTN map_key = 0; // Normally you'd get this from GetMemoryMap
+    // (4) Get memory map and ExitBootServices
+    UINTN map_size = 0;
+    UINTN map_key = 0;
+    UINTN desc_size = 0;
+    UINT32 desc_ver = 0;
+
+    // First call to get required buffer size
+    BS->GetMemoryMap(&map_size, (EFI_MEMORY_DESCRIPTOR *)0, &map_key, &desc_size, &desc_ver);
+    EFI_PHYSICAL_ADDRESS mmap_buf = 0;
+    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData,
+                               (map_size + 4095) / 4096, &mmap_buf);
+    if (status != EFI_SUCCESS)
+        return status;
+
+    status = BS->GetMemoryMap(&map_size, (EFI_MEMORY_DESCRIPTOR *)mmap_buf,
+                              &map_key, &desc_size, &desc_ver);
+    if (status != EFI_SUCCESS)
+        return status;
+
     status = BS->ExitBootServices(ImageHandle, map_key);
     if (status != EFI_SUCCESS) {
         return status;

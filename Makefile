@@ -1,119 +1,24 @@
 CROSS_COMPILE ?= x86_64-linux-gnu-
 CC      = $(CROSS_COMPILE)gcc
-LD      = $(CROSS_COMPILE)ld
 NASM    = nasm
 
 CFLAGS  = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib
-LDFLAGS = -T Kernel/kernel.ld -nostdlib
-
-OBJS = \
-  Kernel/kernel_entry.o \
-  Kernel/kernel.o \
-  IDT/idt.o \
-  IDT/interrupt.o \
-  IDT/isr_stub.o \
-  IO/pic.o \
-  IO/pit.o \
-  IO/keyboard.o \
-  IO/mouse.o \
-  IO/pci.o \
-  Net/e1000.o \
-  VM/paging.o \
-  Task/thread.o \
-  Task/context_switch.o \
-  Task/user_mode.o \
-  GDT/gdt.o \
-  GDT/gdt_flush.o \
-  GDT/user.o \
-  Kernel/syscall.o \
-  servers/nitrfs/nitrfs.o \
-  servers/nitrfs/server.o \
-  servers/shell/shell.o \
-  IPC/ipc.o \
-  libc.o
 
 all: kernel.bin bootloader
 
-.PHONY: bootloader clean
-
-bootloader:
-	$(MAKE) -C bootloader CROSS_COMPILE=$(CROSS_COMPILE)
-
-Kernel/kernel_entry.o: Kernel/kernel_entry.asm
-	$(NASM) -f elf64 $< -o $@
-
-Kernel/kernel.o: Kernel/kernel.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-Kernel/syscall.o: Kernel/syscall.c Kernel/syscall.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-IDT/idt.o: IDT/idt.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-IDT/interrupt.o: IDT/interrupt.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-IDT/isr_stub.o: IDT/isr_stub.asm
-	$(NASM) -f elf64 $< -o $@
-
-IO/pic.o: IO/pic.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-IO/pit.o: IO/pit.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-IO/keyboard.o: IO/keyboard.c IO/keyboard.h IO/io.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-IO/mouse.o: IO/mouse.c IO/mouse.h IO/io.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-IO/pci.o: IO/pci.c IO/pci.h IO/io.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-Net/e1000.o: Net/e1000.c Net/e1000.h IO/pci.h src/libc.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-VM/paging.o: VM/paging.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-Task/thread.o: Task/thread.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-Task/context_switch.o: Task/context_switch.asm
-	$(NASM) -f elf64 $< -o $@
-
-Task/user_mode.o: Task/user_mode.asm
-	$(NASM) -f elf64 $< -o $@
-
-GDT/gdt.o: GDT/gdt.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-GDT/gdt_flush.o: GDT/gdt.asm
-	$(NASM) -f elf64 $< -o $@
-	
-GDT/user.o: GDT/user.c
-	$(CC) $(CFLAGS) -c $< -o $@
-	
-servers/nitrfs/nitrfs.o: servers/nitrfs/nitrfs.c servers/nitrfs/nitrfs.h
-	$(CC) $(CFLAGS) -c $< -o $@
-	
-servers/nitrfs/server.o: servers/nitrfs/server.c servers/nitrfs/nitrfs.h IPC/ipc.h
-	$(CC) $(CFLAGS) -IIPC -Isrc -c $< -o $@
-	
-servers/shell/shell.o: servers/shell/shell.c servers/nitrfs/nitrfs.h IPC/ipc.h
-	$(CC) $(CFLAGS) -IIPC -Isrc -c $< -o $@
-	
-IPC/ipc.o: IPC/ipc.c IPC/ipc.h
-	$(CC) $(CFLAGS) -c $< -o $@
+kernel.bin: libc.o
+	$(MAKE) -C Kernel CROSS_COMPILE=$(CROSS_COMPILE)
+	cp Kernel/kernel.bin $@
 
 libc.o: src/libc.c src/libc.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-kernel.bin: $(OBJS)
-	$(LD) $(LDFLAGS) $(OBJS) -o $@
+bootloader:
+	$(MAKE) -C bootloader
+
+.PHONY: clean
 
 clean:
-	$(MAKE) -C bootloader CROSS_COMPILE=$(CROSS_COMPILE) clean
-	rm -f $(OBJS) kernel.bin
+	$(MAKE) -C Kernel clean
+	$(MAKE) -C bootloader clean
+	rm -f libc.o kernel.bin

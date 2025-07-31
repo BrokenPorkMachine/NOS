@@ -9,11 +9,21 @@ typedef void VOID;
 typedef unsigned long long EFI_PHYSICAL_ADDRESS;
 typedef unsigned int UINT32;
 
+// Allocation types
+#define EFI_ALLOCATE_ANY_PAGES   0
+#define EFI_ALLOCATE_MAX_ADDRESS 1
+#define EFI_ALLOCATE_ADDRESS     2
+
+// Memory types
+#define EfiLoaderCode   1
+#define EfiLoaderData   2
+
 #define EFI_SUCCESS           0
 #define EFI_LOAD_ERROR        (EFI_STATUS)(1 | (1ULL << 63))
 
 typedef struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 typedef struct EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
+typedef struct EFI_MEMORY_DESCRIPTOR EFI_MEMORY_DESCRIPTOR;
 
 struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
     VOID *dummy; // unused
@@ -25,22 +35,40 @@ struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
 };
 
 struct EFI_BOOT_SERVICES {
-    char _pad1[24];  // Skip initial table fields (header and some functions)
-    
-    // Add AllocatePages at the correct offset (simplified version)
+    char _pad1[40];  // Skip EFI table header and TPL services
+
     EFI_STATUS (*AllocatePages)(
         UINT32 Type,
         UINT32 MemoryType,
         UINTN Pages,
         EFI_PHYSICAL_ADDRESS *Memory
     );
+    EFI_STATUS (*FreePages)(
+        EFI_PHYSICAL_ADDRESS Memory,
+        UINTN Pages
+    );
+    EFI_STATUS (*GetMemoryMap)(
+        UINTN *MemoryMapSize,
+        EFI_MEMORY_DESCRIPTOR *MemoryMap,
+        UINTN *MapKey,
+        UINTN *DescriptorSize,
+        UINT32 *DescriptorVersion
+    );
 
-    char _pad2[64];  // Placeholder padding, adjust if more functions are used
+    char _pad2[48];  // Skip to ExitBootServices
 
     EFI_STATUS (*ExitBootServices)(
         EFI_HANDLE ImageHandle,
         UINTN MapKey
     );
+};
+
+struct EFI_MEMORY_DESCRIPTOR {
+    UINT32 Type;
+    EFI_PHYSICAL_ADDRESS PhysicalStart;
+    EFI_PHYSICAL_ADDRESS VirtualStart;
+    UINTN NumberOfPages;
+    UINT64 Attribute;
 };
 
 typedef struct {
