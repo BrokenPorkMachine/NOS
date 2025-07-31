@@ -109,9 +109,9 @@ The shell understands a handful of simple text commands. Examples:
 
 Available commands include:
 
-* `cd` – change the working directory (not yet implemented)
+* `cd` – change the working directory
 * `ls` or `dir` – list directory contents
-* `mkdir` – create a new directory (not yet implemented)
+* `mkdir` – create a new directory
 * `mv` – move or rename a file
 * `crc` – compute CRC32 of a file
 * `verify` – verify file integrity using CRC32
