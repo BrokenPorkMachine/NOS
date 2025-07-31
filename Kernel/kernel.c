@@ -35,17 +35,6 @@ static void log_line(const char *s)
         log_row++;
 }
 
-// System call dispatcher for int $0x80
-void isr_syscall_handler(void) {
-    uint64_t num, a1, a2, a3, ret;
-    asm volatile("mov %%rax, %0" : "=r"(num));
-    asm volatile("mov %%rdi, %0" : "=r"(a1));
-    asm volatile("mov %%rsi, %0" : "=r"(a2));
-    asm volatile("mov %%rdx, %0" : "=r"(a3));
-    ret = syscall_handle(num, a1, a2, a3);
-    asm volatile("mov %0, %%rax" :: "r"(ret));
-}
-
 void kernel_main(void) {
     vga_write("Mach Microkernel: Boot OK");
     log_line("[init] IDT");
