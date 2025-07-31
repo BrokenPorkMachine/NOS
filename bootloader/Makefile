@@ -3,7 +3,7 @@ CFLAGS=--target=x86_64-pc-win32-coff -ffreestanding -fshort-wchar \
 	   -mno-red-zone -fno-stack-protector -fno-exceptions \
 	   -fno-asynchronous-unwind-tables -Iinclude -Wall -Wextra -Werror
 
-LDFLAGS=-fuse-ld=lld-link -nostdlib \
+LDFLAGS=-fuse-ld=lld -nostdlib \
 	    -Wl,/entry:efi_main \
 	    -Wl,/subsystem:efi_application \
 	    -Wl,/align:32 \
