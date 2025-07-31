@@ -219,6 +219,8 @@ struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
     // PixelBlt skipped
     EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
 };
+    EFI_STATUS (*HandleProtocol)(EFI_HANDLE, EFI_GUID*, VOID**);
+    EFI_STATUS (*LocateProtocol)(EFI_GUID*, VOID*, VOID**); // <--- add this line
 
 // The GOP GUID
 static const EFI_GUID gEfiGraphicsOutputProtocolGuid = { 0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a} };
