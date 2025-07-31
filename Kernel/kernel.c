@@ -3,34 +3,37 @@
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
 #define VGA_ROWS 25
-#define COLOR(fg, bg) ((bg << 4) | (fg))
+#define COLOR(fg, bg) (((bg) << 4) | (fg))
 
 static int log_row = 1;
 
 // --- Simple VGA console ---
-static void vga_clear() {
+static void vga_clear(void) {
     volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
     for (int i = 0; i < VGA_COLS * VGA_ROWS; ++i)
         vga[i] = (COLOR(0xF, 0x0) << 8) | ' ';
     log_row = 1;
 }
+
 static void vga_puts(const char *s, int row, int color) {
     volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF + row * VGA_COLS;
     int i = 0;
     while (s[i] && i < VGA_COLS) {
-        vga[i] = (color << 8) | s[i];
+        vga[i] = (color << 8) | (unsigned char)s[i];
         i++;
     }
 }
+
 static void log_line_color(const char *s, int color) {
     if (log_row >= VGA_ROWS-1) log_row = 1;
     vga_puts(s, log_row, color);
     log_row++;
 }
-#define log_line(s) log_line_color((s), COLOR(0xF, 0x0))
-#define log_warn(s) log_line_color((s), COLOR(0xE, 0x0))
-#define log_info(s) log_line_color((s), COLOR(0xB, 0x0))
-#define log_good(s) log_line_color((s), COLOR(0xA, 0x0))
+
+#define log_line(s)   log_line_color((s), COLOR(0xF, 0x0))
+#define log_warn(s)   log_line_color((s), COLOR(0xE, 0x0))
+#define log_info(s)   log_line_color((s), COLOR(0xB, 0x0))
+#define log_good(s)   log_line_color((s), COLOR(0xA, 0x0))
 
 static void utoa(uint64_t val, char *buf, int base) {
     static const char dig[] = "0123456789ABCDEF";
@@ -63,14 +66,14 @@ static const char *efi_memtype(uint32_t t) {
 
 // --- Print framebuffer pixels (demo text, color bar) ---
 static void fb_print_text(const bootinfo_framebuffer_t *fb, const char *s) {
-    if (!fb) return;
+    if (!fb || !fb->address || !s) return;
     uint32_t *pixels = (uint32_t*)(uintptr_t)fb->address;
     uint32_t y = fb->height/2, x = 4;
     for (int i = 0; s[i] && x < fb->width-4; i++, x++)
-        pixels[y * (fb->pitch/4) + x] = 0xFFFFFF00 | (s[i]);
+        pixels[y * (fb->pitch/4) + x] = 0xFFFFFF00 | (unsigned char)s[i];
 }
 static void fb_demo_bar(const bootinfo_framebuffer_t *fb) {
-    if (!fb) return;
+    if (!fb || !fb->address) return;
     uint32_t *pixels = (uint32_t*)(uintptr_t)fb->address;
     for (uint32_t y = 0; y < 24 && y < fb->height; ++y)
         for (uint32_t x = 0; x < fb->width; ++x)
@@ -108,7 +111,7 @@ static void print_bootinfo(const bootinfo_t *bi) {
     // ACPI RSDP
     ptoa(bi->acpi_rsdp, buf); log_line("[boot] ACPI RSDP:"); log_line(buf);
 
-    // TODO: ACPI/MADT parsing, SMP, etc.
+    // --- TODO: Add ACPI/MADT parsing for CPU details, SMP, etc. ---
 }
 
 void kernel_main(bootinfo_t *bootinfo) {
