@@ -3,6 +3,7 @@
 #include "../nitrfs/nitrfs.h"
 #include "../nitrfs/server.h"
 #include "../../IO/keyboard.h"
+#include "../../IO/serial.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -305,6 +306,7 @@ static void cmd_help(void) {
 // --- Shell main loop ---
 void shell_main(ipc_queue_t *q, uint32_t self_id) {
     vga_clear_screen();
+    serial_puts("[shell] starting\n");
     puts_vga("NOS shell ready\n");
     puts_vga("type 'help' for commands\n");
     char line[80]; char *argv[4];

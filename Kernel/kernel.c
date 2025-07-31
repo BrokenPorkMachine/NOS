@@ -169,7 +169,7 @@ void kernel_main(bootinfo_t *bootinfo) {
     serial_init();
     vga_clear();
     log_good("Mach Microkernel: Boot OK");
-    log_line("");
+    log_line("[Stage 1] Validate bootinfo");
     if (!bootinfo || bootinfo->size != sizeof(bootinfo_t)) {
         log_err("bootinfo size mismatch");
         for(;;) __asm__("hlt");
@@ -189,9 +189,11 @@ void kernel_main(bootinfo_t *bootinfo) {
         bootinfo->cpus[0].flags = 1;
     }
     print_bootinfo(bootinfo);
+    log_line("[Stage 2] Init memory management");
     pmm_init(bootinfo);
     paging_init();
-    // Initialize core subsystems and start userland services
+
+    log_line("[Stage 3] Set up interrupts");
     gdt_install();
     idt_install();
     pic_remap();
@@ -199,9 +201,11 @@ void kernel_main(bootinfo_t *bootinfo) {
     keyboard_init();
     log_good("[kbd] Keyboard initialized");
 
+    log_line("[Stage 4] Launch servers");
     threads_init();
     asm volatile("sti");
 
+    log_line("[Stage 5] Scheduler start");
     for (;;) {
         schedule();
     }
