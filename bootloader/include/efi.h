@@ -341,8 +341,18 @@ static const EFI_GUID gEfiAcpi20TableGuid =
 static const EFI_GUID gEfiAcpi10TableGuid =
     { 0xeb9d2d30, 0x2d88, 0x11d3, { 0x9a, 0x16, 0x0, 0x0, 0x9c, 0x00, 0x83, 0x0b } };
 
-static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = 
-    { 0x0964e5b2, 0x6459, 0x11d2, { 0x8e, 0x39, 0x0, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
+static const EFI_GUID gEfiSimpleFileSystemProtocolGuid =
+    { 0x964e5b22, 0x6459, 0x11d2, { 0x8e, 0x39, 0x0, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
+
+static const EFI_GUID gEfiLoadedImageProtocolGuid =
+    { 0x5b1b31a1, 0x9562, 0x11d2, { 0x8e, 0x3f, 0x0, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
+
+typedef struct EFI_LOADED_IMAGE_PROTOCOL {
+    UINT32     Revision;
+    EFI_HANDLE ParentHandle;
+    struct EFI_SYSTEM_TABLE *SystemTable;
+    EFI_HANDLE DeviceHandle;
+} EFI_LOADED_IMAGE_PROTOCOL;
 
 // ====================
 // EFI_MEMORY_DESCRIPTOR

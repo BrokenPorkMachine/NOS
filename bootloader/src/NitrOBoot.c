@@ -2,7 +2,7 @@
 #include "../include/bootinfo.h"
 #include "kernel_loader.h"
 
-#define KERNEL_PATH L"\\EFI\\BOOT\\kernel.bin"
+#define KERNEL_PATH L"\\kernel.bin"
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
 #define BOOTINFO_MAX_MMAP 128
 
@@ -193,8 +193,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         ConOut->OutputString(ConOut, L"No ACPI RSDP found.\r\n");
 
     // --- 5. Kernel ELF load ---
+    // Locate the simple filesystem protocol in the system
     struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
-    status = BS->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem);
+    status = BS->LocateProtocol((EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid,
+                                NULL, (VOID**)&FileSystem);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"FS protocol failed.\r\n"); for(;;); }
     struct EFI_FILE_PROTOCOL *Root;
     status = FileSystem->OpenVolume(FileSystem, &Root);
