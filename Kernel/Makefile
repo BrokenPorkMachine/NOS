@@ -33,6 +33,7 @@ OBJS = \
     ../servers/shell/shell.o \
     ../IPC/ipc.o \
     ../CPU/cpu.o \
+    ../ACPI/acpi.o \
     ../libc.o
 
 all: kernel.bin
