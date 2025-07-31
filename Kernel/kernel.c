@@ -197,6 +197,7 @@ void kernel_main(bootinfo_t *bootinfo) {
     pic_remap();
     pit_init(100);
     keyboard_init();
+    log_good("[kbd] Keyboard initialized");
 
     threads_init();
     asm volatile("sti");
