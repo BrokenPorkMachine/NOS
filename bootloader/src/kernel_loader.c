@@ -52,6 +52,7 @@ static void *memset(void *d, int v, unsigned n) {
 EFI_STATUS load_and_boot_kernel(
     EFI_FILE_PROTOCOL *KernelFile,
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut,
+    EFI_BOOT_SERVICES *BS,  // <-- pass in!
     bootinfo_t *bootinfo)
 {
     EFI_STATUS st;
@@ -84,7 +85,7 @@ EFI_STATUS load_and_boot_kernel(
 
         EFI_PHYSICAL_ADDRESS dest = ph.p_paddr;
         UINTN npages = (ph.p_memsz + 4095) / 4096;
-        st = gBS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, npages, &dest);
+        st = BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, npages, &dest);
         if (st || dest != ph.p_paddr) {
             ConOut->OutputString(ConOut, L"Page alloc failed\r\n");
             return 4;
