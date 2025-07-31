@@ -109,26 +109,88 @@ struct EFI_SYSTEM_TABLE {
 };
 
 // ====================
-// Boot Services (Minimal, add more if needed)
+// Boot Services table (ordered as in UEFI spec)
+// The structure layout must match the real UEFI table so that
+// function pointers retrieved from it are correct.  Many entries are
+// unused by the bootloader, so they are typed as generic pointers but
+// still occupy space to preserve the correct offsets.
+// Only the functions actually used are given explicit prototypes.
 // ====================
 struct EFI_BOOT_SERVICES {
     EFI_TABLE_HEADER  Hdr;
-    // Task Priority
-    VOID* RaiseTPL;
-    VOID* RestoreTPL;
 
-    // Memory Services (Common order)
-    EFI_STATUS (*AllocatePages)(UINTN Type, UINTN MemoryType, UINTN Pages, EFI_PHYSICAL_ADDRESS *Memory);
+    /* Task Priority Services */
+    VOID *RaiseTPL;
+    VOID *RestoreTPL;
+
+    /* Memory Services */
+    EFI_STATUS (*AllocatePages)(UINTN Type, UINTN MemoryType, UINTN Pages,
+                                EFI_PHYSICAL_ADDRESS *Memory);
     EFI_STATUS (*FreePages)(EFI_PHYSICAL_ADDRESS Memory, UINTN Pages);
-    EFI_STATUS (*GetMemoryMap)(UINTN *MemoryMapSize, VOID *MemoryMap, UINTN *MapKey, UINTN *DescriptorSize, UINT32 *DescriptorVersion);
+    EFI_STATUS (*GetMemoryMap)(UINTN *MemoryMapSize, VOID *MemoryMap,
+                               UINTN *MapKey, UINTN *DescriptorSize,
+                               UINT32 *DescriptorVersion);
     EFI_STATUS (*AllocatePool)(UINTN PoolType, UINTN Size, VOID **Buffer);
     EFI_STATUS (*FreePool)(VOID *Buffer);
-    // Add to struct EFI_BOOT_SERVICES:
-    EFI_STATUS (*LocateProtocol)(EFI_GUID *Protocol, VOID *Registration, VOID **Interface);
-    EFI_STATUS (*HandleProtocol)(EFI_HANDLE Handle, EFI_GUID *Protocol, VOID **Interface);
+
+    /* Event & Timer Services */
+    VOID *CreateEvent;
+    VOID *SetTimer;
+    VOID *WaitForEvent;
+    VOID *SignalEvent;
+    VOID *CloseEvent;
+    VOID *CheckEvent;
+
+    /* Protocol Handler Services */
+    VOID *InstallProtocolInterface;
+    VOID *ReinstallProtocolInterface;
+    VOID *UninstallProtocolInterface;
+    EFI_STATUS (*HandleProtocol)(EFI_HANDLE Handle, EFI_GUID *Protocol,
+                                VOID **Interface);
+    VOID *Reserved;
+    VOID *RegisterProtocolNotify;
+    VOID *LocateHandle;
+    VOID *LocateDevicePath;
+    VOID *InstallConfigurationTable;
+
+    /* Image Services */
+    VOID *LoadImage;
+    VOID *StartImage;
+    VOID *Exit;
+    VOID *UnloadImage;
     EFI_STATUS (*ExitBootServices)(EFI_HANDLE ImageHandle, UINTN MapKey);
 
-    // Add more functions as needed
+    /* Misc Services */
+    VOID *GetNextMonotonicCount;
+    VOID *Stall;
+    VOID *SetWatchdogTimer;
+
+    /* Driver Support Services */
+    VOID *ConnectController;
+    VOID *DisconnectController;
+
+    /* Open and Close Protocol Services */
+    VOID *OpenProtocol;
+    VOID *CloseProtocol;
+    VOID *OpenProtocolInformation;
+
+    /* Library Services */
+    VOID *ProtocolsPerHandle;
+    VOID *LocateHandleBuffer;
+    EFI_STATUS (*LocateProtocol)(EFI_GUID *Protocol, VOID *Registration,
+                                VOID **Interface);
+    VOID *InstallMultipleProtocolInterfaces;
+    VOID *UninstallMultipleProtocolInterfaces;
+
+    /* 32-bit CRC Services */
+    VOID *CalculateCrc32;
+
+    /* Memory Utility Services */
+    VOID *CopyMem;
+    VOID *SetMem;
+
+    /* UEFI 2.0 Capsule Services */
+    VOID *CreateEventEx;
 };
 
 // ====================
