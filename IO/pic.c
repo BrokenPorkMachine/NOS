@@ -10,10 +10,9 @@
 #define PIC2_DATA   (PIC2+1)
 
 void pic_remap(void) {
-    uint8_t a1, a2;
-
-    a1 = inb(PIC1_DATA); // Save masks
-    a2 = inb(PIC2_DATA);
+    /* Save current masks - not used since we set new masks explicitly */
+    (void)inb(PIC1_DATA);
+    (void)inb(PIC2_DATA);
 
     outb(PIC1_COMMAND, 0x11); // starts the init
     io_wait();

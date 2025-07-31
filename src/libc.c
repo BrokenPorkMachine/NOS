@@ -51,6 +51,16 @@ char *strncpy(char *dest, const char *src, size_t n) {
     return dest;
 }
 
+size_t strlcpy(char *dst, const char *src, size_t size) {
+    size_t srclen = strlen(src);
+    if (size) {
+        size_t copylen = (srclen >= size) ? size - 1 : srclen;
+        memcpy(dst, src, copylen);
+        dst[copylen] = '\0';
+    }
+    return srclen;
+}
+
 int strcmp(const char *s1, const char *s2) {
     while (*s1 && (*s1 == *s2)) { s1++; s2++; }
     return *(const unsigned char *)s1 - *(const unsigned char *)s2;
