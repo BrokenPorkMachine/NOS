@@ -15,7 +15,7 @@ static void uefi_hex16(CHAR16 *buf, uint64_t val) {
     buf[18] = 0;
 }
 
-static void print_hex(struct 0EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *prefix, uint64_t val) {
+static void print_hex(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *prefix, uint64_t val) {
     CHAR16 buf[64];
     int idx = 0;
     if (prefix) while (prefix[idx]) { buf[idx] = prefix[idx]; idx++; }
@@ -55,9 +55,9 @@ typedef struct {
 
 // --- Standalone ELF64 loader: returns 0 on success, nonzero on error ---
 static int load_elf64_kernel(
-    EFI_FILE_PROTOCOL *KernelFile,
+    struct EFI_FILE_PROTOCOL *KernelFile,
     struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut,
-    EFI_BOOT_SERVICES *BS,
+    struct EFI_BOOT_SERVICES *BS,
     void (**entry_out)(bootinfo_t *))
 {
     EFI_STATUS st;
