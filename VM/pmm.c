@@ -18,6 +18,8 @@ static inline int bit_test(uint64_t bit) {
 void pmm_init(const bootinfo_t *bootinfo) {
     uint64_t max_addr = 0;
     for (uint32_t i = 0; i < bootinfo->mmap_entries; ++i) {
+        if (bootinfo->mmap[i].type != 7)
+            continue;
         uint64_t end = bootinfo->mmap[i].addr + bootinfo->mmap[i].len;
         if (end > max_addr)
             max_addr = end;
