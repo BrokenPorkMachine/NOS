@@ -3,12 +3,6 @@
 #include "../src/libc.h"
 #include <stdint.h>
 
-// Paging flags (should match paging.h)
-#define PAGE_PRESENT 0x1
-#define PAGE_RW      0x2
-#define PAGE_SIZE    4096ULL
-#define PAGE_PS      (1ULL << 7)  // Page Size (for 2MB pages)
-
 // Static page tables (identity map 0–2MB)
 static uint64_t __attribute__((aligned(PAGE_SIZE))) pml4[512];
 static uint64_t __attribute__((aligned(PAGE_SIZE))) pdpt[512];
@@ -21,9 +15,9 @@ void paging_init(void) {
     }
 
     // Map 2MB at virtual address 0 (identity map)
-    pd[0] = PAGE_PRESENT | PAGE_RW | PAGE_PS;           // 2MB page at 0x0
-    pdpt[0] = ((uint64_t)pd) | PAGE_PRESENT | PAGE_RW;  // PD pointer
-    pml4[0] = ((uint64_t)pdpt) | PAGE_PRESENT | PAGE_RW; // PDPT pointer
+    pd[0] = PAGE_PRESENT | PAGE_WRITABLE | PAGE_SIZE_2MB;           // 2MB page at 0x0
+    pdpt[0] = ((uint64_t)pd) | PAGE_PRESENT | PAGE_WRITABLE;  // PD pointer
+    pml4[0] = ((uint64_t)pdpt) | PAGE_PRESENT | PAGE_WRITABLE; // PDPT pointer
 
     // Load page tables (CR3)
     asm volatile("mov %0, %%cr3" : : "r"(pml4));
@@ -70,7 +64,7 @@ static uint64_t *get_or_create(uint64_t *table, uint64_t index, uint64_t flags) 
     if (!(table[index] & PAGE_PRESENT)) {
         uint64_t *new = alloc_table();
         if (!new) return NULL;
-        table[index] = ((uint64_t)new) | flags | PAGE_PRESENT | PAGE_RW;
+        table[index] = ((uint64_t)new) | flags | PAGE_PRESENT | PAGE_WRITABLE;
     }
     return (uint64_t *)(table[index] & ~0xFFFULL);
 }
@@ -88,7 +82,7 @@ void paging_map(uint64_t virt, uint64_t phys, uint64_t flags) {
 
     if (flags & PAGE_SIZE_2MB) {
         pd_t[pd_i] = (phys & ~0x1FFFFFULL) | (flags & ~PAGE_SIZE_2MB) |
-                     PAGE_PRESENT | PAGE_RW;
+                     PAGE_PRESENT | PAGE_WRITABLE;
         paging_flush_tlb(virt);
         return;
     }
@@ -111,7 +105,7 @@ void paging_unmap(uint64_t virt) {
     uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
     if (!(pd_t[pd_i] & PAGE_PRESENT)) return;
 
-    if (pd_t[pd_i] & PAGE_PS) {
+    if (pd_t[pd_i] & PAGE_SIZE_2MB) {
         pd_t[pd_i] = 0;
         paging_flush_tlb(virt);
         return;
@@ -134,7 +128,7 @@ uint64_t paging_virt_to_phys(uint64_t virt) {
     uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
     if (!(pd_t[pd_i] & PAGE_PRESENT)) return 0;
 
-    if (pd_t[pd_i] & PAGE_PS)
+    if (pd_t[pd_i] & PAGE_SIZE_2MB)
         return (pd_t[pd_i] & ~0x1FFFFFULL) | (virt & 0x1FFFFFULL);
 
     uint64_t *pt_t = (uint64_t *)(pd_t[pd_i] & ~0xFFFULL);

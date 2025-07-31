@@ -2,8 +2,6 @@
 #include "paging.h"
 #include "../src/libc.h"
 
-#define PAGE_SIZE 4096ULL
-
 static uint8_t *bitmap = NULL;
 static uint64_t total_frames = 0;
 

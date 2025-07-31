@@ -161,10 +161,15 @@ static void cmd_create(ipc_queue_t *q, uint32_t self_id, const char *name) {
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_CREATE; msg.arg1 = IPC_MSG_DATA_MAX;
     msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
-    strncpy((char *)msg.data, name, IPC_MSG_DATA_MAX); msg.len = strlen(name);
+    size_t len = strlen(name);
+    if (len > IPC_MSG_DATA_MAX - 1)
+        len = IPC_MSG_DATA_MAX - 1;
+    strncpy((char *)msg.data, name, len);
+    msg.data[len] = '\0';
+    msg.len = len;
     ipc_send(q, self_id, &msg);
     ipc_receive(q, self_id, &reply);
-    puts_vga(reply.arg1 >= 0 ? "created\n" : "error\n");
+    puts_vga(reply.arg1 == 0 ? "created\n" : "error\n");
 }
 static void cmd_write(ipc_queue_t *q, uint32_t self_id, const char *name, const char *data) {
     int h = find_handle(q, self_id, name);
@@ -191,8 +196,12 @@ static void cmd_mv(ipc_queue_t *q, uint32_t self_id, const char *old, const char
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_RENAME;
     msg.arg1 = h;
-    strncpy((char *)msg.data, new, IPC_MSG_DATA_MAX);
-    msg.len = strlen(new);
+    size_t len = strlen(new);
+    if (len > IPC_MSG_DATA_MAX - 1)
+        len = IPC_MSG_DATA_MAX - 1;
+    strncpy((char *)msg.data, new, len);
+    msg.data[len] = '\0';
+    msg.len = len;
     ipc_send(q, self_id, &msg);
     ipc_receive(q, self_id, &reply);
     puts_vga(reply.arg1 == 0 ? "moved\n" : "error\n");
