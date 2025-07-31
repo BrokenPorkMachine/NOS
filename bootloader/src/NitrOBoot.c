@@ -141,8 +141,13 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap read failed.\r\n"); for(;;); }
 
     bootinfo_memory_t *mmap = NULL;
-    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1, (EFI_PHYSICAL_ADDRESS*)&mmap);
-    if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Bootinfo mmap alloc failed.\r\n"); for(;;); }
+    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1,
+                               (EFI_PHYSICAL_ADDRESS*)&mmap);
+    if (status != EFI_SUCCESS) {
+        ConOut->OutputString(ConOut, L"Bootinfo mmap alloc failed.\r\n");
+        for(;;);
+    }
+    memset(mmap, 0, sizeof(bootinfo_memory_t) * BOOTINFO_MAX_MMAP);
     uint32_t mmap_count = 0;
     for (UINT8 *p = (UINT8*)efi_mmap; p < (UINT8*)efi_mmap + mmap_size; p += desc_size) {
         EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR*)p;
@@ -163,8 +168,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     status = BS->LocateProtocol((EFI_GUID*)&gEfiGraphicsOutputProtocolGuid, NULL, (VOID**)&gop);
     if (status == EFI_SUCCESS && gop && gop->Mode) {
         bootinfo_framebuffer_t *fb = NULL;
-        status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1, (EFI_PHYSICAL_ADDRESS*)&fb);
+        status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1,
+                                   (EFI_PHYSICAL_ADDRESS*)&fb);
         if (status == EFI_SUCCESS) {
+            memset(fb, 0, sizeof(bootinfo_framebuffer_t));
             fb->address = gop->Mode->FrameBufferBase;
             fb->width   = gop->Mode->Info->HorizontalResolution;
             fb->height  = gop->Mode->Info->VerticalResolution;
@@ -220,6 +227,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         ConOut->OutputString(ConOut, L"Kernel stack alloc failed.\r\n");
         for(;;);
     }
+    memset((void *)(UINTN)stack_base, 0, stack_pages * 4096);
     UINT64 stack_top = stack_base + stack_pages * 4096ULL;
     void (*entry_fn)(bootinfo_t*) = kernel_entry;
 
