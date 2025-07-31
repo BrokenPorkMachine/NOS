@@ -24,7 +24,7 @@ typedef UINT64              EFI_VIRTUAL_ADDRESS;
 
 #ifndef NULL
 #define NULL ((void *)0)
-7#endif
+#endif
 
 // ----------------------------------------------------------------------
 // 2. Function Prototypes (no implementations in header!)
