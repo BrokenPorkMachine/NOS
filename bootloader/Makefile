@@ -1,41 +1,22 @@
-# Makefile
+CC=clang
+CFLAGS=-target x86_64-pc-win32-coff -ffreestanding -fshort-wchar -mno-red-zone \
+       -fno-stack-protector -fno-exceptions -fno-asynchronous-unwind-tables \
+       -Iinclude -Wall -Wextra -Werror
 
-TARGET = bootx64.efi
-OBJS = src/NitrOBoot.o
+LDFLAGS=-fuse-ld=lld-link -nostdlib -Wl,-entry:efi_main -Wl,-subsystem:efi_application
 
-CC = clang
+SRC=src/NitrOBoot.c
+OBJ=src/NitrOBoot.o
 
-CFLAGS = \
-        -target x86_64-pc-win32-coff \
-        -ffreestanding \
-	-fshort-wchar \
-	-mno-red-zone \
-	-fno-stack-protector \
-	-fno-exceptions \
-	-fno-asynchronous-unwind-tables \
-	-Iinclude \
-	-Wall \
-	-Wextra \
-	-c
+all: NitrOBoot.efi
 
-LDFLAGS = \
-        -target x86_64-pc-win32-coff \
-        -nostdlib \
-        -Wl,-entry:efi_main \
-        -Wl,-subsystem:efi_application \
-        -Wl,-dll \
-        -fuse-ld=lld-link \
-        -Wl,-nodefaultlib \
-        -Wl,-align:4096 \
-        -Wl,-filealign:4096
-
-all: $(TARGET)
+NitrOBoot.efi: $(OBJ)
+	$(CC) $(LDFLAGS) -o $@ $^
 
 %.o: %.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-$(TARGET): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS)
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f src/*.o *.efi
+
+.PHONY: all clean
