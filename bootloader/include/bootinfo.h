@@ -1,40 +1,43 @@
-// acpi.c
+// include/bootinfo.h
+#pragma once
 #include <stdint.h>
-#include "bootinfo.h"
 
-// Only basic MADT parsing. Improve as needed!
-void acpi_parse_madt(uint64_t rsdp_addr, bootinfo_t *info) {
-    if (!rsdp_addr || !info) return;
-    // For brevity: only ACPI 2.0 XSDT supported.
-    typedef struct { char sig[8]; uint8_t chksum; char oemid[6]; uint8_t rev; uint32_t rsdt; uint32_t len; uint64_t xsdt; } __attribute__((packed)) RSDP2;
-    RSDP2 *rsdp = (RSDP2 *)(uintptr_t)rsdp_addr;
-    if (rsdp->xsdt == 0) return; // fallback needed for ACPI 1.0 systems
-    uint64_t *entries = (uint64_t *)((uintptr_t)rsdp->xsdt + 36); // XSDT starts after 36 bytes header
-    uint32_t n = (*((uint32_t *)((uintptr_t)rsdp->xsdt + 4)) - 36) / 8;
-    for (uint32_t i = 0; i < n; ++i) {
-        uint8_t *sdt = (uint8_t *)(uintptr_t)entries[i];
-        if (sdt[0] == 'A' && sdt[1] == 'P' && sdt[2] == 'I' && sdt[3] == 'C') {
-            uint32_t len = *(uint32_t *)(sdt + 4);
-            uint8_t *end = sdt + len;
-            uint8_t *ptr = sdt + 44;
-            uint32_t cpu_count = 0;
-            while (ptr + 2 <= end) {
-                uint8_t type = ptr[0], plen = ptr[1];
-                if (type == 0 && plen >= 8) { // Processor Local APIC
-                    uint8_t proc_id = ptr[2], apic_id = ptr[3];
-                    uint32_t flags = *(uint32_t *)(ptr + 4);
-                    if (flags & 1) {
-                        info->cpus[cpu_count].processor_id = proc_id;
-                        info->cpus[cpu_count].apic_id = apic_id;
-                        info->cpus[cpu_count].flags = flags;
-                        cpu_count++;
-                        if (cpu_count >= BOOTINFO_MAX_CPUS) break;
-                    }
-                }
-                ptr += plen;
-            }
-            info->cpu_count = cpu_count;
-            return;
-        }
-    }
-}
+#define BOOTINFO_MAGIC_UEFI 0x55454649   // 'UEFI'
+#define BOOTINFO_MAGIC_MB2  0x36d76289   // Multiboot2
+
+#define BOOTINFO_MAX_MMAP    128
+#define BOOTINFO_MAX_CPUS    32
+
+typedef struct {
+    uint64_t addr, len;
+    uint32_t type; // UEFI/MB2 type
+    uint32_t reserved;
+} bootinfo_memory_t;
+
+typedef struct {
+    uint64_t address;
+    uint32_t width, height, pitch, bpp;
+    uint32_t type; // 0=RGB, 1=Indexed, 2=Text
+} bootinfo_framebuffer_t;
+
+typedef struct {
+    uint32_t processor_id;
+    uint32_t apic_id;
+    uint32_t flags;
+} bootinfo_cpu_t;
+
+typedef struct bootinfo {
+    uint32_t magic;
+    uint32_t size;
+    const char *bootloader_name;
+    const char *cmdline;
+    bootinfo_memory_t *mmap;
+    uint32_t mmap_entries;
+    bootinfo_framebuffer_t *framebuffer;
+    uint64_t acpi_rsdp;
+    bootinfo_cpu_t cpus[BOOTINFO_MAX_CPUS];
+    uint32_t cpu_count;
+    void *mb2_tags;   // Optionally: multiboot2 raw tag pointer
+    uint64_t reserved[8];
+    void *kernel_entry;
+} bootinfo_t;
