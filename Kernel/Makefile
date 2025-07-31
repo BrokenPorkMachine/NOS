@@ -32,6 +32,7 @@ OBJS = \
     ../servers/nitrfs/server.o \
     ../servers/shell/shell.o \
     ../IPC/ipc.o \
+    ../CPU/cpu.o \
     ../libc.o
 
 all: kernel.bin
@@ -66,4 +67,4 @@ kernel.bin: $(OBJS) kernel.ld
 clean:
 	rm -f *.o kernel.bin \
 ../IDT/*.o ../IO/*.o ../Net/*.o ../VM/*.o \
-../Task/*.o ../GDT/*.o ../servers/*/*.o ../IPC/*.o ../libc.o
+../Task/*.o ../GDT/*.o ../servers/*/*.o ../IPC/*.o ../CPU/*.o ../libc.o
