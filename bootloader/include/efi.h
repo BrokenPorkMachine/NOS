@@ -3,6 +3,15 @@
 
 #define EFIAPI __attribute__((ms_abi))
 
+typedef struct {
+    UINT32 Type;
+    UINT32 Pad;
+    EFI_PHYSICAL_ADDRESS PhysicalStart;
+    EFI_VIRTUAL_ADDRESS VirtualStart;
+    UINT64 NumberOfPages;
+    UINT64 Attribute;
+} EFI_MEMORY_DESCRIPTOR;
+
 // Standard UEFI Types
 typedef unsigned char       UINT8;
 typedef unsigned short      UINT16;
