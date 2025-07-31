@@ -1,26 +1,31 @@
 #ifndef EFI_H
 #define EFI_H
 
-// Basic UEFI types
+#include <stddef.h> // For NULL
+
+// Basic types
 typedef unsigned char       UINT8;
 typedef unsigned short      UINT16;
 typedef unsigned int        UINT32;
 typedef unsigned long long  UINT64;
 typedef UINT64              UINTN;
-typedef long long           INT64;
-typedef unsigned short      CHAR16;
-typedef void                VOID;
 typedef UINT64              EFI_STATUS;
+typedef UINT64              EFI_PHYSICAL_ADDRESS;
+typedef void                VOID;
+typedef UINT16              CHAR16;
 typedef VOID*               EFI_HANDLE;
-typedef VOID*               EFI_EVENT;
 
 // Status codes
 #define EFI_SUCCESS         0
-#define EFI_LOAD_ERROR      ((EFI_STATUS)0x8000000000000001)
-#define EFI_INVALID_PARAMETER ((EFI_STATUS)0x8000000000000002)
-// (add more as needed)
 
-// GUID definition
+// Forward declarations
+struct EFI_SYSTEM_TABLE;
+struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
+struct EFI_BOOT_SERVICES;
+struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
+struct EFI_FILE_PROTOCOL;
+
+// EFI_GUID
 typedef struct {
     UINT32  Data1;
     UINT16  Data2;
@@ -28,164 +33,96 @@ typedef struct {
     UINT8   Data4[8];
 } EFI_GUID;
 
-// Forward declarations for protocol structs
-struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
-struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
-struct EFI_BOOT_SERVICES;
-struct EFI_RUNTIME_SERVICES;
-struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
-struct EFI_FILE_PROTOCOL;
-
-// EFI_TABLE_HEADER structure
-typedef struct {
-    UINT64  Signature;
-    UINT32  Revision;
-    UINT32  HeaderSize;
-    UINT32  CRC32;
-    UINT32  Reserved;
-} EFI_TABLE_HEADER;
-
-// EFI_SYSTEM_TABLE structure
-typedef struct {
-    EFI_TABLE_HEADER                Hdr;
-    CHAR16                          *FirmwareVendor;
-    UINT32                          FirmwareRevision;
-    EFI_HANDLE                      ConsoleInHandle;
-    struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL *ConIn;
-    EFI_HANDLE                      ConsoleOutHandle;
+// EFI_SYSTEM_TABLE
+struct EFI_SYSTEM_TABLE {
+    char _pad1[44]; // not used in bootloader, pad to ConOut
     struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
-    EFI_HANDLE                      StandardErrorHandle;
-    struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *StdErr;
-    struct EFI_RUNTIME_SERVICES     *RuntimeServices;
-    struct EFI_BOOT_SERVICES        *BootServices;
-    UINTN                           NumberOfTableEntries;
-    VOID                            *ConfigurationTable;
-} EFI_SYSTEM_TABLE;
+    // add more as needed
+    struct EFI_BOOT_SERVICES *BootServices;
+};
 
-// EFI_BOOT_SERVICES structure (truncated to essentials for bootloader use)
-typedef struct EFI_BOOT_SERVICES {
-    EFI_TABLE_HEADER        Hdr;
-
-    // Task Priority Services
-    VOID *RaiseTPL;
-    VOID *RestoreTPL;
-
-    // Memory Services
+// EFI_BOOT_SERVICES (minimal)
+struct EFI_BOOT_SERVICES {
+    char _pad2[24]; // skip to AllocatePages
     EFI_STATUS (*AllocatePages)(
         UINTN Type,
         UINTN MemoryType,
         UINTN Pages,
-        UINT64 *Memory
+        EFI_PHYSICAL_ADDRESS *Memory
     );
-    EFI_STATUS (*FreePages)(
-        UINT64 Memory,
-        UINTN Pages
-    );
-    EFI_STATUS (*GetMemoryMap)(
-        UINTN *MemoryMapSize,
-        VOID *MemoryMap,
-        UINTN *MapKey,
-        UINTN *DescriptorSize,
-        UINT32 *DescriptorVersion
-    );
-    EFI_STATUS (*AllocatePool)(
-        UINTN PoolType,
-        UINTN Size,
-        VOID **Buffer
-    );
-    EFI_STATUS (*FreePool)(
-        VOID *Buffer
-    );
+    // ... (add more if needed)
+};
 
-    // ... (other members skipped)
-} EFI_BOOT_SERVICES;
-
-// Memory allocation types
-#define AllocateAnyPages     0
-#define AllocateMaxAddress   1
-#define AllocateAddress      2
+// Allocation types
+#define AllocateAnyPages       0
+#define AllocateMaxAddress     1
+#define AllocateAddress        2
 
 // Memory types
-#define EfiLoaderData        4
+#define EfiLoaderData          4
 
-// File protocol and related
-typedef struct EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
-typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
-
-// EFI_FILE_PROTOCOL structure (simplified)
+// File protocol
 struct EFI_FILE_PROTOCOL {
     UINT64 Revision;
     EFI_STATUS (*Open)(
-        EFI_FILE_PROTOCOL *This,
-        EFI_FILE_PROTOCOL **NewHandle,
+        struct EFI_FILE_PROTOCOL *This,
+        struct EFI_FILE_PROTOCOL **NewHandle,
         CHAR16 *FileName,
         UINT64 OpenMode,
         UINT64 Attributes
     );
-    EFI_STATUS (*Close)(
-        EFI_FILE_PROTOCOL *This
-    );
-    EFI_STATUS (*Delete)(
-        EFI_FILE_PROTOCOL *This
-    );
+    EFI_STATUS (*Close)(struct EFI_FILE_PROTOCOL *This);
+    EFI_STATUS (*Delete)(struct EFI_FILE_PROTOCOL *This);
     EFI_STATUS (*Read)(
-        EFI_FILE_PROTOCOL *This,
+        struct EFI_FILE_PROTOCOL *This,
         UINTN *BufferSize,
         VOID *Buffer
     );
-    EFI_STATUS (*Write)(
-        EFI_FILE_PROTOCOL *This,
-        UINTN *BufferSize,
-        VOID *Buffer
-    );
-    EFI_STATUS (*GetPosition)(
-        EFI_FILE_PROTOCOL *This,
-        UINT64 *Position
-    );
-    EFI_STATUS (*SetPosition)(
-        EFI_FILE_PROTOCOL *This,
-        UINT64 Position
-    );
-    EFI_STATUS (*GetInfo)(
-        EFI_FILE_PROTOCOL *This,
-        EFI_GUID *InformationType,
-        UINTN *BufferSize,
-        VOID *Buffer
-    );
-    EFI_STATUS (*SetInfo)(
-        EFI_FILE_PROTOCOL *This,
-        EFI_GUID *InformationType,
-        UINTN BufferSize,
-        VOID *Buffer
-    );
-    EFI_STATUS (*Flush)(
-        EFI_FILE_PROTOCOL *This
-    );
-    // ... (add more if you need)
+    // ... (add more if needed)
 };
 
-// EFI_SIMPLE_FILE_SYSTEM_PROTOCOL structure
 struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
     UINT64 Revision;
     EFI_STATUS (*OpenVolume)(
-        EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This,
-        EFI_FILE_PROTOCOL **Root
+        struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This,
+        struct EFI_FILE_PROTOCOL **Root
     );
 };
 
-// Text Output protocol (simplified)
+// Console output protocol with required members
 struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
-    VOID *Reset;
-    EFI_STATUS (*OutputString)(
-        struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This,
-        const CHAR16 *String
-    );
-    // ... (other members skipped)
+    EFI_STATUS (*Reset)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINT8 ExtVerify);
+    EFI_STATUS (*OutputString)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, const CHAR16 *String);
+    EFI_STATUS (*TestString)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, const CHAR16 *String);
+    EFI_STATUS (*QueryMode)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINTN ModeNumber, UINTN *Columns, UINTN *Rows);
+    EFI_STATUS (*SetMode)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINTN ModeNumber);
+    EFI_STATUS (*SetAttribute)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINTN Attribute);
+    EFI_STATUS (*ClearScreen)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
+    EFI_STATUS (*SetCursorPosition)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINTN Column, UINTN Row);
+    EFI_STATUS (*EnableCursor)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINT8 Visible);
+    // ... (add more if needed)
 };
 
-// Text Input protocol (placeholder)
-struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
-    // ... (add as needed)
-};
+// Text color macros
+#define EFI_BLACK          0x00
+#define EFI_BLUE           0x01
+#define EFI_GREEN          0x02
+#define EFI_CYAN           0x03
+#define EFI_RED            0x04
+#define EFI_MAGENTA        0x05
+#define EFI_BROWN          0x06
+#define EFI_LIGHTGRAY      0x07
+#define EFI_BRIGHT         0x08
+#define EFI_DARKGRAY       0x08
+#define EFI_LIGHTBLUE      0x09
+#define EFI_LIGHTGREEN     0x0A
+#define EFI_LIGHTCYAN      0x0B
+#define EFI_LIGHTRED       0x0C
+#define EFI_LIGHTMAGENTA   0x0D
+#define EFI_YELLOW         0x0E
+#define EFI_WHITE          0x0F
+
+// EFI_TEXT_ATTR macro
+#define EFI_TEXT_ATTR(f, b)   ((f) | ((b) << 4))
 
 #endif // EFI_H
