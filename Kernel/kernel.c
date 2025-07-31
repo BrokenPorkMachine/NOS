@@ -112,8 +112,10 @@ static void print_bootinfo(const bootinfo_t *bi) {
     else if (bi->magic == BOOTINFO_MAGIC_MB2) log_good("[boot] Multiboot2 detected.");
     else log_warn("[boot] Unknown boot magic!");
 
+    uint32_t count = bi->mmap_entries;
+    if (count > BOOTINFO_MAX_MMAP) count = BOOTINFO_MAX_MMAP;
     log_info("[boot] RAM regions:");
-    for (uint32_t i = 0; i < bi->mmap_entries; ++i) {
+    for (uint32_t i = 0; i < count; ++i) {
         const bootinfo_memory_t *m = &bi->mmap[i];
         log_line("-------------------------------");
         utoa(i, buf, 10); log_line_color(buf, COLOR(0xC, 0x0));

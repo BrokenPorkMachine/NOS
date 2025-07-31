@@ -145,7 +145,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap read failed.\r\n"); for(;;); }
 
     bootinfo_memory_t *mmap = NULL;
-    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1,
+    UINTN mmap_pages = (BOOTINFO_MAX_MMAP * sizeof(bootinfo_memory_t) + 4095) / 4096;
+    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, mmap_pages,
                                (EFI_PHYSICAL_ADDRESS*)&mmap);
     if (status != EFI_SUCCESS) {
         ConOut->OutputString(ConOut, L"Bootinfo mmap alloc failed.\r\n");
