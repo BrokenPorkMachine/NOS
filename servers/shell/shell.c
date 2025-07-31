@@ -270,7 +270,7 @@ static void cmd_cd(ipc_queue_t *q, uint32_t self_id, const char *path) {
         new[len] = '/'; new[len+1] = '\0';
     }
     if (find_handle(q, self_id, new) < 0) { puts_vga("no such dir\n"); return; }
-    strncpy(cwd, new, sizeof(cwd)-1); cwd[sizeof(cwd)-1] = '\0';
+    strlcpy(cwd, new, sizeof(cwd));
 }
 
 static void cmd_mkdir(ipc_queue_t *q, uint32_t self_id, const char *name) {
@@ -282,8 +282,7 @@ static void cmd_mkdir(ipc_queue_t *q, uint32_t self_id, const char *name) {
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_CREATE; msg.arg1 = 0; // zero capacity
     msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
-    strncpy((char *)msg.data, path, NITRFS_NAME_LEN-1);
-    msg.data[NITRFS_NAME_LEN-1] = '\0';
+    strlcpy((char *)msg.data, path, NITRFS_NAME_LEN);
     msg.len = strlen((char *)msg.data);
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     puts_vga(reply.arg1 == 0 ? "created\n" : "error\n");
