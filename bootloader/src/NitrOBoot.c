@@ -2,6 +2,22 @@
 
 #define KERNEL_PATH L"\\EFI\\BOOT\\kernel.bin"
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
+// Put this in src/efi_mem.c or src/NitrOBoot.c (outside of efi_main)
+
+#include "../include/efi.h"
+
+VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length) {
+    UINT8 *d = (UINT8 *)Destination;
+    const UINT8 *s = (const UINT8 *)Source;
+    for (UINTN i = 0; i < Length; ++i) d[i] = s[i];
+    return Destination;
+}
+
+VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value) {
+    UINT8 *b = (UINT8 *)Buffer;
+    for (UINTN i = 0; i < Size; ++i) b[i] = Value;
+    return Buffer;
+}
 
 // Minimal ELF64 structs
 typedef struct {
