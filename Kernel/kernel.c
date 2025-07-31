@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "../bootloader/include/bootinfo.h"
+
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
 #define VGA_ROWS 25
@@ -7,12 +8,23 @@
 
 static int log_row = 1;
 
-// --- Simple VGA console ---
+// --- Improved VGA console with scrolling ---
 static void vga_clear(void) {
     volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
     for (int i = 0; i < VGA_COLS * VGA_ROWS; ++i)
         vga[i] = (COLOR(0xF, 0x0) << 8) | ' ';
     log_row = 1;
+}
+
+static void vga_scroll(void) {
+    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
+    // Copy rows 2..24 up by one (skip title row)
+    for (int r = 1; r < VGA_ROWS - 1; ++r)
+        for (int c = 0; c < VGA_COLS; ++c)
+            vga[r * VGA_COLS + c] = vga[(r + 1) * VGA_COLS + c];
+    // Clear last line
+    for (int c = 0; c < VGA_COLS; ++c)
+        vga[(VGA_ROWS - 1) * VGA_COLS + c] = (COLOR(0xF, 0x0) << 8) | ' ';
 }
 
 static void vga_puts(const char *s, int row, int color) {
@@ -25,7 +37,10 @@ static void vga_puts(const char *s, int row, int color) {
 }
 
 static void log_line_color(const char *s, int color) {
-    if (log_row >= VGA_ROWS-1) log_row = 1;
+    if (log_row >= VGA_ROWS - 1) {
+        vga_scroll();
+        log_row = VGA_ROWS - 2;
+    }
     vga_puts(s, log_row, color);
     log_row++;
 }
@@ -34,6 +49,7 @@ static void log_line_color(const char *s, int color) {
 #define log_warn(s)   log_line_color((s), COLOR(0xE, 0x0))
 #define log_info(s)   log_line_color((s), COLOR(0xB, 0x0))
 #define log_good(s)   log_line_color((s), COLOR(0xA, 0x0))
+#define log_err(s)    log_line_color((s), COLOR(0xC, 0x0))
 
 static void utoa(uint64_t val, char *buf, int base) {
     static const char dig[] = "0123456789ABCDEF";
@@ -43,12 +59,11 @@ static void utoa(uint64_t val, char *buf, int base) {
     while (i) buf[j++] = tmp[--i];
     buf[j] = 0;
 }
-static void ptoa(uint64_t val, char *buf) { // Print as 0xHEX
+static void ptoa(uint64_t val, char *buf) {
     buf[0] = '0'; buf[1] = 'x';
-    utoa(val, buf+2, 16);
+    utoa(val, buf + 2, 16);
 }
 
-// --- Bootinfo Memory Type decode ---
 static const char *efi_memtype(uint32_t t) {
     switch (t) {
         case 1: return "LoaderCode";
@@ -68,19 +83,18 @@ static const char *efi_memtype(uint32_t t) {
 static void fb_print_text(const bootinfo_framebuffer_t *fb, const char *s) {
     if (!fb || !fb->address || !s) return;
     uint32_t *pixels = (uint32_t*)(uintptr_t)fb->address;
-    uint32_t y = fb->height/2, x = 4;
-    for (int i = 0; s[i] && x < fb->width-4; i++, x++)
-        pixels[y * (fb->pitch/4) + x] = 0xFFFFFF00 | (unsigned char)s[i];
+    uint32_t y = fb->height / 2, x = 4;
+    for (int i = 0; s[i] && x < fb->width - 4; i++, x++)
+        pixels[y * (fb->pitch / 4) + x] = 0xFFFFFF00 | (unsigned char)s[i];
 }
 static void fb_demo_bar(const bootinfo_framebuffer_t *fb) {
     if (!fb || !fb->address) return;
     uint32_t *pixels = (uint32_t*)(uintptr_t)fb->address;
     for (uint32_t y = 0; y < 24 && y < fb->height; ++y)
         for (uint32_t x = 0; x < fb->width; ++x)
-            pixels[y * (fb->pitch/4) + x] = (y << 16) | (0xCC << 8) | 0x22;
+            pixels[y * (fb->pitch / 4) + x] = (y << 16) | (0xCC << 8) | 0x22;
 }
 
-// --- Bootinfo print ---
 static void print_bootinfo(const bootinfo_t *bi) {
     char buf[80];
     if (!bi) { log_warn("No bootinfo struct."); return; }
@@ -88,7 +102,6 @@ static void print_bootinfo(const bootinfo_t *bi) {
     else if (bi->magic == BOOTINFO_MAGIC_MB2) log_good("[boot] Multiboot2 detected.");
     else log_warn("[boot] Unknown boot magic!");
 
-    // Memory map
     log_info("[boot] RAM regions:");
     for (uint32_t i = 0; i < bi->mmap_entries; ++i) {
         const bootinfo_memory_t *m = &bi->mmap[i];
@@ -98,7 +111,7 @@ static void print_bootinfo(const bootinfo_t *bi) {
         ptoa((uint64_t)m->len, buf);  log_line_color(buf, COLOR(0x7, 0x0));
         log_line_color(efi_memtype(m->type), COLOR(0xB, 0x0));
     }
-    // Framebuffer
+
     if (bi->framebuffer) {
         utoa(bi->framebuffer->width, buf, 10); log_line("[boot] FB width:"); log_line(buf);
         utoa(bi->framebuffer->height, buf, 10); log_line("[boot] FB height:"); log_line(buf);
@@ -111,7 +124,8 @@ static void print_bootinfo(const bootinfo_t *bi) {
     // ACPI RSDP
     ptoa(bi->acpi_rsdp, buf); log_line("[boot] ACPI RSDP:"); log_line(buf);
 
-    // --- TODO: Add ACPI/MADT parsing for CPU details, SMP, etc. ---
+    // --- ACPI/MADT parsing, SMP enumeration can be inserted here. ---
+    // e.g., parse MADT from ACPI, enumerate CPUs, print APIC IDs, etc.
 }
 
 void kernel_main(bootinfo_t *bootinfo) {
@@ -119,5 +133,6 @@ void kernel_main(bootinfo_t *bootinfo) {
     log_good("Mach Microkernel: Boot OK");
     log_line("");
     print_bootinfo(bootinfo);
+    // (Insert future initialization, SMP, scheduler, etc here)
     for (;;) __asm__ volatile("cli; hlt");
 }
