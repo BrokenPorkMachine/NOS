@@ -1,7 +1,5 @@
 #ifndef EFI_H
 #define EFI_H
-VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length);
-VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value);
 
 // === Basic Types ===
 typedef unsigned char       UINT8;
@@ -17,6 +15,8 @@ typedef UINTN               EFI_STATUS;
 typedef VOID*               EFI_HANDLE;
 typedef UINT64              EFI_PHYSICAL_ADDRESS;
 typedef UINT64              EFI_VIRTUAL_ADDRESS;
+VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length);
+VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value);
 
 #ifndef NULL
 #define NULL ((void *)0)
