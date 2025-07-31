@@ -1,4 +1,3 @@
-// src/NitrOBoot.c
 #include "../include/efi.h"
 #include "../include/bootinfo.h"
 
@@ -6,7 +5,7 @@
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
 #define BOOTINFO_MAX_MMAP 128
 
-// Minimal SPrint fallback (prints only 1 64-bit hex argument)
+// --- Minimal Hex Printer for CHAR16 (prints 0x...64bit) ---
 static void uefi_hex16(CHAR16 *buf, uint64_t val) {
     buf[0] = L'0'; buf[1] = L'x';
     int shift = 60;
@@ -15,7 +14,7 @@ static void uefi_hex16(CHAR16 *buf, uint64_t val) {
     buf[18] = 0;
 }
 
-static void print_hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *prefix, UINT64 val) {
+static void print_hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *prefix, uint64_t val) {
     CHAR16 buf[64];
     int idx = 0;
     if (prefix) while (prefix[idx]) { buf[idx] = prefix[idx]; idx++; }
@@ -26,6 +25,17 @@ static void print_hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *pre
     ConOut->OutputString(ConOut, buf);
 }
 
+// --- Minimal memcmp, memset ---
+static int memcmp(const void *a, const void *b, unsigned n) {
+    const unsigned char *p = a, *q = b;
+    for (unsigned i = 0; i < n; ++i) if (p[i] != q[i]) return p[i] - q[i];
+    return 0;
+}
+static void *memset(void *d, int v, unsigned n) {
+    unsigned char *p = d; for (unsigned i = 0; i < n; ++i) p[i] = v; return d;
+}
+
+// --- ELF structs ---
 typedef struct {
     unsigned char e_ident[16];
     uint16_t e_type, e_machine;
@@ -40,15 +50,53 @@ typedef struct {
     uint64_t p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_align;
 } __attribute__((packed)) Elf64_Phdr;
 
-// Minimal memory functions
-VOID *EFIAPI CopyMem(VOID *d, const VOID *s, UINTN l) {
-    UINT8 *dst = (UINT8*)d; const UINT8 *src = (const UINT8*)s;
-    for (UINTN i = 0; i < l; ++i) dst[i] = src[i];
-    return d;
+#define PT_LOAD 1
+
+// --- Standalone ELF64 loader: returns 0 on success, nonzero on error ---
+static int load_elf64_kernel(
+    EFI_FILE_PROTOCOL *KernelFile,
+    EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut,
+    EFI_BOOT_SERVICES *BS,
+    void (**entry_out)(bootinfo_t *))
+{
+    EFI_STATUS st;
+    UINTN sz;
+    Elf64_Ehdr eh;
+    // Read ELF header
+    sz = sizeof(eh);
+    st = KernelFile->Read(KernelFile, &sz, &eh);
+    if (st || sz != sizeof(eh)) { ConOut->OutputString(ConOut, L"ELF header read error\r\n"); return 1; }
+    if (memcmp(eh.e_ident, "\x7f""ELF", 4) != 0 || eh.e_ident[4] != 2) {
+        ConOut->OutputString(ConOut, L"Not ELF64\r\n"); return 2;
+    }
+    // Load segments
+    for (UINTN i = 0; i < eh.e_phnum; ++i) {
+        Elf64_Phdr ph;
+        KernelFile->SetPosition(KernelFile, eh.e_phoff + i * sizeof(ph));
+        sz = sizeof(ph);
+        st = KernelFile->Read(KernelFile, &sz, &ph);
+        if (st || sz != sizeof(ph)) { ConOut->OutputString(ConOut, L"PH read fail\r\n"); return 3; }
+        if (ph.p_type != PT_LOAD || ph.p_memsz == 0) continue;
+        print_hex(ConOut, L"Seg addr: ", ph.p_paddr);
+        print_hex(ConOut, L"filesz: ", ph.p_filesz);
+        print_hex(ConOut, L"memsz: ", ph.p_memsz);
+        EFI_PHYSICAL_ADDRESS dest = ph.p_paddr;
+        UINTN npages = (ph.p_memsz + 4095) / 4096;
+        st = BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, npages, &dest);
+        if (st || dest != ph.p_paddr) { ConOut->OutputString(ConOut, L"Page alloc failed\r\n"); return 4; }
+        KernelFile->SetPosition(KernelFile, ph.p_offset);
+        sz = ph.p_filesz;
+        st = KernelFile->Read(KernelFile, &sz, (void *)(UINTN)dest);
+        if (st || sz != ph.p_filesz) { ConOut->OutputString(ConOut, L"Segment read fail\r\n"); return 5; }
+        if (ph.p_memsz > ph.p_filesz)
+            memset((void *)(UINTN)(dest + ph.p_filesz), 0, ph.p_memsz - ph.p_filesz);
+    }
+    *entry_out = (void (*)(bootinfo_t *))(UINTN)eh.e_entry;
+    print_hex(ConOut, L"Kernel entry: ", eh.e_entry);
+    return 0;
 }
-VOID *EFIAPI SetMem(VOID *b, UINTN l, UINT8 v) {
-    UINT8 *buf = (UINT8*)b; for (UINTN i = 0; i < l; ++i) buf[i] = v; return b;
-}
+
+// -------------------- Main Bootloader Logic --------------------
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     EFI_STATUS status;
@@ -63,7 +111,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     bootinfo_t *info = NULL;
     status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, 1, (EFI_PHYSICAL_ADDRESS*)&info);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Bootinfo alloc failed.\r\n"); for(;;); }
-    SetMem(info, sizeof(bootinfo_t), 0);
+    memset(info, 0, sizeof(bootinfo_t));
     info->magic = BOOTINFO_MAGIC_UEFI;
     info->size = sizeof(bootinfo_t);
     info->bootloader_name = "NitrOBoot UEFI";
@@ -89,20 +137,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         mmap[mmap_count].len  = d->NumberOfPages * 4096;
         mmap[mmap_count].type = d->Type;
         mmap[mmap_count].reserved = 0;
-
-     //   CHAR16 buf[96];
-#if 0
-        // If you have EDK2 SPrint, use this, else use hex printer above.
-        SPrint(buf, sizeof(buf),
-            L"RAM: %lx-%lx (%lu MiB) type=%u\r\n",
-            d->PhysicalStart, d->PhysicalStart + d->NumberOfPages * 4096,
-            mmap[mmap_count].len >> 20, d->Type);
-        ConOut->OutputString(ConOut, buf);
-#else
         print_hex(ConOut, L"Mem Start: ", d->PhysicalStart);
         print_hex(ConOut, L"Mem End  : ", d->PhysicalStart + d->NumberOfPages * 4096);
-#endif
-
         mmap_count++;
         if (mmap_count >= BOOTINFO_MAX_MMAP) break;
     }
@@ -123,7 +159,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
             fb->bpp     = 32;
             fb->type    = 0;
             info->framebuffer = fb;
-
             // Fill framebuffer with color
             UINT32 *pixels = (UINT32*)(UINTN)fb->address;
             for (UINT32 y = 0; y < fb->height; ++y)
@@ -156,40 +191,21 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     status = Root->Open(Root, &KernelFile, KERNEL_PATH, EFI_FILE_MODE_READ, 0);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"kernel.bin open failed.\r\n"); for(;;); }
 
-    EFI_PHYSICAL_ADDRESS kernel_buf = 0x200000;
-    UINTN buf_pages = (KERNEL_MAX_SIZE + 4095) / 4096;
-    status = BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, buf_pages, &kernel_buf);
-    if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Kernel buffer alloc failed.\r\n"); for(;;); }
-    UINTN kernel_size = KERNEL_MAX_SIZE;
-    status = KernelFile->Read(KernelFile, &kernel_size, (VOID*)kernel_buf);
+    // --- 6. Load the ELF64 kernel ---
+    void (*kernel_entry)(bootinfo_t*) = 0;
+    int elf_status = load_elf64_kernel(KernelFile, ConOut, BS, &kernel_entry);
     KernelFile->Close(KernelFile);
-    if (status != EFI_SUCCESS || kernel_size == 0) { ConOut->OutputString(ConOut, L"Read kernel.bin failed.\r\n"); for(;;); }
+    if (elf_status != 0 || !kernel_entry) { ConOut->OutputString(ConOut, L"Kernel load failed.\r\n"); for(;;); }
 
-    // Parse ELF and load all PT_LOAD segments
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)(UINTN)kernel_buf;
-    Elf64_Phdr *phdrs = (Elf64_Phdr *)(UINTN)(kernel_buf + ehdr->e_phoff);
-    for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
-        if (phdrs[i].p_type != 1) continue; // PT_LOAD
-        UINT64 dest = phdrs[i].p_paddr;
-        UINT64 src  = kernel_buf + phdrs[i].p_offset;
-        UINTN seg_pages = (phdrs[i].p_memsz + 4095) / 4096;
-        status = BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, seg_pages, &dest);
-        if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Kernel segment alloc failed.\r\n"); for(;;); }
-        CopyMem((VOID *)(UINTN)dest, (VOID *)(UINTN)src, phdrs[i].p_filesz);
-        if (phdrs[i].p_memsz > phdrs[i].p_filesz)
-            SetMem((VOID *)(UINTN)(dest + phdrs[i].p_filesz), phdrs[i].p_memsz - phdrs[i].p_filesz, 0);
-    }
-
-    // --- 6. Final memory map and ExitBootServices ---
+    // --- 7. Final memory map and ExitBootServices ---
     status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"GetMemoryMap before ExitBootServices failed.\r\n"); for(;;); }
     status = BS->ExitBootServices(ImageHandle, map_key);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"ExitBootServices failed.\r\n"); for(;;); }
     ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
 
-    // --- 7. Handoff to kernel (bootinfo pointer) ---
-    void (*entry)(bootinfo_t*) = (void (*)(bootinfo_t*))(UINTN)ehdr->e_entry;
-    entry(info);
+    // --- 8. Handoff to kernel (bootinfo pointer) ---
+    kernel_entry(info);
 
     for(;;);
     return EFI_SUCCESS;
