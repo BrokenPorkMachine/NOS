@@ -163,8 +163,12 @@ void kernel_main(bootinfo_t *bootinfo) {
     vga_clear();
     log_good("Mach Microkernel: Boot OK");
     log_line("");
-    if (!bootinfo || !bootinfo->framebuffer) log_line("No framebuffer!");
-    if (!bootinfo || !bootinfo->mmap) log_line("No mmap!");
+    if (!bootinfo || bootinfo->size != sizeof(bootinfo_t)) {
+        log_err("bootinfo size mismatch");
+        for(;;) __asm__("hlt");
+    }
+    if (!bootinfo->framebuffer) log_line("No framebuffer!");
+    if (!bootinfo->mmap) log_line("No mmap!");
     if (bootinfo && bootinfo->mmap_entries > 128) {
         log_err("BUG: mmap_entries too high, halting.");
         for(;;) __asm__("hlt");
