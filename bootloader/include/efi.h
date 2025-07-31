@@ -217,5 +217,15 @@ static const EFI_GUID gEfiAcpi20TableGuid = {
     0x8868e871, 0xe4f1, 0x11d3,
     {0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81}
 };
+typedef struct EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
+struct EFI_FILE_PROTOCOL {
+    UINT64 Revision;
+    EFI_STATUS (*Open)(EFI_FILE_PROTOCOL*, EFI_FILE_PROTOCOL**, CHAR16*, UINT64, UINT64);
+    EFI_STATUS (*Close)(EFI_FILE_PROTOCOL*);
+    EFI_STATUS (*Read)(EFI_FILE_PROTOCOL*, UINTN*, VOID*);
+    EFI_STATUS (*Write)(EFI_FILE_PROTOCOL*, UINTN*, VOID*);
+    EFI_STATUS (*SetPosition)(EFI_FILE_PROTOCOL*, UINT64);
+    // ... (rest optional)
+};
 
 #endif // EFI_H
