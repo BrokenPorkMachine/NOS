@@ -3,6 +3,8 @@
 
 #include <stddef.h> // for NULL
 
+#define EFI_FILE_MODE_READ      0x0000000000000001ULL
+
 // ====================
 // Basic UEFI Types
 // ====================
