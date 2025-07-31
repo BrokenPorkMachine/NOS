@@ -1,5 +1,11 @@
 #include <stdint.h>
 #include "../bootloader/include/bootinfo.h"
+#include "../GDT/gdt.h"
+#include "../IDT/idt.h"
+#include "../IO/pic.h"
+#include "../IO/pit.h"
+#include "../IO/keyboard.h"
+#include "../Task/thread.h"
 
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
@@ -133,6 +139,16 @@ void kernel_main(bootinfo_t *bootinfo) {
     log_good("Mach Microkernel: Boot OK");
     log_line("");
     print_bootinfo(bootinfo);
-    // (Insert future initialization, SMP, scheduler, etc here)
+    // Initialize core subsystems and start userland services
+    gdt_install();
+    idt_install();
+    pic_remap();
+    pit_init(100);
+    keyboard_init();
+
+    threads_init();
+    asm volatile("sti");
+
+    schedule();
     for (;;) __asm__ volatile("cli; hlt");
 }
