@@ -108,6 +108,11 @@ struct EFI_SYSTEM_TABLE {
     VOID*                                     ConfigurationTable;
 };
 
+typedef struct {
+    EFI_GUID VendorGuid;
+    VOID    *VendorTable;
+} EFI_CONFIGURATION_TABLE;
+
 // ====================
 // Boot Services table (ordered as in UEFI spec)
 // The structure layout must match the real UEFI table so that
@@ -332,6 +337,9 @@ static const EFI_GUID gEfiGraphicsOutputProtocolGuid =
 
 static const EFI_GUID gEfiAcpi20TableGuid =
     { 0x8868e871, 0xe4f1, 0x11d3, { 0xbc, 0x22, 0x0, 0x80, 0xc7, 0x3c, 0x88, 0x81 } };
+
+static const EFI_GUID gEfiAcpi10TableGuid =
+    { 0xeb9d2d30, 0x2d88, 0x11d3, { 0x9a, 0x16, 0x0, 0x0, 0x9c, 0x00, 0x83, 0x0b } };
 
 static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = 
     { 0x0964e5b2, 0x6459, 0x11d2, { 0x8e, 0x39, 0x0, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };

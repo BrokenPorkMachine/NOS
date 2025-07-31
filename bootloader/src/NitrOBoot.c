@@ -36,6 +36,18 @@ static void *memset(void *d, int v, unsigned n) {
     unsigned char *p = d; for (unsigned i = 0; i < n; ++i) p[i] = v; return d;
 }
 
+// --- Find ACPI RSDP from configuration tables ---
+static VOID *find_acpi_rsdp(struct EFI_SYSTEM_TABLE *SystemTable) {
+    EFI_CONFIGURATION_TABLE *ct = (EFI_CONFIGURATION_TABLE *)SystemTable->ConfigurationTable;
+    for (UINTN i = 0; i < SystemTable->NumberOfTableEntries; ++i) {
+        if (!memcmp(&ct[i].VendorGuid, &gEfiAcpi20TableGuid, sizeof(EFI_GUID)) ||
+            !memcmp(&ct[i].VendorGuid, &gEfiAcpi10TableGuid, sizeof(EFI_GUID))) {
+            return ct[i].VendorTable;
+        }
+    }
+    return NULL;
+}
+
 // --- ELF structs ---
 typedef struct {
     unsigned char e_ident[16];
@@ -173,8 +185,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     }
 
     // --- 4. ACPI RSDP ---
-    VOID *rsdp = 0;
-    status = BS->LocateProtocol((EFI_GUID*)&gEfiAcpi20TableGuid, NULL, &rsdp);
+    VOID *rsdp = find_acpi_rsdp(SystemTable);
     info->acpi_rsdp = (uint64_t)rsdp;
     if (rsdp)
         ConOut->OutputString(ConOut, L"ACPI RSDP found and passed to kernel.\r\n");
