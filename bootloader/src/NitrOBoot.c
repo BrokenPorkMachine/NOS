@@ -2,12 +2,6 @@
 #include "../include/bootinfo.h"
 #include "kernel_loader.h"
 
-extern char __bss_start, __bss_end;
-
-static void zero_bss(void) {
-    for (char *p = &__bss_start; p < &__bss_end; ++p)
-        *p = 0;
-}
 
 #define KERNEL_PATH L"\\kernel.bin"
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
@@ -122,7 +116,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     EFI_STATUS status;
     struct EFI_BOOT_SERVICES *BS = SystemTable->BootServices;
     struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut = SystemTable->ConOut;
-    zero_bss();
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLUE));
     ConOut->ClearScreen(ConOut);
     ConOut->OutputString(ConOut, L"NitrOBoot UEFI Loader starting...\r\n");
