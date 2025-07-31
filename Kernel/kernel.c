@@ -113,7 +113,6 @@ static void print_bootinfo(const bootinfo_t *bi) {
     else log_warn("[boot] Unknown boot magic!");
 
     uint32_t count = bi->mmap_entries;
-    if (count > BOOTINFO_MAX_MMAP) count = BOOTINFO_MAX_MMAP;
     log_info("[boot] RAM regions:");
     for (uint32_t i = 0; i < count; ++i) {
         const bootinfo_memory_t *m = &bi->mmap[i];
