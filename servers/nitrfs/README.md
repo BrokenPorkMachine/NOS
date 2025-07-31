@@ -36,6 +36,7 @@ The filesystem server understands the following request types:
 | `NITRFS_MSG_WRITE`  | Write data to an open file           |
 | `NITRFS_MSG_READ`   | Read data from an open file          |
 | `NITRFS_MSG_DELETE` | Delete a file by handle              |
+| `NITRFS_MSG_RENAME` | Rename an existing file              |
 | `NITRFS_MSG_LIST`   | List all file names                  |
 | `NITRFS_MSG_CRC`    | Compute CRC32 of a file              |
 | `NITRFS_MSG_VERIFY` | Verify stored CRC against data       |

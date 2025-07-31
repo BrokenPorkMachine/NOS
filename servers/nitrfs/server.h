@@ -9,6 +9,7 @@ enum {
     NITRFS_MSG_WRITE,        // Write file  (arg1=handle, arg2=len, msg.data=buffer)
     NITRFS_MSG_READ,         // Read file   (arg1=handle, arg2=len)
     NITRFS_MSG_DELETE,       // Delete file (arg1=handle)
+    NITRFS_MSG_RENAME,       // Rename file (arg1=handle, msg.data=new name)
     NITRFS_MSG_LIST,         // List files  (no args)
     NITRFS_MSG_CRC,          // Compute CRC (arg1=handle)
     NITRFS_MSG_VERIFY,       // Verify CRC  (arg1=handle)

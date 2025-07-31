@@ -84,6 +84,17 @@ int nitrfs_delete(nitrfs_fs_t *fs, int handle) {
     return 0;
 }
 
+int nitrfs_rename(nitrfs_fs_t *fs, int handle, const char *new_name) {
+    if (handle < 0 || (size_t)handle >= fs->file_count)
+        return -1;
+    if (!new_name)
+        return -1;
+    nitrfs_file_t *f = &fs->files[handle];
+    strncpy(f->name, new_name, NITRFS_NAME_LEN - 1);
+    f->name[NITRFS_NAME_LEN - 1] = '\0';
+    return 0;
+}
+
 size_t nitrfs_list(nitrfs_fs_t *fs, char names[][NITRFS_NAME_LEN], size_t max) {
     size_t count = fs->file_count < max ? fs->file_count : max;
     for (size_t i = 0; i < count; ++i)
