@@ -13,7 +13,15 @@
 #define VGA_COLS 80
 #define VGA_ROWS 25
 
-static int row = 12, col = 0;
+static int row = 0, col = 0;
+
+static void vga_clear_screen(void) {
+    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
+    for (int i = 0; i < VGA_COLS * VGA_ROWS; ++i)
+        vga[i] = (0x0F << 8) | ' ';
+    row = 0;
+    col = 0;
+}
 
 static void vga_scroll() {
     volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
@@ -246,6 +254,7 @@ static void cmd_help(void) {
 
 // --- Shell main loop ---
 void shell_main(ipc_queue_t *q, uint32_t self_id) {
+    vga_clear_screen();
     puts_vga("NOS shell ready\n");
     puts_vga("type 'help' for commands\n");
     char line[80]; char *argv[4];
