@@ -221,6 +221,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         for(;;);
     }
     UINT64 stack_top = stack_base + stack_pages * 4096ULL;
+    void (*entry_fn)(bootinfo_t*) = kernel_entry;
+
+    // Switch to the new stack before leaving boot services
+    __asm__ __volatile__("mov %0, %%rsp" :: "r"(stack_top));
 
     // --- 7. Final memory map and ExitBootServices ---
     status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
@@ -239,12 +243,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     // --- 8. Handoff to kernel (bootinfo pointer) ---
     __asm__ __volatile__(
         "mov %0, %%rdi\n"
-        "mov %1, %%rsp\n"
         "xor %%rbp, %%rbp\n"
-        "jmp *%2\n"
+        "jmp *%1\n"
         :
-        : "r"(info), "r"(stack_top), "r"(kernel_entry)
-        : "rdi", "rsp", "rbp");
+        : "r"(info), "r"(entry_fn)
+        : "rdi", "rbp");
 
     for(;;);
     return EFI_SUCCESS;
