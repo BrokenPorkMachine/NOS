@@ -128,11 +128,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         UINTN pages = (phdrs[i].p_memsz + 4095) / 4096;
         BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, pages, &dest);
 
-        BS->CopyMem((VOID *)(UINTN)dest, (VOID *)(UINTN)src, phdrs[i].p_filesz);
+        CopyMem((VOID *)(UINTN)dest, (VOID *)(UINTN)src, phdrs[i].p_filesz);
 
         if (phdrs[i].p_memsz > phdrs[i].p_filesz) {
             UINTN bss_len = phdrs[i].p_memsz - phdrs[i].p_filesz;
-            BS->SetMem((VOID *)(UINTN)(dest + phdrs[i].p_filesz), bss_len, 0);
+            SetMem((VOID *)(UINTN)(dest + phdrs[i].p_filesz), bss_len, 0);
         }
     }
     print_ok(ConOut);
