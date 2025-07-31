@@ -96,6 +96,14 @@ int     nitrfs_verify(nitrfs_fs_t *fs, int handle);
 int     nitrfs_delete(nitrfs_fs_t *fs, int handle);
 
 /**
+ * @brief Rename a file.
+ * @param handle File handle to rename.
+ * @param new_name New name string (truncated to NITRFS_NAME_LEN-1).
+ * @return 0 on success, -1 on error.
+ */
+int     nitrfs_rename(nitrfs_fs_t *fs, int handle, const char *new_name);
+
+/**
  * @brief List file names in the FS.
  * @param names  Output buffer [max][NITRFS_NAME_LEN]
  * @param max    Max names to fill

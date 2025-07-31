@@ -48,6 +48,11 @@ void nitrfs_server(ipc_queue_t *q, uint32_t self_id) {
             ret = nitrfs_delete(&fs, handle);
             reply.arg1 = ret;
             break;
+        case NITRFS_MSG_RENAME:
+            handle = msg.arg1;
+            ret = nitrfs_rename(&fs, handle, (const char*)msg.data);
+            reply.arg1 = ret;
+            break;
         case NITRFS_MSG_LIST:
             reply.arg1 = nitrfs_list(&fs, (char (*)[NITRFS_NAME_LEN])reply.data,
                                      IPC_MSG_DATA_MAX / NITRFS_NAME_LEN);

@@ -100,6 +100,8 @@ Available commands include:
 * `ls` or `dir` – list directory contents
 * `mkdir` – create a new directory (not yet implemented)
 * `mv` – move or rename a file
+* `crc` – compute CRC32 of a file
+* `verify` – verify file integrity using CRC32
 * `rm` – remove a file or directory
 * `cat` – display file contents
 * `create` – create a new empty file
