@@ -51,19 +51,6 @@ static void print_fail(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, CHAR16 *msg) {
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
 }
 
-// Simple mem functions for bootloader
-VOID *EFIAPI CopyMem(VOID *dest, const VOID *src, UINTN len) {
-    UINT8 *d = (UINT8 *)dest;
-    const UINT8 *s = (const UINT8 *)src;
-    for (UINTN i = 0; i < len; ++i) d[i] = s[i];
-    return dest;
-}
-VOID *EFIAPI SetMem(VOID *dest, UINTN len, UINT8 v) {
-    UINT8 *d = (UINT8 *)dest;
-    for (UINTN i = 0; i < len; ++i) d[i] = v;
-    return dest;
-}
-
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     EFI_STATUS status;
     EFI_BOOT_SERVICES *BS = SystemTable->BootServices;
