@@ -249,19 +249,27 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     void (*entry_fn)(bootinfo_t*) = kernel_entry;
 
     // --- 7. Final memory map and ExitBootServices ---
-    status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
-    if (status == EFI_BUFFER_TOO_SMALL) {
-        UINTN npages = (mmap_size + 4095) / 4096;
-        status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, npages,
-                                  (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
-        if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap realloc failed.\r\n"); for(;;); }
+    while (1) {
         status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
+        if (status == EFI_BUFFER_TOO_SMALL) {
+            UINTN npages = (mmap_size + 4095) / 4096;
+            status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, npages,
+                                      (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
+            if (status != EFI_SUCCESS) {
+                ConOut->OutputString(ConOut, L"Memmap realloc failed.\r\n");
+                for(;;);
+            }
+            status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
+        }
+        if (status != EFI_SUCCESS) {
+            ConOut->OutputString(ConOut, L"GetMemoryMap before ExitBootServices failed.\r\n");
+            for(;;);
+        }
+        ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
+        status = BS->ExitBootServices(ImageHandle, map_key);
+        if (status == EFI_SUCCESS)
+            break;
     }
-    if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"GetMemoryMap before ExitBootServices failed.\r\n"); for(;;); }
-    ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
-
-    status = BS->ExitBootServices(ImageHandle, map_key);
-    if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"ExitBootServices failed.\r\n"); for(;;); }
 
     g_info = info;
     g_entry = entry_fn;
