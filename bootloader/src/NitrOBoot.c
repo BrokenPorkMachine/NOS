@@ -122,6 +122,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     ConOut->ClearScreen(ConOut);
     ConOut->OutputString(ConOut, L"NitrOBoot UEFI Loader starting...\r\n");
     ConOut->SetAttribute(ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
+    ConOut->OutputString(ConOut, L"[Stage 1] Allocate bootinfo\r\n");
 
     // --- 1. Allocate and zero bootinfo struct ---
     bootinfo_t *info = NULL;
@@ -139,6 +140,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     print_hex(ConOut, L"bootinfo magic:", info->magic);
     print_hex(ConOut, L"bootinfo_memory_t size: ", sizeof(bootinfo_memory_t));
 
+    ConOut->OutputString(ConOut, L"[Stage 2] Retrieve memory map\r\n");
     // --- 2. UEFI Memory map (copy & print) ---
     UINTN mmap_size = 0, map_key, desc_size;
     UINT32 desc_ver;
@@ -200,6 +202,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     print_hex(ConOut, L"mmap struct ptr: ", (UINTN)mmap);
     print_hex(ConOut, L"mmap entries : ", mmap_count);
 
+    ConOut->OutputString(ConOut, L"[Stage 3] Framebuffer setup\r\n");
     // --- 3. Framebuffer info + fill screen ---
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = NULL;
     status = BS->LocateProtocol((EFI_GUID*)&gEfiGraphicsOutputProtocolGuid, NULL, (VOID**)&gop);
@@ -235,6 +238,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         ConOut->OutputString(ConOut, L"Framebuffer NOT available.\r\n");
     }
 
+    ConOut->OutputString(ConOut, L"[Stage 4] ACPI lookup\r\n");
     // --- 4. ACPI RSDP ---
     VOID *rsdp = find_acpi_rsdp(SystemTable);
     info->acpi_rsdp = (uint64_t)rsdp;
@@ -243,6 +247,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     else
         ConOut->OutputString(ConOut, L"No ACPI RSDP found.\r\n");
 
+    ConOut->OutputString(ConOut, L"[Stage 5] Load kernel image\r\n");
     // --- 5. Kernel ELF load ---
     // Locate the simple filesystem protocol in the system
     struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
@@ -275,6 +280,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     UINT64 stack_top = stack_base + stack_pages * 4096ULL;
     void (*entry_fn)(bootinfo_t*) = kernel_entry;
 
+    ConOut->OutputString(ConOut, L"[Stage 6] Exit boot services\r\n");
     // --- 7. Final memory map and ExitBootServices ---
     while (1) {
         status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
@@ -322,6 +328,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     g_info = info;
     g_entry = entry_fn;
 
+    ConOut->OutputString(ConOut, L"[Stage 7] Jumping to kernel\r\n");
     // --- 8. Switch stack and handoff to kernel ---
     __asm__ __volatile__(
         "mov %0, %%rsp\n"

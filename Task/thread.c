@@ -3,6 +3,7 @@
 #include "../servers/nitrfs/server.h"
 #include "../servers/shell/shell.h"
 #include "../src/libc.h"
+#include "../IO/serial.h"
 #include <stdint.h>
 
 #define STACK_SIZE 4096
@@ -63,6 +64,20 @@ thread_t *thread_create(void (*func)(void)) {
         tail->next = t;
         tail = t;
     }
+    char buf[32];
+    serial_puts("[thread] created id=");
+    buf[0] = '\0';
+    {
+        int id = t->id;
+        int pos = 0;
+        char tmp[16];
+        if (id == 0) { tmp[pos++] = '0'; }
+        while (id > 0 && pos < 15) { tmp[pos++] = '0' + (id % 10); id /= 10; }
+        for (int i = pos-1, j=0; i>=0; --i,++j) buf[j]=tmp[i];
+        buf[pos] = 0;
+    }
+    serial_puts(buf);
+    serial_puts("\n");
     return t;
 }
 
