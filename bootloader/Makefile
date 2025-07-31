@@ -3,9 +3,11 @@
 TARGET = NitrOBoot.efi
 OBJS = src/NitrOBoot.o
 
+CC ?= clang
+
 CFLAGS = \
-	-target x86_64-pc-win32-coff \
-	-ffreestanding \
+        -target x86_64-pc-win32-coff \
+        -ffreestanding \
 	-fshort-wchar \
 	-mno-red-zone \
 	-fno-stack-protector \
@@ -17,23 +19,23 @@ CFLAGS = \
 	-c
 
 LDFLAGS = \
-	-target x86_64-pc-win32-coff \
-	-nostdlib \
-	-Wl,-entry:efi_main \
-	-Wl,-subsystem:efi_application \
-	-Wl,-dll \
-	-fuse-ld=lld-link \
-	-Wl,-nodefaultlib \
-	-Wl,-align:4096 \
-	-Wl,-filealign:4096
+        -target x86_64-pc-win32-coff \
+        -nostdlib \
+        -Wl,-entry:efi_main \
+        -Wl,-subsystem:efi_application \
+        -Wl,-dll \
+        -fuse-ld=lld-link \
+        -Wl,-nodefaultlib \
+        -Wl,-align:4096 \
+        -Wl,-filealign:4096
 
 all: $(TARGET)
 
 %.o: %.c
-	clang $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $<
 
 $(TARGET): $(OBJS)
-	clang $(LDFLAGS) -o $@ $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS)
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+		rm -f $(TARGET) $(OBJS)

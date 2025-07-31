@@ -6,12 +6,45 @@ NASM = nasm
 CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib
 LDFLAGS = -T kernel.ld -nostdlib
 
-OBJS = kernel_entry.o kernel.o idt.o interrupt.o isr_stub.o
+OBJS = \
+    kernel_entry.o \
+    kernel.o \
+    ../IDT/idt.o \
+    ../IDT/interrupt.o \
+    ../IDT/isr_stub.o \
+    ../IO/pic.o \
+    ../IO/pit.o \
+    ../IO/keyboard.o \
+    ../IO/mouse.o \
+    ../IO/pci.o \
+    ../Net/e1000.o \
+    ../VM/paging.o \
+    ../Task/thread.o \
+    ../Task/context_switch.o \
+    ../Task/user_mode.o \
+    ../GDT/gdt.o \
+    ../GDT/gdt_flush.o \
+    ../GDT/user.o \
+    syscall.o \
+    ../servers/nitrfs/nitrfs.o \
+    ../servers/nitrfs/server.o \
+    ../servers/shell/shell.o \
+    ../IPC/ipc.o \
+    ../libc.o
 
 all: kernel.bin
 
 kernel.o: kernel.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+../%.o: ../%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+../%.o: ../%.asm
+	$(NASM) -f elf64 $< -o $@
+
+../GDT/gdt_flush.o: ../GDT/gdt.asm
+	$(NASM) -f elf64 $< -o $@
 
 idt.o: idt.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -29,4 +62,6 @@ kernel.bin: $(OBJS) kernel.ld
 	$(LD) $(LDFLAGS) $(OBJS) -o $@
 
 clean:
-	rm -f *.o kernel.bin
+	rm -f *.o kernel.bin \
+../IDT/*.o ../IO/*.o ../Net/*.o ../VM/*.o \
+../Task/*.o ../GDT/*.o ../servers/*/*.o ../IPC/*.o ../libc.o
