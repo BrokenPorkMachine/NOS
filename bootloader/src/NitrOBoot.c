@@ -131,6 +131,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     print_hex(ConOut, L"bootinfo ptr: ", (UINTN)info);
     print_hex(ConOut, L"bootinfo size: ", info->size);
     print_hex(ConOut, L"bootinfo magic:", info->magic);
+    print_hex(ConOut, L"bootinfo_memory_t size: ", sizeof(bootinfo_memory_t));
 
     // --- 2. UEFI Memory map (copy & print) ---
     UINTN mmap_size = 0, map_key, desc_size;
