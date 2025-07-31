@@ -90,7 +90,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         mmap[mmap_count].type = d->Type;
         mmap[mmap_count].reserved = 0;
 
-        CHAR16 buf[96];
+     //   CHAR16 buf[96];
 #if 0
         // If you have EDK2 SPrint, use this, else use hex printer above.
         SPrint(buf, sizeof(buf),
