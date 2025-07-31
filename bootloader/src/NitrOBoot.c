@@ -129,6 +129,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     info->magic = BOOTINFO_MAGIC_UEFI;
     info->size = sizeof(bootinfo_t);
     info->bootloader_name = "NitrOBoot UEFI";
+    print_hex(ConOut, L"bootinfo ptr: ", (UINTN)info);
+    print_hex(ConOut, L"bootinfo size: ", info->size);
+    print_hex(ConOut, L"bootinfo magic:", info->magic);
 
     // --- 2. UEFI Memory map (copy & print) ---
     UINTN mmap_size = 0, map_key, desc_size;
@@ -163,6 +166,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     }
     info->mmap = mmap;
     info->mmap_entries = mmap_count;
+    print_hex(ConOut, L"mmap struct ptr: ", (UINTN)mmap);
+    print_hex(ConOut, L"mmap entries : ", mmap_count);
 
     // --- 3. Framebuffer info + fill screen ---
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = NULL;
@@ -180,6 +185,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             fb->bpp     = 32;
             fb->type    = 0;
             info->framebuffer = fb;
+            print_hex(ConOut, L"fb struct ptr: ", (UINTN)fb);
+            print_hex(ConOut, L"fb addr     : ", fb->address);
+            print_hex(ConOut, L"fb width    : ", fb->width);
+            print_hex(ConOut, L"fb height   : ", fb->height);
+            print_hex(ConOut, L"fb pitch    : ", fb->pitch);
             // Fill framebuffer with color
             UINT32 *pixels = (UINT32*)(UINTN)fb->address;
             for (UINT32 y = 0; y < fb->height; ++y)
