@@ -1,7 +1,7 @@
 // src/NitrOBoot.c
 #include "../include/efi.h"
 
-#define KERNEL_PATH L"\\kernel.bin"
+#define KERNEL_PATH L"\\EFI\\BOOT\\kernel.bin"
 #define KERNEL_BASE_ADDR 0x100000
 #define KERNEL_MAX_SIZE (2 * 1024 * 1024)
 
