@@ -28,13 +28,13 @@
 
    * `x86_64-elf-gcc`, `nasm`, `clang`, `lld`, `qemu`, `make`, `mtools`, `dosfstools`
    * FAT image tools (`mkfs.vfat`, `mcopy`) for creating the boot disk
-   * Optionally set the `CROSS_COMPILE` environment variable if your
-     cross compiler prefix differs from the default `/opt/cross/bin/x86_64-elf-`.
-     For example, Ubuntu packages typically use `x86_64-linux-gnu-`:
+  * Optionally set the `CROSS_COMPILE` environment variable if your
+    cross compiler prefix differs from the default `x86_64-linux-gnu-`.
+    For example:
 
-     ```sh
-     make CROSS_COMPILE=x86_64-linux-gnu-
-     ```
+    ```sh
+    make CROSS_COMPILE=/opt/cross/bin/x86_64-elf-
+    ```
 2. **Build the kernel:**
 
    ```sh

@@ -1,4 +1,4 @@
-CROSS_COMPILE ?= /opt/cross/bin/x86_64-elf-
+CROSS_COMPILE ?= x86_64-linux-gnu-
 
 all: libc kernel bootloader disk.img
 
@@ -20,16 +20,17 @@ disk.img: bootloader kernel
 	mcopy -i disk.img bootloader/NitrOBoot.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img kernel.bin ::/
 
+
 clean:
 	make -C Kernel clean
 	make -C bootloader clean
 	rm -f kernel.bin libc.o disk.img
-
+	
 run: disk.img
 	qemu-system-x86_64 \
-		-bios OVMF.fd \
-		-drive file=disk.img,format=raw \
-		-m 512M \
-		-enable-kvm
+	-bios OVMF.fd \
+	-drive file=disk.img,format=raw \
+	-m 512M \
+	-serial stdio -display none
 
 .PHONY: all libc kernel bootloader clean run

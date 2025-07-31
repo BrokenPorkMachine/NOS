@@ -1,4 +1,4 @@
-CROSS_COMPILE ?= /opt/cross/bin/x86_64-elf-
+CROSS_COMPILE ?= x86_64-linux-gnu-
 CC = $(CROSS_COMPILE)gcc
 LD = $(CROSS_COMPILE)ld
 NASM = nasm
