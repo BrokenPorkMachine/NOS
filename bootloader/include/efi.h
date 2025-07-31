@@ -24,7 +24,7 @@ typedef UINT64              EFI_VIRTUAL_ADDRESS;
 
 #ifndef NULL
 #define NULL ((void *)0)
-#endif
+7#endif
 
 // ----------------------------------------------------------------------
 // 2. Function Prototypes (no implementations in header!)
@@ -183,3 +183,35 @@ static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = {
 };
 
 #endif // EFI_H
+// --- UEFI Graphics Output Protocol (GOP) ---
+
+typedef struct {
+    UINT32  Version;
+    UINT32  HorizontalResolution;
+    UINT32  VerticalResolution;
+    UINT32  PixelFormat;
+    UINT32  PixelsPerScanLine;
+} EFI_GRAPHICS_OUTPUT_MODE_INFORMATION;
+
+typedef struct {
+    UINT32                         MaxMode;
+    UINT32                         Mode;
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
+    UINTN                          SizeOfInfo;
+    EFI_PHYSICAL_ADDRESS           FrameBufferBase;
+    UINTN                          FrameBufferSize;
+} EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE;
+
+typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL EFI_GRAPHICS_OUTPUT_PROTOCOL;
+struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
+    EFI_STATUS (*QueryMode)(EFI_GRAPHICS_OUTPUT_PROTOCOL*, UINT32, UINTN*, EFI_GRAPHICS_OUTPUT_MODE_INFORMATION**);
+    EFI_STATUS (*SetMode)(EFI_GRAPHICS_OUTPUT_PROTOCOL*, UINT32);
+    // PixelBlt skipped
+    EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
+};
+
+// The GOP GUID
+static const EFI_GUID gEfiGraphicsOutputProtocolGuid = { 0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a} };
+
+// ACPI 2.0 Table GUID (for RSDP)
+static const EFI_GUID gEfiAcpi20TableGuid = {0x8868e871,0xe4f1,0x11d3,{0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81}};
