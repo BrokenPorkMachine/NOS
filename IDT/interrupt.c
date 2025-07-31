@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "../Task/thread.h"
 void isr_default_handler(uint64_t *rsp) {
+    (void)rsp; // unused in default handler
     // You could output to serial here or VGA
     volatile char *vga = (char*)0xB8000 + 160; // Line 2
     const char *msg = "INTERRUPT!";

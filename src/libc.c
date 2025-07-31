@@ -155,9 +155,11 @@ void free(void *ptr) {
     }
 }
 void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen) {
-    // Simply ignore destlen and call memcpy
+    (void)destlen; // parameter not used in this stub
     return memcpy(dest, src, n);
 }
+
 char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
+    (void)destlen; // parameter not used in this stub
     return strncpy(dest, src, n);
 }

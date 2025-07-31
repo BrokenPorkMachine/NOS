@@ -23,7 +23,6 @@ int e1000_init(void) {
             if (ven_dev == 0xFFFFFFFF)
                 continue;
             uint16_t vendor = ven_dev & 0xFFFF;
-            uint16_t device = (ven_dev >> 16) & 0xFFFF;
 
             if (vendor == INTEL_VENDOR_ID) {
                 uint32_t classcode = pci_config_read(bus, slot, 0, 0x08);
