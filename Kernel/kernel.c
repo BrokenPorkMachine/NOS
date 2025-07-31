@@ -201,6 +201,7 @@ void kernel_main(bootinfo_t *bootinfo) {
     threads_init();
     asm volatile("sti");
 
-    schedule();
-    for (;;) __asm__ volatile("cli; hlt");
+    for (;;) {
+        schedule();
+    }
 }
