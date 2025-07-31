@@ -88,3 +88,17 @@ EFI_STATUS efi_read_file(EFI_FILE_PROTOCOL *File, UINTN *BufferSize, VOID *Buffe
 EFI_STATUS efi_close_file(EFI_FILE_PROTOCOL *File) {
     return File->Close(File);
 }
+#include "../include/efi.h"
+
+VOID *EFIAPI CopyMem(VOID *Destination, const VOID *Source, UINTN Length) {
+    UINT8 *d = (UINT8*)Destination;
+    const UINT8 *s = (const UINT8*)Source;
+    for (UINTN i = 0; i < Length; ++i) d[i] = s[i];
+    return Destination;
+}
+
+VOID *EFIAPI SetMem(VOID *Buffer, UINTN Size, UINT8 Value) {
+    UINT8 *d = (UINT8*)Buffer;
+    for (UINTN i = 0; i < Size; ++i) d[i] = Value;
+    return Buffer;
+}
