@@ -281,7 +281,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             ConOut->OutputString(ConOut, L"GetMemoryMap before ExitBootServices failed.\r\n");
             for(;;);
         }
-        ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
+        /* Do not call any Boot Services (including console output)
+         * between GetMemoryMap and ExitBootServices. Printing here can
+         * allocate memory and change the map, causing ExitBootServices
+         * to fail with EFI_INVALID_PARAMETER. */
         status = BS->ExitBootServices(ImageHandle, map_key);
         if (status == EFI_SUCCESS)
             break;
