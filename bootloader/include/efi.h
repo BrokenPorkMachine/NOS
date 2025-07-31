@@ -34,6 +34,37 @@ typedef struct {
     UINT16  Data3;
     UINT8   Data4[8];
 } EFI_GUID;
+// GOP structures
+typedef struct {
+    UINT32                       Version;
+    UINT32                       HorizontalResolution;
+    UINT32                       VerticalResolution;
+    UINT32                       PixelFormat;
+    UINT32                       PixelInformation[4];
+    UINT32                       PixelsPerScanLine;
+} EFI_GRAPHICS_OUTPUT_MODE_INFORMATION;
+
+typedef struct {
+    UINT32                                MaxMode;
+    UINT32                                Mode;
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* Info;
+    UINTN                                 SizeOfInfo;
+    UINT64                                FrameBufferBase;
+    UINTN                                 FrameBufferSize;
+} EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE;
+
+typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL EFI_GRAPHICS_OUTPUT_PROTOCOL;
+struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
+    EFI_STATUS (*QueryMode)(
+        EFI_GRAPHICS_OUTPUT_PROTOCOL*,
+        UINT32,
+        UINTN*,
+        EFI_GRAPHICS_OUTPUT_MODE_INFORMATION**
+    );
+    EFI_STATUS (*SetMode)(EFI_GRAPHICS_OUTPUT_PROTOCOL*, UINT32);
+    EFI_STATUS (*Blt)(EFI_GRAPHICS_OUTPUT_PROTOCOL*, VOID*, UINT32, UINTN, UINTN, UINTN, UINTN, UINTN, UINTN, UINTN);
+    EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* Mode;
+};
 
 // ====================
 // Forward Declarations
