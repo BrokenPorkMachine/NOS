@@ -1,8 +1,8 @@
 // src/elf_loader.h
 #pragma once
 
-#include <efi.h>
-#include "bootinfo.h"
+#include "../include/efi.h"
+#include "../include/bootinfo.h"
 
 #ifdef __cplusplus
 extern "C" {
