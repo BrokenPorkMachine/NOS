@@ -1,4 +1,4 @@
-CROSS_COMPILE=x86_64-linux-gnu-
+CROSS_COMPILE ?= /opt/cross/bin/x86_64-elf-
 
 all: libc kernel bootloader disk.img
 

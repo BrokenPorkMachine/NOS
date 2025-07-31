@@ -26,11 +26,15 @@
 
 1. **Dependencies:**
 
-   * `x86_64-elf-gcc`, `nasm`, `qemu`, `make`, `mtools`
-   * For UEFI boot: FAT image tools (`mkfs.vfat`, `mcopy`)
-   * For gnu-efi bootloader: `gnu-efi` (for bootloader only)
+   * `x86_64-elf-gcc`, `nasm`, `clang`, `lld`, `qemu`, `make`, `mtools`, `dosfstools`
+   * FAT image tools (`mkfs.vfat`, `mcopy`) for creating the boot disk
    * Optionally set the `CROSS_COMPILE` environment variable if your
      cross compiler prefix differs from the default `/opt/cross/bin/x86_64-elf-`.
+     For example, Ubuntu packages typically use `x86_64-linux-gnu-`:
+
+     ```sh
+     make CROSS_COMPILE=x86_64-linux-gnu-
+     ```
 2. **Build the kernel:**
 
    ```sh
