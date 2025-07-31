@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "../include/bootinfo.h"
+#include "../bootloader/include/bootinfo.h"
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
 #define VGA_ROWS 25
