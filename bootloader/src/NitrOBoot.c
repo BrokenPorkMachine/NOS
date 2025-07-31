@@ -140,11 +140,22 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     UINTN mmap_size = 0, map_key, desc_size;
     UINT32 desc_ver;
     status = BS->GetMemoryMap(&mmap_size, NULL, &map_key, &desc_size, &desc_ver);
-    mmap_size += desc_size * 64; // add plenty of slack for final map
-    EFI_MEMORY_DESCRIPTOR *efi_mmap;
-    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, (mmap_size + 4095) / 4096, (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
+    mmap_size += desc_size * 64; // add initial slack for allocations
+    EFI_MEMORY_DESCRIPTOR *efi_mmap = NULL;
+    UINTN efi_mmap_pages = (mmap_size + 4095) / 4096;
+    status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, efi_mmap_pages, (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap alloc failed.\r\n"); for(;;); }
-    status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
+    mmap_size = efi_mmap_pages * 4096;
+    while (1) {
+        status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
+        if (status != EFI_BUFFER_TOO_SMALL)
+            break;
+        // allocate more space and retry
+        efi_mmap_pages = (mmap_size + desc_size * 64 + 4095) / 4096;
+        status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, efi_mmap_pages, (EFI_PHYSICAL_ADDRESS*)&efi_mmap);
+        if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap resize failed.\r\n"); for(;;); }
+        mmap_size = efi_mmap_pages * 4096;
+    }
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"Memmap read failed.\r\n"); for(;;); }
 
     UINTN desc_count = mmap_size / desc_size;
@@ -255,9 +266,16 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     while (1) {
         status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
         if (status == EFI_BUFFER_TOO_SMALL) {
-            // Should not allocate here as that would modify the map again
-            ConOut->OutputString(ConOut, L"Final memmap buffer too small.\r\n");
-            for(;;);
+            // Allocate a larger buffer and retry
+            efi_mmap_pages = (mmap_size + desc_size * 64 + 4095) / 4096;
+            status = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, efi_mmap_pages,
+                                       (EFI_PHYSICAL_ADDRESS *)&efi_mmap);
+            if (status != EFI_SUCCESS) {
+                ConOut->OutputString(ConOut, L"Final memmap alloc failed.\r\n");
+                for(;;);
+            }
+            mmap_size = efi_mmap_pages * 4096;
+            continue;
         }
         if (status != EFI_SUCCESS) {
             ConOut->OutputString(ConOut, L"GetMemoryMap before ExitBootServices failed.\r\n");
