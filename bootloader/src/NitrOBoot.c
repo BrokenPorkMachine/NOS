@@ -258,10 +258,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         status = BS->GetMemoryMap(&mmap_size, efi_mmap, &map_key, &desc_size, &desc_ver);
     }
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"GetMemoryMap before ExitBootServices failed.\r\n"); for(;;); }
+    ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
+
     status = BS->ExitBootServices(ImageHandle, map_key);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"ExitBootServices failed.\r\n"); for(;;); }
-
-    ConOut->OutputString(ConOut, L"Exiting boot services.\r\n");
 
     g_info = info;
     g_entry = entry_fn;
