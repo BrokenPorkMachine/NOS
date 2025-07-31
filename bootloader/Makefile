@@ -10,7 +10,7 @@ CFLAGS=--target=x86_64-pc-win32-coff \
 LDFLAGS=/entry:efi_main \
         /subsystem:efi_application \
         /nodefaultlib \
-        /base:0x100000 \
+       /base:0 \
         /align:32 \
         /filealign:32 \
         /out:NitrOBoot.efi

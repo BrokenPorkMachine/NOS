@@ -25,6 +25,7 @@ typedef VOID*               EFI_HANDLE;
 #define EFI_SUCCESS              0
 #define EFI_LOAD_ERROR           ((EFI_STATUS)0x8000000000000001)
 #define EFI_INVALID_PARAMETER    ((EFI_STATUS)0x8000000000000002)
+#define EFI_BUFFER_TOO_SMALL     ((EFI_STATUS)0x8000000000000005)
 // Add others as needed
 
 // ====================
