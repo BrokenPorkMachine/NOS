@@ -1,8 +1,8 @@
 // src/elf_loader.c
-#include <efi.h>
 #include <efilib.h>
 #include <elf.h>
-#include "bootinfo.h"
+#include "../include/efi.h"
+#include "../include/bootinfo.h"
 #include "elf_loader.h"
 
 // Loads an ELF64 kernel from an open EFI_FILE_HANDLE, maps all PT_LOAD segments, and jumps to entry point.
