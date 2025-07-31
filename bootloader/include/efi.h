@@ -121,6 +121,10 @@ struct EFI_BOOT_SERVICES {
     EFI_STATUS (*GetMemoryMap)(UINTN *MemoryMapSize, VOID *MemoryMap, UINTN *MapKey, UINTN *DescriptorSize, UINT32 *DescriptorVersion);
     EFI_STATUS (*AllocatePool)(UINTN PoolType, UINTN Size, VOID **Buffer);
     EFI_STATUS (*FreePool)(VOID *Buffer);
+    // Add to struct EFI_BOOT_SERVICES:
+    EFI_STATUS (*LocateProtocol)(EFI_GUID *Protocol, VOID *Registration, VOID **Interface);
+    EFI_STATUS (*HandleProtocol)(EFI_HANDLE Handle, EFI_GUID *Protocol, VOID **Interface);
+    EFI_STATUS (*ExitBootServices)(EFI_HANDLE ImageHandle, UINTN MapKey);
 
     // Add more functions as needed
 };
@@ -258,6 +262,14 @@ struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
 #define EFI_WHITE         0x0F
 
 #define EFI_TEXT_ATTR(Foreground, Background) (((Foreground) & 0x0F) | (((Background) & 0x0F) << 4))
+static const EFI_GUID gEfiGraphicsOutputProtocolGuid = 
+    { 0x9042a9de, 0x23dc, 0x4a38, { 0x96, 0xfb, 0x7a, 0xde, 0x39, 0xe8, 0xc6, 0x81 } };
+
+static const EFI_GUID gEfiAcpi20TableGuid =
+    { 0x8868e871, 0xe4f1, 0x11d3, { 0xbc, 0x22, 0x0, 0x80, 0xc7, 0x3c, 0x88, 0x81 } };
+
+static const EFI_GUID gEfiSimpleFileSystemProtocolGuid = 
+    { 0x0964e5b2, 0x6459, 0x11d2, { 0x8e, 0x39, 0x0, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
 
 // ====================
 // EFI_MEMORY_DESCRIPTOR
