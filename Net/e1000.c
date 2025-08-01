@@ -1,5 +1,6 @@
 #include "e1000.h"
 #include "../IO/pci.h"
+#include "../IO/mmio.h"
 #include "../src/libc.h"
 
 // Simple VGA print at row 4
@@ -57,8 +58,8 @@ int e1000_init(void) {
 int e1000_get_mac(uint8_t mac[6]) {
     if (!regs)
         return -1;
-    uint32_t ral = regs[0x5400 / 4];
-    uint32_t rah = regs[0x5404 / 4];
+    uint32_t ral = mmio_read32((uintptr_t)regs + 0x5400);
+    uint32_t rah = mmio_read32((uintptr_t)regs + 0x5404);
     mac[0] = ral & 0xFF;
     mac[1] = (ral >> 8) & 0xFF;
     mac[2] = (ral >> 16) & 0xFF;
