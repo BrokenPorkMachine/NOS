@@ -22,6 +22,9 @@
 * All device drivers, filesystems, and networking to run as user-mode agents
 * Minimal network stack with NIC detection
 * Stub VNC, SSH(SCP), and FTP servers (no real networking yet)
+* Experimental copy-on-write paging and basic demand paging
+* Early NUMA node enumeration from bootloader memory map
+* IPC shared memory channels with rights masks
 
 ---
 
