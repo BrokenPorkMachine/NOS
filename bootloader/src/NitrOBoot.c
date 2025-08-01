@@ -328,7 +328,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     g_info = info;
     g_entry = entry_fn;
 
-    ConOut->OutputString(ConOut, L"[Stage 7] Jumping to kernel\r\n");
+    // After ExitBootServices() we must avoid all boot service calls.
+    // In particular the UEFI text console is no longer guaranteed
+    // to be available, so skip the final status print.
     // --- 8. Switch stack and handoff to kernel ---
     __asm__ __volatile__(
         "mov %0, %%rsp\n"
