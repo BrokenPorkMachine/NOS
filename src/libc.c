@@ -74,7 +74,7 @@ int strncmp(const char *s1, const char *s2, size_t n) {
     return 0;
 }
 
-#define HEAP_SIZE (16 * 1024)
+#define HEAP_SIZE (64 * 1024)
 #define HEAP_MAGIC 0xC0DECAFE
 
 typedef struct block_header {
