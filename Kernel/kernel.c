@@ -7,6 +7,7 @@
 #include "../IO/keyboard.h"
 #include "../IO/mouse.h"
 #include "../IO/serial.h"
+#include "../Net/netstack.h"
 #include "../IO/video.h"
 #include "../Task/thread.h"
 #include "../VM/pmm.h"
@@ -207,6 +208,9 @@ void kernel_main(bootinfo_t *bootinfo) {
     log_good("[kbd] Keyboard initialized");
     mouse_init();
     log_good("[mou] Mouse initialized");
+
+    net_init();
+    log_good("[net] Network stack ready");
 
     log_line("[Stage 4] Launch servers");
     threads_init();
