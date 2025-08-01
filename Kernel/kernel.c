@@ -212,8 +212,8 @@ void kernel_main(bootinfo_t *bootinfo) {
     threads_init();
 
     log_line("[Stage 5] Scheduler start");
-    schedule();               // start first thread before enabling IRQs
-    asm volatile("sti");      // enable interrupts after scheduler is active
+    asm volatile("sti");      // enable interrupts before scheduling threads
+    schedule();               // start first thread now that IRQs are enabled
 
     for (;;) {
         schedule();
