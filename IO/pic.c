@@ -9,6 +9,9 @@
 #define PIC2_COMMAND PIC2
 #define PIC2_DATA   (PIC2+1)
 
+static uint8_t pic1_mask = 0xFF;
+static uint8_t pic2_mask = 0xFF;
+
 void pic_remap(void) {
     /* Save current masks - not used since we set new masks explicitly */
     (void)inb(PIC1_DATA);
@@ -32,8 +35,21 @@ void pic_remap(void) {
     outb(PIC2_DATA, 0x01);
     io_wait();
 
-    // Unmask timer (IRQ0) and keyboard (IRQ1) while masking others
-    // This allows scheduling preemption via PIT and keyboard input
-    outb(PIC1_DATA, 0xFC); // 11111100b -> IRQ0 and IRQ1 enabled
-    outb(PIC2_DATA, 0xFF); // mask all IRQs on the slave PIC for now
+    // Mask all IRQs initially
+    pic1_mask = 0xFF;
+    pic2_mask = 0xFF;
+    outb(PIC1_DATA, pic1_mask);
+    outb(PIC2_DATA, pic2_mask);
+}
+
+void pic_set_mask(uint8_t irq, int enable)
+{
+    if (irq < 8) {
+        if (enable) pic1_mask &= ~(1 << irq); else pic1_mask |= (1 << irq);
+        outb(PIC1_DATA, pic1_mask);
+    } else {
+        irq -= 8;
+        if (enable) pic2_mask &= ~(1 << irq); else pic2_mask |= (1 << irq);
+        outb(PIC2_DATA, pic2_mask);
+    }
 }

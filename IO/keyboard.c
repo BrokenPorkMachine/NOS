@@ -1,5 +1,6 @@
 #include "io.h"
 #include "keyboard.h"
+#include "pic.h"
 #include <stddef.h>
 
 #define KEYBUF_SIZE 32
@@ -29,7 +30,8 @@ static const char keymap_shift[128] = {
 static void keyboard_isr(void);
 
 void keyboard_init(void) {
-    // Nothing special for PS/2 keyboard
+    // Enable keyboard IRQ1 on PIC
+    pic_set_mask(1, 1);
     // Handler installed via IDT in idt_install()
 }
 

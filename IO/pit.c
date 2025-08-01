@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "io.h"
 #include "pit.h"
+#include "pic.h"
 
 #define PIT_FREQ 1193182
 #define PIT_CMD 0x43
@@ -13,4 +14,5 @@ void pit_init(uint32_t hz) {
     outb(PIT_CH0, divisor & 0xFF); // Low byte
     io_wait();
     outb(PIT_CH0, (divisor >> 8) & 0xFF); // High byte
+    pic_set_mask(0, 1); // enable IRQ0
 }
