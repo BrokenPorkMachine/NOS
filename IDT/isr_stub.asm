@@ -78,3 +78,17 @@ isr_mouse_stub:
     out 0x20, al
     leave
     iretq
+
+global isr_page_fault_stub
+isr_page_fault_stub:
+    cli
+    push rax
+    mov rax, cr2
+    push rax            ; fault address
+    mov rdi, [rsp+16]   ; error code
+    mov rsi, [rsp]      ; address
+    extern isr_page_fault_handler
+    call isr_page_fault_handler
+    add rsp, 8          ; pop address
+    pop rax
+    iretq

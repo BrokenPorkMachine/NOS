@@ -41,10 +41,10 @@ This document outlines a proposed secure and optimized memory mapping and manage
    - Reference counting shared frames to minimize copy
    - Batch TLB flushes where possible (e.g., per-task CR3 switch)
 
-6. **Future Extensions**
-   - Copy-on-write and demand paging for executables and IPC buffers
-   - NUMA awareness for systems with multiple memory regions
-   - Secure shared memory channels between tasks via Mach IPC rights
+6. **Recent Additions**
+   - Copy-on-write tracking with a simple page fault handler
+   - Experimental NUMA region discovery from the boot memory map
+   - IPC shared memory buffers protected by rights masks
 
 ## Boot Sequence Overview
 

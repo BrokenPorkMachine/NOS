@@ -12,6 +12,8 @@
 #include "../Task/thread.h"
 #include "../VM/pmm.h"
 #include "../VM/paging.h"
+#include "../VM/cow.h"
+#include "../VM/numa.h"
 #include "../CPU/cpu.h"
 #include "../ACPI/acpi.h"
 
@@ -197,6 +199,8 @@ void kernel_main(bootinfo_t *bootinfo) {
     acpi_init(bootinfo);
     log_line("[Stage 2] Init memory management");
     pmm_init(bootinfo);
+    cow_init(pmm_total_frames());
+    numa_init(bootinfo);
     paging_init();
 
     log_line("[Stage 3] Set up interrupts");

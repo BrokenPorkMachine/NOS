@@ -22,6 +22,8 @@ OBJS = \
     ../Net/netstack.o \
     ../VM/paging.o \
     ../VM/pmm.o \
+    ../VM/cow.o \
+    ../VM/numa.o \
     ../Task/thread.o \
     ../Task/context_switch.o \
     ../Task/user_mode.o \
@@ -36,6 +38,7 @@ OBJS = \
     ../servers/ssh/ssh.o \
     ../servers/ftp/ftp.o \
     ../IPC/ipc.o \
+    ../IPC/sharedmem.o \
     ../CPU/cpu.o \
     ../ACPI/acpi.o \
     ../IO/video.o \
