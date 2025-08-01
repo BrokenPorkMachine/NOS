@@ -31,6 +31,9 @@ OBJS = \
     ../servers/nitrfs/nitrfs.o \
     ../servers/nitrfs/server.o \
     ../servers/shell/shell.o \
+    ../servers/vnc/vnc.o \
+    ../servers/ssh/ssh.o \
+    ../servers/ftp/ftp.o \
     ../IPC/ipc.o \
     ../CPU/cpu.o \
     ../ACPI/acpi.o \

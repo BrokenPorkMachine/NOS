@@ -2,6 +2,9 @@
 #include "../IPC/ipc.h"
 #include "../servers/nitrfs/server.h"
 #include "../servers/shell/shell.h"
+#include "../servers/vnc/vnc.h"
+#include "../servers/ssh/ssh.h"
+#include "../servers/ftp/ftp.h"
 #include "../src/libc.h"
 #include "../IO/serial.h"
 #include <stdint.h>
@@ -29,6 +32,9 @@ static void thread_entry(void (*f)(void)) {
 
 static void thread_fs_func(void)   { nitrfs_server(&fs_queue, current->id); }
 static void thread_shell_func(void){ shell_main(&fs_queue, current->id); }
+static void thread_vnc_func(void)  { vnc_server(NULL, current->id); }
+static void thread_ssh_func(void)  { ssh_server(NULL, current->id); }
+static void thread_ftp_func(void)  { ftp_server(NULL, current->id); }
 
 // --- THREAD CREATION ---
 
@@ -105,6 +111,9 @@ void threads_init(void) {
     ipc_init(&fs_queue, mask, mask);
     thread_create(thread_fs_func);
     thread_create(thread_shell_func);
+    thread_create(thread_vnc_func);
+    thread_create(thread_ssh_func);
+    thread_create(thread_ftp_func);
 
     // Insert kernel main thread into the run queue so the first
     // schedule() call can switch away safely.
