@@ -210,9 +210,11 @@ void kernel_main(bootinfo_t *bootinfo) {
 
     log_line("[Stage 4] Launch servers");
     threads_init();
-    asm volatile("sti");
 
     log_line("[Stage 5] Scheduler start");
+    schedule();               // start first thread before enabling IRQs
+    asm volatile("sti");      // enable interrupts after scheduler is active
+
     for (;;) {
         schedule();
     }

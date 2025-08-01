@@ -11,6 +11,7 @@
 thread_t *current = NULL;
 static thread_t *tail = NULL;
 static int next_id = 1;
+static thread_t main_thread; // represents kernel_main for initial switch
 
 ipc_queue_t fs_queue;
 
@@ -104,7 +105,18 @@ void threads_init(void) {
     ipc_init(&fs_queue, mask, mask);
     thread_create(thread_fs_func);
     thread_create(thread_shell_func);
-    current->state = THREAD_RUNNING;
+
+    // Insert kernel main thread into the run queue so the first
+    // schedule() call can switch away safely.
+    main_thread.id    = 0;
+    main_thread.func  = NULL;
+    main_thread.stack = NULL;
+    main_thread.state = THREAD_RUNNING;
+
+    main_thread.next = current; // current points to first created thread
+    tail->next       = &main_thread;
+    tail             = &main_thread;
+    current          = &main_thread;
 }
 
 // --- SCHEDULER: simple round-robin, skips non-ready threads ---
