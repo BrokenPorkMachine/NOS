@@ -1,5 +1,6 @@
 #include "io.h"
 #include "mouse.h"
+#include "pic.h"
 #include <stddef.h>
 
 #define MOUSEBUF_SIZE 8
@@ -28,6 +29,7 @@ void mouse_init(void) {
     outb(0x60, 0xF4);
     io_wait();
     inb(0x60); // Ack
+    pic_set_mask(12, 1); // enable IRQ12
 }
 
 int mouse_read_packet(struct mouse_packet *p) {

@@ -34,6 +34,7 @@ OBJS = \
     ../IPC/ipc.o \
     ../CPU/cpu.o \
     ../ACPI/acpi.o \
+    ../IO/video.o \
     ../libc.o
 
 all: kernel.bin

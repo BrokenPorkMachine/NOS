@@ -5,7 +5,9 @@
 #include "../IO/pic.h"
 #include "../IO/pit.h"
 #include "../IO/keyboard.h"
+#include "../IO/mouse.h"
 #include "../IO/serial.h"
+#include "../IO/video.h"
 #include "../Task/thread.h"
 #include "../VM/pmm.h"
 #include "../VM/paging.h"
@@ -168,6 +170,7 @@ static void print_bootinfo(const bootinfo_t *bi) {
 
 void kernel_main(bootinfo_t *bootinfo) {
     serial_init();
+    video_init(bootinfo ? bootinfo->framebuffer : NULL);
     vga_clear();
     log_good("Mach Microkernel: Boot OK");
     log_line("[Stage 1] Validate bootinfo");
@@ -202,6 +205,8 @@ void kernel_main(bootinfo_t *bootinfo) {
     pit_init(100);
     keyboard_init();
     log_good("[kbd] Keyboard initialized");
+    mouse_init();
+    log_good("[mou] Mouse initialized");
 
     log_line("[Stage 4] Launch servers");
     threads_init();
