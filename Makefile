@@ -27,10 +27,10 @@ clean:
 	rm -f kernel.bin libc.o disk.img
 	
 run: disk.img
-qemu-system-x86_64 \
--bios OVMF.fd \
--drive file=disk.img,format=raw \
--m 512M \
--serial stdio -display sdl
+	qemu-system-x86_64 \
+		-bios OVMF.fd \
+		-drive file=disk.img,format=raw \
+		-m 512M \
+		-serial stdio -display sdl
 
 .PHONY: all libc kernel bootloader clean run
