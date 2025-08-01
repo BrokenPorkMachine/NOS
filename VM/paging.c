@@ -3,31 +3,38 @@
 #include "../src/libc.h"
 #include <stdint.h>
 
-// Static page tables (identity map 0–2MB)
+// Static page tables (identity map first 4GB)
 static uint64_t __attribute__((aligned(PAGE_SIZE))) pml4[512];
 static uint64_t __attribute__((aligned(PAGE_SIZE))) pdpt[512];
-static uint64_t __attribute__((aligned(PAGE_SIZE))) pd[512];
+static uint64_t __attribute__((aligned(PAGE_SIZE))) pd[4][512];
 
 void paging_init(void) {
     // Zero out the tables for safety
     for (int i = 0; i < 512; ++i) {
-        pml4[i] = pdpt[i] = pd[i] = 0;
+        pml4[i] = pdpt[i] = 0;
+    }
+    for (int j = 0; j < 4; ++j)
+        for (int i = 0; i < 512; ++i)
+            pd[j][i] = 0;
+
+    // Identity map the first 4GB using 2MB pages
+    for (int j = 0; j < 4; ++j) {
+        for (int i = 0; i < 512; ++i) {
+            uint64_t addr = ((uint64_t)j << 30) + ((uint64_t)i << 21);
+            pd[j][i] = addr | PAGE_PRESENT | PAGE_WRITABLE | PAGE_SIZE_2MB;
+        }
+        pdpt[j] = ((uint64_t)pd[j]) | PAGE_PRESENT | PAGE_WRITABLE;
     }
 
-    // Map 2MB at virtual address 0 (identity map)
-    pd[0] = PAGE_PRESENT | PAGE_WRITABLE | PAGE_SIZE_2MB;           // 2MB page at 0x0
-    pdpt[0] = ((uint64_t)pd) | PAGE_PRESENT | PAGE_WRITABLE;  // PD pointer
-    pml4[0] = ((uint64_t)pdpt) | PAGE_PRESENT | PAGE_WRITABLE; // PDPT pointer
+    pml4[0] = ((uint64_t)pdpt) | PAGE_PRESENT | PAGE_WRITABLE;
 
     // Load page tables (CR3)
     asm volatile("mov %0, %%cr3" : : "r"(pml4));
 
-    // Enable PAE (Physical Address Extension), SMEP, SMAP in CR4
+    // Enable PAE (Physical Address Extension) in CR4
     uint64_t cr4;
     asm volatile("mov %%cr4, %0" : "=r"(cr4));
     cr4 |= (1ULL << 5);   // PAE
-    cr4 |= (1ULL << 20);  // SMEP (optional, safe on modern CPUs)
-    cr4 |= (1ULL << 21);  // SMAP (optional, safe on modern CPUs)
     asm volatile("mov %0, %%cr4" : : "r"(cr4));
 
     // Enable Long Mode (LME) and NXE (No-Execute) in EFER MSR
