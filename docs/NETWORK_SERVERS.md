@@ -17,7 +17,7 @@ This document outlines the network services for NitrOS. A very small network sta
 ## FTP Server
 
 - **Purpose**: Provide file transfer capabilities for legacy clients.
-- **Status**: Replies to simple commands using the loopback stack. Real file transfer and TCP/IP remain TODO.
+- **Status**: Handles `LIST` over the loopback stack using NitrFS. Real file transfer and TCP/IP remain TODO.
 - **Future work**: Build on the NitrFS filesystem once a TCP/IP stack is available.
 
 Each of these services is started as a kernel thread during system initialization. They use the loopback network stack for testing but remain placeholders until true network drivers and protocols are added.

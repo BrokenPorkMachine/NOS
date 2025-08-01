@@ -34,7 +34,7 @@ static void thread_fs_func(void)   { nitrfs_server(&fs_queue, current->id); }
 static void thread_shell_func(void){ shell_main(&fs_queue, current->id); }
 static void thread_vnc_func(void)  { vnc_server(NULL, current->id); }
 static void thread_ssh_func(void)  { ssh_server(NULL, current->id); }
-static void thread_ftp_func(void)  { ftp_server(NULL, current->id); }
+static void thread_ftp_func(void)  { ftp_server(&fs_queue, current->id); }
 
 // --- THREAD CREATION ---
 
@@ -107,7 +107,7 @@ void thread_yield(void) {
 // --- THREAD SYSTEM INIT ---
 
 void threads_init(void) {
-    uint32_t mask = (1u << 1) | (1u << 2);
+    uint32_t mask = (1u << 1) | (1u << 2) | (1u << 5);
     ipc_init(&fs_queue, mask, mask);
     thread_create(thread_fs_func);
     thread_create(thread_shell_func);
