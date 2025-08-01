@@ -16,11 +16,15 @@ The simplest approach is to print serial output directly to your terminal:
 ```sh
 qemu-system-x86_64 -drive format=raw,file=disk.img \
   -bios /usr/share/OVMF/OVMF_CODE.fd \
-  -serial stdio -display none
+  -serial stdio -display sdl
 ```
 
 All boot messages will appear in the terminal window. You can also log to a
 file instead by using `-serial file:boot.log`.
+
+Note: Omitting the graphical window with `-display none` disables the VGA
+output and PS/2 keyboard. The system will appear to hang after "[Stage 5]
+Scheduler start" because the shell only prints to VGA.
 
 ## Real Hardware
 
