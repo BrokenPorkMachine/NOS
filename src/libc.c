@@ -74,6 +74,15 @@ int strncmp(const char *s1, const char *s2, size_t n) {
     return 0;
 }
 
+char *strchr(const char *s, int c) {
+    while (*s) {
+        if (*s == (char)c)
+            return (char *)s;
+        s++;
+    }
+    return NULL;
+}
+
 #define HEAP_SIZE (64 * 1024)
 #define HEAP_MAGIC 0xC0DECAFE
 
