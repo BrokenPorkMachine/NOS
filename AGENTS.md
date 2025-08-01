@@ -22,7 +22,7 @@ This file is intended as a high-level guide and technical reference for all cont
 | Window Server        | Ring 3    | User server | (Planned) Manages GUI, display, input      |
 | IPC Subsystem        | Kernel    | Logic/Abstr | Manages message passing, port rights       |
 | Network Server       | Ring 3    | User server | (Planned) TCP/IP stack, drivers, sockets   |
-| Login/Session Agent  | Ring 3    | User server | (Planned) User authentication, sessions    |
+| Login/Session Agent  | Ring 3    | User server | Handles login prompt and user authentication |
 | Supervisor/Update    | Ring 3    | User server | (Planned) System updates, integrity        |
 
 ---
@@ -103,7 +103,7 @@ This file is intended as a high-level guide and technical reference for all cont
 
 * **Network Stack/Server:** User-space TCP/IP, NIC drivers, socket/port IPC
 * **Window/Display Server:** Handles graphics output, user input, windowing
-* **Login/Session Agent:** Manages authentication and user sessions
+* **Login/Session Agent:** Provides login prompt and manages authentication
 * **Supervisor/Update Agent:** System update, patching, and recovery
 
 ---

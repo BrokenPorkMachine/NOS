@@ -2,8 +2,10 @@
 #include "../../src/libc.h"
 #include "../nitrfs/nitrfs.h"
 #include "../nitrfs/server.h"
+#include "../login/login.h"
 #include "../../IO/keyboard.h"
 #include "../../IO/serial.h"
+#include "../../Task/thread.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -309,6 +311,8 @@ static void cmd_help(void) {
 
 // --- Shell main loop ---
 void shell_main(ipc_queue_t *q, uint32_t self_id) {
+    while(!login_done)
+        thread_yield();
     vga_clear_screen();
     serial_puts("[shell] starting\n");
     puts_out("NOS shell ready\n");

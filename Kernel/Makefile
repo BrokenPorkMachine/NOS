@@ -37,6 +37,7 @@ OBJS = \
     ../servers/vnc/vnc.o \
     ../servers/ssh/ssh.o \
     ../servers/ftp/ftp.o \
+    ../servers/login/login.o \
     ../IPC/ipc.o \
     ../IPC/sharedmem.o \
     ../CPU/cpu.o \
