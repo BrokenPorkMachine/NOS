@@ -1,6 +1,6 @@
 # Planned Network Servers
 
-This document outlines proposed network services for NitrOS. The current code base does not include a full TCP/IP stack, so these services are provided as stub servers only.
+This document outlines the network services for NitrOS. A very small network stack is now present in `Net/` but only supports NIC detection and logging. The VNC, SSH, and FTP servers continue to act as stubs until higher level protocols are implemented.
 
 ## VNC Server
 

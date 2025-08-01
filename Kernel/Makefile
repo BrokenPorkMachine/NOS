@@ -19,6 +19,7 @@ OBJS = \
     ../IO/pci.o \
     ../IO/serial.o \
     ../Net/e1000.o \
+    ../Net/netstack.o \
     ../VM/paging.o \
     ../VM/pmm.o \
     ../Task/thread.o \

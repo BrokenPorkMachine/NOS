@@ -20,7 +20,8 @@
 * NitrFS secure in-memory filesystem server with optional block storage
 * Simple secure heap allocator for user-space memory
 * All device drivers, filesystems, and networking to run as user-mode agents
-* Stub VNC, SSH(SCP), and FTP servers (placeholders for future networking)
+* Minimal network stack with NIC detection
+* Stub VNC, SSH(SCP), and FTP servers (no real networking yet)
 
 ---
 
@@ -67,8 +68,8 @@
   `-display sdl`) otherwise no shell will appear and keyboard input will seem
   unresponsive. See
   [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details.
-  The planned network services are described in
-  [docs/NETWORK_SERVERS.md](docs/NETWORK_SERVERS.md).
+  Networking support is under active development. See
+  [docs/NETWORK_SERVERS.md](docs/NETWORK_SERVERS.md) for current status.
 
 ---
 
