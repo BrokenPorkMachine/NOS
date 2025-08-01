@@ -83,9 +83,9 @@
 /kernel        # Kernel sources (kernel.c, idt.c, gdt.c, ...)
 /servers/nitrfs # NitrFS filesystem server
 /servers/shell  # Simple demonstration shell
-/servers/vnc    # Placeholder VNC server
-/servers/ssh    # Placeholder SSH/SCP server
-/servers/ftp    # Placeholder FTP server
+/servers/vnc    # Simple VNC demo (port 1 on loopback)
+/servers/ssh    # Echo SSH/SCP demo (port 2 on loopback)
+/servers/ftp    # Minimal FTP demo (port 3 on loopback)
 /agents        # Reference docs and AGENTS.md
 /              # Root: Makefile, linker scripts, README.md
 ```
