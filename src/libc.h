@@ -10,6 +10,7 @@ char *strncpy(char *dest, const char *src, size_t n);
 size_t strlcpy(char *dst, const char *src, size_t size);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
+char *strchr(const char *s, int c);
 
 void *malloc(size_t size);
 void *calloc(size_t nmemb, size_t size);
