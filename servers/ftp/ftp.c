@@ -97,7 +97,7 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                     msg.data[len] = '\0';
                     msg.len = len;
                     ipc_send(q, self_id, &msg);
-                    if (ipc_receive(q, self_id, &reply) != 0 || reply.arg1 < 0) {
+                    if (ipc_receive(q, self_id, &reply) != 0 || (int32_t)reply.arg1 < 0) {
                         const char err[] = "550 STOR fail\r\n";
                         net_send(err, strlen(err));
                         continue;
