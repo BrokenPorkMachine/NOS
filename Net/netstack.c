@@ -25,10 +25,26 @@ static size_t netbuf_avail(unsigned p) {
 void net_init(void) {
     serial_puts("[net] initializing network stack\n");
     int nic = e1000_init();
-    if (nic < 0)
+    if (nic < 0) {
         serial_puts("[net] no supported NIC found\n");
-    else
-        serial_puts("[net] NIC ready (driver stub)\n");
+    } else {
+        serial_puts("[net] NIC ready\n");
+        uint8_t mac[6];
+        if (e1000_get_mac(mac) == 0) {
+            char buf[32];
+            const char *hex = "0123456789ABCDEF";
+            int p = 0;
+            for (int i = 0; i < 6; ++i) {
+                buf[p++] = hex[(mac[i] >> 4) & 0xF];
+                buf[p++] = hex[mac[i] & 0xF];
+                if (i < 5) buf[p++] = ':';
+            }
+            buf[p] = '\0';
+            serial_puts("[net] MAC ");
+            serial_puts(buf);
+            serial_puts("\n");
+        }
+    }
     for (unsigned i = 0; i < NET_PORTS; ++i)
         head[i] = tail[i] = 0;
 }

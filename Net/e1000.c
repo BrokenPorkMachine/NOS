@@ -15,6 +15,8 @@ static void puts_vga(const char *s) {
 #define E1000_CLASS     0x02  // Network controller
 #define E1000_SUBCLASS  0x00  // Ethernet controller
 
+static volatile uint32_t *regs = NULL;
+
 // Returns PCI bus/slot packed in int (bus<<8|slot), or -1 if not found
 int e1000_init(void) {
     for (uint8_t bus = 0; bus < 8; ++bus) {
@@ -32,17 +34,15 @@ int e1000_init(void) {
                 if (class == E1000_CLASS && subclass == E1000_SUBCLASS) {
                     puts_vga("[net] Intel e1000 NIC detected\n");
 
-                    // Optional: print PCI bus/slot
+                    uint32_t bar0 = pci_config_read(bus, slot, 0, 0x10);
+                    bar0 &= ~0xF; // mask flags
+                    regs = (volatile uint32_t *)(uintptr_t)bar0;
+
                     char buf[32];
-                    buf[0] = '[';
-                    buf[1] = 'b';
-                    buf[2] = 'u';
-                    buf[3] = 's';
-                    buf[4] = ':'; buf[5] = ' ';
-                    buf[6] = '0' + bus; buf[7] = ','; buf[8] = ' ';
+                    buf[0] = '['; buf[1] = 'b'; buf[2] = 'u'; buf[3] = 's';
+                    buf[4] = ':'; buf[5] = ' '; buf[6] = '0' + bus; buf[7] = ','; buf[8] = ' ';
                     buf[9] = 's'; buf[10] = 'l'; buf[11] = 'o'; buf[12] = 't';
-                    buf[13] = ':'; buf[14] = ' ';
-                    buf[15] = '0' + slot; buf[16] = ']'; buf[17] = '\0';
+                    buf[13] = ':'; buf[14] = ' '; buf[15] = '0' + slot; buf[16] = ']'; buf[17] = '\0';
                     puts_vga(buf);
 
                     return (bus << 8) | slot;
@@ -52,4 +52,18 @@ int e1000_init(void) {
     }
     puts_vga("[net] No Intel NIC found\n");
     return -1;
+}
+
+int e1000_get_mac(uint8_t mac[6]) {
+    if (!regs)
+        return -1;
+    uint32_t ral = regs[0x5400 / 4];
+    uint32_t rah = regs[0x5404 / 4];
+    mac[0] = ral & 0xFF;
+    mac[1] = (ral >> 8) & 0xFF;
+    mac[2] = (ral >> 16) & 0xFF;
+    mac[3] = (ral >> 24) & 0xFF;
+    mac[4] = rah & 0xFF;
+    mac[5] = (rah >> 8) & 0xFF;
+    return 0;
 }
