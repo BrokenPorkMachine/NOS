@@ -20,6 +20,7 @@
 * NitrFS secure in-memory filesystem server with optional block storage
 * Simple secure heap allocator for user-space memory
 * All device drivers, filesystems, and networking to run as user-mode agents
+* Stub VNC, SSH(SCP), and FTP servers (placeholders for future networking)
 
 ---
 
@@ -62,10 +63,12 @@
    The `-serial stdio` option attaches COM1 to your terminal so early boot
    logs appear even before the framebuffer is initialized.
    **Important:** the shell's VGA output and PS/2 keyboard require a graphical
-   window. Remove the `-display none` argument (or explicitly use
-   `-display sdl`) otherwise no shell will appear and keyboard input will seem
-   unresponsive. See
-   [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details.
+  window. Remove the `-display none` argument (or explicitly use
+  `-display sdl`) otherwise no shell will appear and keyboard input will seem
+  unresponsive. See
+  [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details.
+  The planned network services are described in
+  [docs/NETWORK_SERVERS.md](docs/NETWORK_SERVERS.md).
 
 ---
 
@@ -76,6 +79,9 @@
 /kernel        # Kernel sources (kernel.c, idt.c, gdt.c, ...)
 /servers/nitrfs # NitrFS filesystem server
 /servers/shell  # Simple demonstration shell
+/servers/vnc    # Placeholder VNC server
+/servers/ssh    # Placeholder SSH/SCP server
+/servers/ftp    # Placeholder FTP server
 /agents        # Reference docs and AGENTS.md
 /              # Root: Makefile, linker scripts, README.md
 ```
