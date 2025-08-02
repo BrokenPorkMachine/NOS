@@ -302,6 +302,18 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     status = Root->Open(Root, &KernelFile, KERNEL_PATH, EFI_FILE_MODE_READ, 0);
     if (status != EFI_SUCCESS) { ConOut->OutputString(ConOut, L"kernel.bin open failed.\r\n"); for(;;); }
 
+    UINT8 info_buf[sizeof(EFI_FILE_INFO) + 64];
+    UINTN info_sz = sizeof(info_buf);
+    EFI_STATUS info_st = KernelFile->GetInfo(KernelFile, (EFI_GUID*)&gEfiFileInfoGuid, &info_sz, info_buf);
+    if (info_st != EFI_SUCCESS || info_sz < sizeof(EFI_FILE_INFO)) {
+        ConOut->OutputString(ConOut, L"GetInfo failed.\r\n"); for(;;);
+    }
+    EFI_FILE_INFO *finfo = (EFI_FILE_INFO*)info_buf;
+    if (finfo->FileSize > KERNEL_MAX_SIZE) {
+        ConOut->OutputString(ConOut, L"Kernel too large.\r\n"); for(;;);
+    }
+    print_hex(ConOut, L"kernel size: ", finfo->FileSize);
+
     // --- 6. Load the ELF64 kernel ---
     void (*kernel_entry)(bootinfo_t*) = 0;
     int elf_status = load_elf64_kernel(KernelFile, ConOut, BS, &kernel_entry);

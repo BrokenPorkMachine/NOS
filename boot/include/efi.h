@@ -18,6 +18,7 @@ typedef UINT64              EFI_PHYSICAL_ADDRESS;
 typedef UINT16              CHAR16;
 typedef void                VOID;
 typedef VOID*               EFI_HANDLE;
+typedef signed short        INT16;
 
 // ====================
 // Status Codes (Common)
@@ -37,6 +38,31 @@ typedef struct {
     UINT16  Data3;
     UINT8   Data4[8];
 } EFI_GUID;
+
+typedef struct {
+    UINT16 Year;
+    UINT8  Month;
+    UINT8  Day;
+    UINT8  Hour;
+    UINT8  Minute;
+    UINT8  Second;
+    UINT8  Pad1;
+    UINT32 Nanosecond;
+    INT16  TimeZone;
+    UINT8  Daylight;
+    UINT8  Pad2;
+} EFI_TIME;
+
+typedef struct {
+    UINT64   Size;
+    UINT64   FileSize;
+    UINT64   PhysicalSize;
+    EFI_TIME CreateTime;
+    EFI_TIME LastAccessTime;
+    EFI_TIME ModificationTime;
+    UINT64   Attribute;
+    CHAR16   FileName[1];
+} EFI_FILE_INFO;
 // GOP structures
 typedef struct {
     UINT32                       Version;
@@ -347,6 +373,9 @@ static const EFI_GUID gEfiSimpleFileSystemProtocolGuid =
 
 static const EFI_GUID gEfiLoadedImageProtocolGuid =
     { 0x5b1b31a1, 0x9562, 0x11d2, { 0x8e, 0x3f, 0x0, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
+
+static const EFI_GUID gEfiFileInfoGuid =
+    { 0x09576e92, 0x6d3f, 0x11d2, { 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
 
 typedef struct EFI_LOADED_IMAGE_PROTOCOL {
     UINT32     Revision;

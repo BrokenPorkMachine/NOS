@@ -204,6 +204,10 @@ void kernel_main(bootinfo_t *bootinfo) {
     }
     if (bootinfo && bootinfo->mmap_entries >= BOOTINFO_MAX_MMAP)
         log_warn("Warning: suspiciously large mmap_entries");
+    if (bootinfo && bootinfo->cpu_count > BOOTINFO_MAX_CPUS) {
+        log_err("BUG: cpu_count too high, halting.");
+        for(;;) __asm__("hlt");
+    }
     acpi_init(bootinfo);
     if (bootinfo && bootinfo->cpu_count == 0) {
         bootinfo->cpu_count = cpu_detect_logical_count();
