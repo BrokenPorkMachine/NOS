@@ -36,7 +36,7 @@ typedef struct bootinfo {
     bootinfo_cpu_t cpus[BOOTINFO_MAX_CPUS];
     uint32_t cpu_count;
     void *mb2_tags;
-    uint64_t reserved[8];
+    uint64_t reserved[8]; // reserved[0] stores total mmap entries before clamping
     void *kernel_entry;
 } bootinfo_t;
 
