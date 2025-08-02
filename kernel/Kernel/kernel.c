@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "../../boot/include/bootinfo.h"
+#include "../../user/libc/libc.h"
 #include "../arch/GDT/gdt.h"
 #include "../arch/IDT/idt.h"
 #include "../drivers/IO/pic.h"
@@ -24,6 +25,9 @@
 #define COLOR(fg, bg) (((bg) << 4) | (fg))
 
 static int log_row = 1;
+
+enum { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
+static int current_log_level = LOG_INFO;
 
 // --- Improved VGA console with scrolling ---
 static void vga_clear(void) {
@@ -53,7 +57,9 @@ static void vga_puts(const char *s, int row, int color) {
     }
 }
 
-static void log_line_color(const char *s, int color) {
+static void log_line_color_level(const char *s, int color, int level) {
+    if (level < current_log_level)
+        return;
     if (log_row >= VGA_ROWS - 1) {
         vga_scroll();
         log_row = VGA_ROWS - 2;
@@ -64,11 +70,12 @@ static void log_line_color(const char *s, int color) {
     serial_puts("\n");
 }
 
-#define log_line(s)   log_line_color((s), COLOR(0xF, 0x0))
-#define log_warn(s)   log_line_color((s), COLOR(0xE, 0x0))
-#define log_info(s)   log_line_color((s), COLOR(0xB, 0x0))
-#define log_good(s)   log_line_color((s), COLOR(0xA, 0x0))
-#define log_err(s)    log_line_color((s), COLOR(0xC, 0x0))
+#define log_line(s)   log_line_color_level((s), COLOR(0xF, 0x0), LOG_INFO)
+#define log_warn(s)   log_line_color_level((s), COLOR(0xE, 0x0), LOG_WARN)
+#define log_info(s)   log_line_color_level((s), COLOR(0xB, 0x0), LOG_INFO)
+#define log_good(s)   log_line_color_level((s), COLOR(0xA, 0x0), LOG_INFO)
+#define log_err(s)    log_line_color_level((s), COLOR(0xC, 0x0), LOG_ERROR)
+#define log_debug(s)  log_line_color_level((s), COLOR(0x7, 0x0), LOG_DEBUG)
 
 static void utoa(uint64_t val, char *buf, int base) {
     static const char dig[] = "0123456789ABCDEF";
@@ -116,6 +123,27 @@ static uint64_t calc_total_ram(const bootinfo_t *bi) {
     return total;
 }
 
+static void parse_cmdline(const char *cmdline) {
+    if (!cmdline)
+        return;
+    const char *p = cmdline;
+    while (*p) {
+        while (*p == ' ')
+            p++;
+        if (!*p)
+            break;
+        if (!strncmp(p, "loglevel=", 9)) {
+            int lvl = p[9] - '0';
+            if (lvl >= LOG_DEBUG && lvl <= LOG_ERROR)
+                current_log_level = lvl;
+        } else if (!strncmp(p, "quiet", 5)) {
+            current_log_level = LOG_WARN;
+        }
+        while (*p && *p != ' ')
+            p++;
+    }
+}
+
 // --- Print framebuffer pixels (demo text, color bar) ---
 static void fb_print_text(const bootinfo_framebuffer_t *fb, const char *s) {
     if (!fb || !fb->address || !s) return;
@@ -153,31 +181,33 @@ static void print_bootinfo(const bootinfo_t *bi) {
 
     uint32_t count = bi->mmap_entries;
     log_info("[boot] RAM regions:");
-    for (uint32_t i = 0; i < count && i < 2; ++i) {
-        const bootinfo_memory_t *m = &bi->mmap[i];
-        log_line("-------------------------------");
-        utoa(i, buf, 10); log_line_color(buf, COLOR(0xC, 0x0));
-        ptoa((uint64_t)m->addr, buf); log_line_color(buf, COLOR(0x7, 0x0));
-        ptoa((uint64_t)m->len, buf);  log_line_color(buf, COLOR(0x7, 0x0));
-        log_line_color(efi_memtype(m->type), COLOR(0xB, 0x0));
-    }
-    if (count > 4) {
-        for (uint32_t i = count - 2; i < count; ++i) {
+    if (current_log_level <= LOG_DEBUG) {
+        for (uint32_t i = 0; i < count && i < 2; ++i) {
             const bootinfo_memory_t *m = &bi->mmap[i];
-            log_line("-------------------------------");
-            utoa(i, buf, 10); log_line_color(buf, COLOR(0xC, 0x0));
-            ptoa((uint64_t)m->addr, buf); log_line_color(buf, COLOR(0x7, 0x0));
-            ptoa((uint64_t)m->len, buf);  log_line_color(buf, COLOR(0x7, 0x0));
-            log_line_color(efi_memtype(m->type), COLOR(0xB, 0x0));
+            log_line_color_level("-------------------------------", COLOR(0xF,0x0), LOG_DEBUG);
+            utoa(i, buf, 10); log_line_color_level(buf, COLOR(0xC, 0x0), LOG_DEBUG);
+            ptoa((uint64_t)m->addr, buf); log_line_color_level(buf, COLOR(0x7, 0x0), LOG_DEBUG);
+            ptoa((uint64_t)m->len, buf);  log_line_color_level(buf, COLOR(0x7, 0x0), LOG_DEBUG);
+            log_line_color_level(efi_memtype(m->type), COLOR(0xB, 0x0), LOG_DEBUG);
         }
-    } else {
-        for (uint32_t i = 2; i < count; ++i) {
-            const bootinfo_memory_t *m = &bi->mmap[i];
-            log_line("-------------------------------");
-            utoa(i, buf, 10); log_line_color(buf, COLOR(0xC, 0x0));
-            ptoa((uint64_t)m->addr, buf); log_line_color(buf, COLOR(0x7, 0x0));
-            ptoa((uint64_t)m->len, buf);  log_line_color(buf, COLOR(0x7, 0x0));
-            log_line_color(efi_memtype(m->type), COLOR(0xB, 0x0));
+        if (count > 4) {
+            for (uint32_t i = count - 2; i < count; ++i) {
+                const bootinfo_memory_t *m = &bi->mmap[i];
+                log_line_color_level("-------------------------------", COLOR(0xF,0x0), LOG_DEBUG);
+                utoa(i, buf, 10); log_line_color_level(buf, COLOR(0xC, 0x0), LOG_DEBUG);
+                ptoa((uint64_t)m->addr, buf); log_line_color_level(buf, COLOR(0x7, 0x0), LOG_DEBUG);
+                ptoa((uint64_t)m->len, buf);  log_line_color_level(buf, COLOR(0x7, 0x0), LOG_DEBUG);
+                log_line_color_level(efi_memtype(m->type), COLOR(0xB, 0x0), LOG_DEBUG);
+            }
+        } else {
+            for (uint32_t i = 2; i < count; ++i) {
+                const bootinfo_memory_t *m = &bi->mmap[i];
+                log_line_color_level("-------------------------------", COLOR(0xF,0x0), LOG_DEBUG);
+                utoa(i, buf, 10); log_line_color_level(buf, COLOR(0xC, 0x0), LOG_DEBUG);
+                ptoa((uint64_t)m->addr, buf); log_line_color_level(buf, COLOR(0x7, 0x0), LOG_DEBUG);
+                ptoa((uint64_t)m->len, buf);  log_line_color_level(buf, COLOR(0x7, 0x0), LOG_DEBUG);
+                log_line_color_level(efi_memtype(m->type), COLOR(0xB, 0x0), LOG_DEBUG);
+            }
         }
     }
 
@@ -191,17 +221,19 @@ static void print_bootinfo(const bootinfo_t *bi) {
     // CPUs
     utoa(bi->cpu_count, buf, 10); log_line("[boot] CPUs detected:"); log_line(buf);
     log_info("[boot] CPU table:");
-    for (uint32_t i = 0; i < bi->cpu_count && i < BOOTINFO_MAX_CPUS; ++i) {
-        const bootinfo_cpu_t *c = &bi->cpus[i];
-        log_line("-------------------------------");
-        log_line("index:");
-        utoa(i, buf, 10);              log_line_color(buf, COLOR(0xC, 0x0));
-        log_line("processor id:");
-        utoa(c->processor_id, buf, 10); log_line_color(buf, COLOR(0x7, 0x0));
-        log_line("apic id:");
-        utoa(c->apic_id, buf, 10);      log_line_color(buf, COLOR(0x7, 0x0));
-        log_line("flags:");
-        utoa(c->flags, buf, 16);        log_line_color(buf, COLOR(0xB, 0x0));
+    if (current_log_level <= LOG_DEBUG) {
+        for (uint32_t i = 0; i < bi->cpu_count && i < BOOTINFO_MAX_CPUS; ++i) {
+            const bootinfo_cpu_t *c = &bi->cpus[i];
+            log_line_color_level("-------------------------------", COLOR(0xF,0x0), LOG_DEBUG);
+            log_line_color_level("index:", COLOR(0xF,0x0), LOG_DEBUG);
+            utoa(i, buf, 10);              log_line_color_level(buf, COLOR(0xC, 0x0), LOG_DEBUG);
+            log_line_color_level("processor id:", COLOR(0xF,0x0), LOG_DEBUG);
+            utoa(c->processor_id, buf, 10); log_line_color_level(buf, COLOR(0x7, 0x0), LOG_DEBUG);
+            log_line_color_level("apic id:", COLOR(0xF,0x0), LOG_DEBUG);
+            utoa(c->apic_id, buf, 10);      log_line_color_level(buf, COLOR(0x7, 0x0), LOG_DEBUG);
+            log_line_color_level("flags:", COLOR(0xF,0x0), LOG_DEBUG);
+            utoa(c->flags, buf, 16);        log_line_color_level(buf, COLOR(0xB, 0x0), LOG_DEBUG);
+        }
     }
     // ACPI RSDP
     ptoa(bi->acpi_rsdp, buf); log_line("[boot] ACPI RSDP:"); log_line(buf);
@@ -234,6 +266,8 @@ void kernel_main(bootinfo_t *bootinfo) {
         log_err("BUG: cpu_count too high, halting.");
         for(;;) __asm__("hlt");
     }
+    if (bootinfo && bootinfo->cmdline)
+        parse_cmdline(bootinfo->cmdline);
     acpi_init(bootinfo);
     if (bootinfo && bootinfo->cpu_count == 0) {
         bootinfo->cpu_count = cpu_detect_logical_count();
