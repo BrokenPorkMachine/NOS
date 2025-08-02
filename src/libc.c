@@ -93,7 +93,7 @@ typedef struct block_header {
     uint32_t magic;
 } block_header_t;
 
-static uint8_t heap[HEAP_SIZE];
+static uint8_t __attribute__((aligned(16))) heap[HEAP_SIZE];
 static block_header_t *free_list = NULL;
 
 static void heap_init(void) {

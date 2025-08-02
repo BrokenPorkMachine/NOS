@@ -3,6 +3,14 @@
 #include "../src/libc.h"
 #include <stdint.h>
 
+static inline void cpuid(uint32_t eax_in, uint32_t ecx_in,
+                         uint32_t *eax, uint32_t *ebx,
+                         uint32_t *ecx_out, uint32_t *edx) {
+    __asm__ volatile("cpuid"
+                     : "=a"(*eax), "=b"(*ebx), "=c"(*ecx_out), "=d"(*edx)
+                     : "a"(eax_in), "c"(ecx_in));
+}
+
 // Static page tables (identity map first 4GB)
 static uint64_t __attribute__((aligned(PAGE_SIZE))) pml4[512];
 static uint64_t __attribute__((aligned(PAGE_SIZE))) pdpt[512];
@@ -31,15 +39,23 @@ void paging_init(void) {
     // Load page tables (CR3)
     asm volatile("mov %0, %%cr3" : : "r"(pml4));
 
-    // Enable PAE (Physical Address Extension) in CR4
+    // Enable PAE and optional protection features in CR4
     uint64_t cr4;
     asm volatile("mov %%cr4, %0" : "=r"(cr4));
     cr4 |= (1ULL << 5);   // PAE
+
+    uint32_t eax, ebx, ecx, edx;
+    cpuid(7, 0, &eax, &ebx, &ecx, &edx);
+    if (ebx & (1u << 7))  // SMEP supported
+        cr4 |= (1ULL << 20);
+    if (ebx & (1u << 20)) // SMAP supported
+        cr4 |= (1ULL << 21);
+
     asm volatile("mov %0, %%cr4" : : "r"(cr4));
 
     // Enable Long Mode (LME) and NXE (No-Execute) in EFER MSR
     uint64_t efer;
-    uint32_t edx = 0;
+    edx = 0;
     asm volatile(
         "mov $0xC0000080, %%ecx; rdmsr"
         : "=a"(efer), "=d"(edx) :: "ecx"
