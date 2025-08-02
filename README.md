@@ -25,6 +25,7 @@
 * Experimental copy-on-write paging and basic demand paging
 * Early NUMA node enumeration from bootloader memory map
 * IPC shared memory channels with rights masks
+* Adjustable kernel log verbosity via `loglevel=` and `quiet` boot options
 
 ---
 
