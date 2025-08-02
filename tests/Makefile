@@ -14,7 +14,7 @@ test_ipc: unit/test_ipc.c ../kernel/IPC/ipc.c ../user/libc/libc.c
 test_pmm: unit/test_pmm.c ../kernel/VM/pmm.c ../user/libc/libc.c
 	$(CC) $(CFLAGS) $^ -o $@
 
-test_syscall: unit/test_syscall.c ../kernel/Kernel/syscall.c ../user/libc/libc.c
+test_syscall: unit/test_syscall.c ../kernel/Kernel/syscall.c ../kernel/Kernel/elf.c ../user/libc/libc.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_nitrfs: unit/test_nitrfs.c ../user/servers/nitrfs/nitrfs.c ../user/libc/libc.c ../kernel/drivers/IO/block.c

@@ -31,9 +31,11 @@ OBJS = \
     ../arch/GDT/gdt.o \
     ../arch/GDT/gdt_flush.o \
     ../arch/GDT/user.o \
+    elf.o \
     syscall.o \
     ../../user/servers/nitrfs/nitrfs.o \
     ../../user/servers/nitrfs/server.o \
+    ../../user/servers/init/init.o \
     ../../user/servers/shell/shell.o \
     ../../user/servers/vnc/vnc.o \
     ../../user/servers/ssh/ssh.o \

@@ -1,6 +1,8 @@
 // syscall.c
 #include "syscall.h"
 #include "../Task/thread.h"
+#include "elf.h"
+#include "../arch/CPU/smp.h"
 #include <stdint.h>
 
 // Allow C linkage if included in a C++ build (for linker sanity)
@@ -34,6 +36,22 @@ uint64_t syscall_handle(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg
         return 0;
     case SYS_WRITE_VGA:
         return sys_write_vga((const char *)arg1);
+    case SYS_FORK: {
+        thread_t *cur = current_cpu[smp_cpu_index()];
+        thread_t *child = thread_create(cur->func);
+        return child ? (uint64_t)child->id : (uint64_t)-1;
+    }
+    case SYS_EXEC: {
+        void *entry = elf_load((const void *)arg1);
+        return entry ? (uint64_t)entry : (uint64_t)-1;
+    }
+    case SYS_SBRK: {
+        extern uint8_t _end;
+        static uint8_t *brk = &_end;
+        uint8_t *old = brk;
+        brk += arg1;
+        return (uint64_t)old;
+    }
     default:
         return (uint64_t)-1;
     }
