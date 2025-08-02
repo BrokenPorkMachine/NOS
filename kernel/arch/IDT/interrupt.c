@@ -19,8 +19,8 @@ void isr_timer_handler(void) {
     // Write a clock value to VGA
     volatile char* vga = (char*)0xB8000 + 160;
     vga[0] = '0' + (ticks % 10);
-    // Preempt current thread on each timer tick
-    thread_yield();
+    // actual scheduling occurs in the assembly stub after acknowledging
+    // the interrupt. This handler simply updates the timer tick display.
 }
 
 void isr_page_fault_handler(uint64_t error_code, uint64_t addr) {

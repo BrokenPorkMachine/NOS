@@ -2,12 +2,16 @@ global isr_timer_stub
 isr_timer_stub:
     push rbp
     mov rbp, rsp
-    cli
     extern isr_timer_handler
     call isr_timer_handler
-    ; Send EOI to PIC
+    ; Acknowledge the PIC before switching threads
     mov al, 0x20
     out 0x20, al
+    ; Re-enable interrupts for the next thread
+    sti
+    extern thread_yield
+    call thread_yield
+    ; Execution resumes here when the preempted thread runs again
     leave
     iretq
 
