@@ -39,8 +39,8 @@ void thread_yield(void);
 // Run the scheduler (internal, also used by yield/block/unblock)
 void schedule(void);
 
-// Switch stack (old_rsp, new_rsp): implemented in asm, never returns here
-void context_switch(uint64_t *old_rsp, uint64_t new_rsp) __attribute__((noreturn));
+// Switch stack (old_rsp, new_rsp): implemented in asm and returns to caller
+void context_switch(uint64_t *old_rsp, uint64_t new_rsp);
 
 // Enter user mode at given entry/stack: implemented in asm
 void enter_user_mode(uint64_t entry, uint64_t user_stack) __attribute__((noreturn));
