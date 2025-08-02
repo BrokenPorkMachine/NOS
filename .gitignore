@@ -11,3 +11,4 @@ qemu.log
 qemu_output.txt
 *.img
 
+tests/test_*
