@@ -1,6 +1,8 @@
 #include "ipc.h"
 #include "../../user/libc/libc.h"
 
+__attribute__((weak)) void thread_yield(void) {}
+
 /**
  * Initialize an IPC queue for message passing.
  */
@@ -59,8 +61,10 @@ int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
     if (!q || !msg) return -4;
     if (receiver_id >= IPC_MAX_TASKS || !(q->caps[receiver_id] & IPC_CAP_RECV))
         return -2; // unauthorized receiver
-    if (q->tail == q->head)
+    if (q->tail == q->head) {
+        thread_yield();
         return -1; // queue empty
+    }
     *msg = q->msgs[q->tail];
     q->tail = (q->tail + 1) % IPC_QUEUE_SIZE;
     return 0;
