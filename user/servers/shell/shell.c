@@ -58,7 +58,6 @@ static void putc_vga(char c) {
     }
 }
 
-static void puts_vga(const char *s) { while (*s) putc_vga(*s++); }
 
 // Write to both serial and VGA
 static void putc_out(char c) { serial_write(c); putc_vga(c); }
