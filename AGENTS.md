@@ -19,6 +19,7 @@ This file is intended as a high-level guide and technical reference for all cont
 | User Task/Thread     | Ring 3    | User proc   | Runs app/server code, uses syscalls, IPC   |
 | NitrFS Server       | Ring 3    | User server | Secure in-memory filesystem              |
 | Device Driver Server | Ring 3    | User server | Handles hardware via IPC (keyboard, disk)  |
+| Audio Server        | Ring 3    | User server | Provides PCM playback via kernel audio driver |
 | Window Server        | Ring 3    | User server | (Planned) Manages GUI, display, input      |
 | IPC Subsystem        | Kernel    | Logic/Abstr | Manages message passing, port rights       |
 | Network Server       | Ring 3    | User server | (Planned) TCP/IP stack, drivers, sockets   |
@@ -135,6 +136,7 @@ This file is intended as a high-level guide and technical reference for all cont
 | Bootloader | Kernel          | Direct jump   | Boot handoff                   |
 | User task  | Kernel          | Syscall/trap  | System calls, IPC, mapping     |
 | User task  | FS/Dev server   | Mach IPC      | File/dev/network requests      |
+| User task  | Audio server    | Mach IPC      | PCM playback requests          |
 | Kernel     | User task       | Scheduler/IRQ | Preemption, async notification |
 | Kernel     | All user agents | Mach IPC/IRQ  | Message delivery, interrupt    |
 | Any agent  | Any agent       | Mach IPC      | Message, service, async        |
@@ -147,7 +149,7 @@ This file is intended as a high-level guide and technical reference for all cont
 * **Kernel:** Scheduler, MMU, IPC, security, system calls, device IRQs
 * **User Tasks:** All application logic, servers, drivers, networking, GUI
 * **IPC Subsystem:** Messaging/port framework binding the whole OS
-* **Servers:** (FS, device, network, display, etc) implemented as user agents
+* **Servers:** (FS, device, network, display, audio, etc) implemented as user agents
 * **NitrFS:** Initial secure in-memory filesystem server
 
 ---

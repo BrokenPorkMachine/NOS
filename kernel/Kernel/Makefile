@@ -17,6 +17,7 @@ OBJS = \
     ../drivers/IO/keyboard.o \
     ../drivers/IO/mouse.o \
     ../drivers/IO/pci.o \
+    ../drivers/IO/usb.o \
     ../drivers/IO/serial.o \
     ../drivers/IO/block.o \
     ../drivers/Net/e1000.o \
@@ -41,6 +42,8 @@ OBJS = \
     ../../user/servers/ssh/ssh.o \
     ../../user/servers/ftp/ftp.o \
     ../../user/servers/login/login.o \
+    ../../user/servers/audio/audio.o \
+    ../../user/servers/audio/server.o \
     ../IPC/ipc.o \
     ../IPC/sharedmem.o \
     ../arch/CPU/cpu.o \
@@ -48,6 +51,7 @@ OBJS = \
     ../arch/CPU/smp.o \
     ../arch/ACPI/acpi.o \
     ../drivers/IO/video.o \
+    ../drivers/Audio/audio.o \
     ../../libc.o
 
 all: kernel.bin
