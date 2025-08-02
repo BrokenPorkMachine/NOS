@@ -127,7 +127,7 @@ char *strstr(const char *haystack, const char *needle) {
     return NULL;
 }
 
-#define HEAP_SIZE (64 * 1024)
+#define HEAP_SIZE (1024 * 1024)  // 1 MiB bootstrap heap for early allocations
 #define HEAP_MAGIC 0xC0DECAFE
 
 typedef struct block_header {

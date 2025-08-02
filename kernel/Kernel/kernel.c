@@ -282,21 +282,40 @@ void kernel_main(bootinfo_t *bootinfo) {
     }
     print_bootinfo(bootinfo);
     log_line("[Stage 2] Init memory management");
+    log_line("  pmm_init start");
     pmm_init(bootinfo);
+    log_line("  pmm_init done");
+    log_line("  cow_init start");
     cow_init(pmm_total_frames());
+    log_line("  cow_init done");
+    log_line("  numa_init start");
     numa_init(bootinfo);
+    log_line("  numa_init done");
+    log_line("  paging_init start");
     paging_init();
+    log_line("  paging_init done");
 
     log_line("[Stage 3] Set up interrupts");
+    log_line("  gdt_install start");
     gdt_install();
+    log_line("  gdt_install done");
+    log_line("  idt_install start");
     idt_install();
+    log_line("  idt_install done");
+    log_line("  pic_remap start");
     pic_remap();
+    log_line("  pic_remap done");
+    log_line("  pit_init start");
     pit_init(100);
+    log_line("  pit_init done");
+    log_line("  keyboard_init start");
     keyboard_init();
     log_good("[kbd] Keyboard initialized");
+    log_line("  mouse_init start");
     mouse_init();
     log_good("[mou] Mouse initialized");
 
+    log_line("  net_init start");
     net_init();
     log_good("[net] Network stack ready");
 
