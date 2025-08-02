@@ -1,5 +1,6 @@
 #include "libc.h"
 #include <stdint.h>
+#include "../../kernel/Kernel/syscall.h"
 
 void *memset(void *s, int c, size_t n) {
     unsigned char *p = (unsigned char *)s;
@@ -187,4 +188,26 @@ char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
     strncpy(dest, src, n);
     dest[n] = '\0';
     return dest;
+}
+
+// --- System call wrappers ---
+static inline long syscall3(long n, long a1, long a2, long a3) {
+    long ret;
+    asm volatile("mov %1, %%rax; mov %2, %%rdi; mov %3, %%rsi; mov %4, %%rdx; int $0x80; mov %%rax, %0"
+                 : "=r"(ret)
+                 : "r"(n), "r"(a1), "r"(a2), "r"(a3)
+                 : "rax", "rdi", "rsi", "rdx");
+    return ret;
+}
+
+int fork(void) {
+    return (int)syscall3(SYS_FORK, 0, 0, 0);
+}
+
+int exec(const char *path) {
+    return (int)syscall3(SYS_EXEC, (long)path, 0, 0);
+}
+
+void *sbrk(long inc) {
+    return (void *)syscall3(SYS_SBRK, inc, 0, 0);
 }

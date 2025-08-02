@@ -6,6 +6,7 @@
 #include "../../user/servers/ssh/ssh.h"
 #include "../../user/servers/ftp/ftp.h"
 #include "../../user/servers/login/login.h"
+#include "../../user/servers/init/init.h"
 #include "../../user/libc/libc.h"
 #include "../drivers/IO/serial.h"
 #include <stdint.h>
@@ -33,6 +34,7 @@ static void thread_entry(void (*f)(void)) {
 // --- THREAD FUNCTIONS ---
 
 static void thread_fs_func(void)   { thread_t *c = current_cpu[smp_cpu_index()]; nitrfs_server(&fs_queue, c->id); }
+static void thread_init_func(void) { thread_t *c = current_cpu[smp_cpu_index()]; init_main(&fs_queue, c->id); }
 static void thread_shell_func(void){ thread_t *c = current_cpu[smp_cpu_index()]; shell_main(&fs_queue, c->id); }
 static void thread_vnc_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; vnc_server(NULL, c->id); }
 static void thread_ssh_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; ssh_server(NULL, c->id); }
@@ -113,6 +115,7 @@ void threads_init(void) {
     uint32_t mask = (1u << 1) | (1u << 2) | (1u << 5);
     ipc_init(&fs_queue, mask, mask);
     thread_create(thread_fs_func);
+    thread_create(thread_init_func);
     thread_create(thread_login_func);
     thread_create(thread_shell_func);
     thread_create(thread_vnc_func);

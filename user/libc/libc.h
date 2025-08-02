@@ -18,3 +18,7 @@ void free(void *ptr);
 void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen);
 char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen);
 
+int fork(void);
+int exec(const char *path);
+void *sbrk(long inc);
+
