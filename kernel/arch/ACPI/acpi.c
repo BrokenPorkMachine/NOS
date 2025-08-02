@@ -73,17 +73,29 @@ void acpi_init(bootinfo_t *bootinfo) {
         return;
     }
     serial_puts("[acpi] RSDP ok\n");
-    struct sdt_header *rsdt = (struct sdt_header*)(uintptr_t)rsdp->rsdt_addr;
-    if (!rsdt) { serial_puts("[acpi] no RSDT\n"); return; }
-    if (sum((const uint8_t*)rsdt, rsdt->length)) {
-        serial_puts("[acpi] RSDT checksum fail\n");
+    struct sdt_header *sdt;
+    int entry_size;
+    if (rsdp->revision >= 2 && rsdp->xsdt_addr) {
+        sdt = (struct sdt_header*)(uintptr_t)rsdp->xsdt_addr;
+        entry_size = 8;
+    } else {
+        sdt = (struct sdt_header*)(uintptr_t)rsdp->rsdt_addr;
+        entry_size = 4;
+    }
+    if (!sdt) { serial_puts("[acpi] no RSDT/XSDT\n"); return; }
+    if (sum((const uint8_t*)sdt, sdt->length)) {
+        serial_puts("[acpi] RSDT/XSDT checksum fail\n");
         return;
     }
-    int entries = (rsdt->length - sizeof(*rsdt)) / 4;
-    uint32_t *ptrs = (uint32_t*)((uintptr_t)rsdt + sizeof(*rsdt));
+    int entries = (sdt->length - sizeof(*sdt)) / entry_size;
     g_dsdt = NULL;
     for (int i = 0; i < entries && i < 16; ++i) {
-        struct sdt_header *hdr = (struct sdt_header*)(uintptr_t)ptrs[i];
+        uint64_t addr;
+        if (entry_size == 8)
+            addr = ((uint64_t*)((uintptr_t)sdt + sizeof(*sdt)))[i];
+        else
+            addr = ((uint32_t*)((uintptr_t)sdt + sizeof(*sdt)))[i];
+        struct sdt_header *hdr = (struct sdt_header*)(uintptr_t)addr;
         serial_puts("[acpi] table ");
         print_sig(hdr->signature);
         serial_puts("\n");

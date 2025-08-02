@@ -168,11 +168,21 @@ static void print_bootinfo(const bootinfo_t *bi) {
     }
     // CPUs
     utoa(bi->cpu_count, buf, 10); log_line("[boot] CPUs detected:"); log_line(buf);
+    log_info("[boot] CPU table:");
+    for (uint32_t i = 0; i < bi->cpu_count && i < BOOTINFO_MAX_CPUS; ++i) {
+        const bootinfo_cpu_t *c = &bi->cpus[i];
+        log_line("-------------------------------");
+        log_line("index:");
+        utoa(i, buf, 10);              log_line_color(buf, COLOR(0xC, 0x0));
+        log_line("processor id:");
+        utoa(c->processor_id, buf, 10); log_line_color(buf, COLOR(0x7, 0x0));
+        log_line("apic id:");
+        utoa(c->apic_id, buf, 10);      log_line_color(buf, COLOR(0x7, 0x0));
+        log_line("flags:");
+        utoa(c->flags, buf, 16);        log_line_color(buf, COLOR(0xB, 0x0));
+    }
     // ACPI RSDP
     ptoa(bi->acpi_rsdp, buf); log_line("[boot] ACPI RSDP:"); log_line(buf);
-
-    // --- ACPI/MADT parsing, SMP enumeration can be inserted here. ---
-    // e.g., parse MADT from ACPI, enumerate CPUs, print APIC IDs, etc.
 }
 
 void kernel_main(bootinfo_t *bootinfo) {
