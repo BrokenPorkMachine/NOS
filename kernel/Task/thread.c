@@ -27,7 +27,15 @@ ipc_queue_t upd_queue;
 
 // --- THREAD START HELPERS ---
 
-static void thread_entry(void (*f)(void)) {
+// Entry trampoline for newly created threads. The scheduler initially
+// switches to a stack prepared by thread_create(). At that point the
+// return address is thread_entry and the next value on the stack is the
+// function pointer the thread should run. We pop that function pointer and
+// invoke it. When the function returns the thread marks itself as exited
+// and yields back to the scheduler.
+static void thread_entry(void) {
+    void (*f)(void);
+    __asm__ volatile("pop %0" : "=r"(f));
     f();
     thread_t *cur = current_cpu[smp_cpu_index()];
     cur->state = THREAD_EXITED;
@@ -55,17 +63,17 @@ thread_t *thread_create(void (*func)(void)) {
     t->stack = malloc(STACK_SIZE);
     if (!t->stack) { free(t); return NULL; }
 
-    // Setup stack for context_switch: rbp/rbx/r12-r15/ret
+    // Setup stack for context_switch: r15..rbp, return, argument
     uint64_t *sp = (uint64_t *)(t->stack + STACK_SIZE);
 
+    *--sp = (uint64_t)func;         // function argument for thread_entry
+    *--sp = (uint64_t)thread_entry; // initial return address
     *--sp = 0; // rbp
     *--sp = 0; // rbx
     *--sp = 0; // r12
     *--sp = 0; // r13
     *--sp = 0; // r14
     *--sp = 0; // r15
-    *--sp = (uint64_t)thread_entry; // return address
-    *--sp = (uint64_t)func;         // argument for thread_entry
 
     t->rsp = (uint64_t)sp;
     t->func = func;
