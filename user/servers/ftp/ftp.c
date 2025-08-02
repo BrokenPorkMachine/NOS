@@ -25,16 +25,17 @@ static int find_handle(ipc_queue_t *q, uint32_t id, const char *name) {
 
 void ftp_server(ipc_queue_t *q, uint32_t self_id) {
     serial_puts("[ftp] FTP server starting\n");
+    int sock = net_socket_open(FTP_PORT, NET_SOCK_STREAM);
     const char hello[] = "220 NOS FTP\r\n";
-    net_send(FTP_PORT, hello, strlen(hello));
+    net_socket_send(sock, hello, strlen(hello));
     char buf[128];
     for (;;) {
-        int n = net_receive(FTP_PORT, buf, sizeof(buf) - 1);
+        int n = net_socket_recv(sock, buf, sizeof(buf) - 1);
         if (n > 0) {
             buf[n] = '\0';
             if (!strncmp(buf, "QUIT", 4)) {
                 const char bye[] = "221 Bye\r\n";
-                net_send(FTP_PORT, bye, strlen(bye));
+                net_socket_send(sock, bye, strlen(bye));
                 break;
             }
             if (q && !strncmp(buf, "LIST", 4)) {
@@ -45,12 +46,12 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                 if (ipc_receive(q, self_id, &reply) == 0) {
                     for (int i = 0; i < (int)reply.arg1; i++) {
                         char *name = (char *)reply.data + i * NITRFS_NAME_LEN;
-                        net_send(FTP_PORT, name, strlen(name));
-                        net_send(FTP_PORT, "\r\n", 2);
+                        net_socket_send(sock, name, strlen(name));
+                        net_socket_send(sock, "\r\n", 2);
                     }
                 } else {
                     const char err[] = "550 LIST failed\r\n";
-                    net_send(FTP_PORT, err, strlen(err));
+                    net_socket_send(sock, err, strlen(err));
                 }
                 continue;
             }
@@ -59,7 +60,7 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                 int h = find_handle(q, self_id, name);
                 if (h < 0) {
                     const char err[] = "550 Not found\r\n";
-                    net_send(FTP_PORT, err, strlen(err));
+                    net_socket_send(sock, err, strlen(err));
                     continue;
                 }
                 ipc_message_t msg = {0}, reply = {0};
@@ -69,11 +70,11 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                 msg.len = 0;
                 ipc_send(q, self_id, &msg);
                 if (ipc_receive(q, self_id, &reply) == 0 && reply.arg1 == 0) {
-                    net_send(FTP_PORT, reply.data, reply.len);
-                    net_send(FTP_PORT, "\r\n", 2);
+                    net_socket_send(sock, reply.data, reply.len);
+                    net_socket_send(sock, "\r\n", 2);
                 } else {
                     const char err[] = "550 Read error\r\n";
-                    net_send(FTP_PORT, err, strlen(err));
+                    net_socket_send(sock, err, strlen(err));
                 }
                 continue;
             }
@@ -85,7 +86,7 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                 }
                 if (!data) {
                     const char err[] = "501 Syntax\r\n";
-                    net_send(FTP_PORT, err, strlen(err));
+                    net_socket_send(sock, err, strlen(err));
                     continue;
                 }
                 int h = find_handle(q, self_id, name);
@@ -102,7 +103,7 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                     ipc_send(q, self_id, &msg);
                     if (ipc_receive(q, self_id, &reply) != 0 || (int32_t)reply.arg1 < 0) {
                         const char err[] = "550 STOR fail\r\n";
-                        net_send(FTP_PORT, err, strlen(err));
+                        net_socket_send(sock, err, strlen(err));
                         continue;
                     }
                     h = reply.arg1;
@@ -117,15 +118,15 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                 ipc_send(q, self_id, &msg);
                 if (ipc_receive(q, self_id, &reply) == 0 && reply.arg1 == 0) {
                     const char ok[] = "200 STOR OK\r\n";
-                    net_send(FTP_PORT, ok, strlen(ok));
+                    net_socket_send(sock, ok, strlen(ok));
                 } else {
                     const char err[] = "550 STOR fail\r\n";
-                    net_send(FTP_PORT, err, strlen(err));
+                    net_socket_send(sock, err, strlen(err));
                 }
                 continue;
             }
             const char ok[] = "200 OK\r\n";
-            net_send(FTP_PORT, ok, strlen(ok));
+            net_socket_send(sock, ok, strlen(ok));
         }
         thread_yield();
     }

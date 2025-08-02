@@ -10,19 +10,20 @@
 void vnc_server(ipc_queue_t *q, uint32_t self_id) {
     (void)q; (void)self_id;
     serial_puts("[vnc] VNC server starting\n");
+    int sock = net_socket_open(VNC_PORT, NET_SOCK_STREAM);
     const char hello[] = "NOS VNC ready\r\n";
-    net_send(VNC_PORT, hello, strlen(hello));
+    net_socket_send(sock, hello, strlen(hello));
     char buf[64];
     for (;;) {
-        int n = net_receive(VNC_PORT, buf, sizeof(buf) - 1);
+        int n = net_socket_recv(sock, buf, sizeof(buf) - 1);
         if (n > 0) {
             buf[n] = '\0';
             if (!strncmp(buf, "ping", 4)) {
                 const char pong[] = "pong\r\n";
-                net_send(VNC_PORT, pong, strlen(pong));
+                net_socket_send(sock, pong, strlen(pong));
             } else {
                 const char unk[] = "unknown\r\n";
-                net_send(VNC_PORT, unk, strlen(unk));
+                net_socket_send(sock, unk, strlen(unk));
             }
         }
         thread_yield();
