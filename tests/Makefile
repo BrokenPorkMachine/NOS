@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-Wall -Wextra -std=gnu11 \
     -I../kernel/IPC -I../kernel/Kernel -I../kernel/VM -I../boot/include \
     -I../user/servers/nitrfs -I../user/servers/login -I../user/libc \
-    -I../kernel/drivers/IO
+    -I../kernel/drivers/IO -I../kernel/drivers/Audio
 UNIT_TESTS=test_ipc test_pmm test_syscall test_nitrfs test_login
 
 all: $(UNIT_TESTS)
