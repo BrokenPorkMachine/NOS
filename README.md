@@ -11,7 +11,7 @@
 * Custom UEFI bootloader (no GRUB, no 3rd-party loaders)
 * True x86\_64 long mode kernel
 * Clean kernel/user separation (ring 0/3)
-* Full paging and memory protection
+* Full paging and memory protection (NX, SMEP, SMAP)
 * Modular, timer-driven preemptive multitasking
 * Interrupt handling (IDT, PIT, PIC)
 * Early ACPI table parsing for basic hardware enumeration

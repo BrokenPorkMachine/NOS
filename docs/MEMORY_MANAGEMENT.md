@@ -20,7 +20,7 @@ This document outlines a proposed secure and optimized memory mapping and manage
 2. **Virtual Memory Manager (VMM)**
    - Builds per-task page tables (PML4 -> PDP -> PD -> PT)
    - Supports 4 KiB and 2 MiB pages to balance granularity and TLB usage
-   - Enforces NX, SMEP and SMAP for user mappings
+   - Detects CPU features via `CPUID` and enables NX, SMEP and SMAP for user mappings
    - Kernel memory mapped high in address space and shared read-only with tasks
    - Maps user code/data stacks with appropriate permissions and ASLR offsets
 
