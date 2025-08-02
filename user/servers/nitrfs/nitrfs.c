@@ -69,8 +69,14 @@ void nitrfs_init(nitrfs_fs_t *fs) {
 }
 
 int nitrfs_create(nitrfs_fs_t *fs, const char *name, uint32_t capacity, uint32_t perm) {
+    if (!fs || !name || capacity == 0)
+        return -1;
     if (fs->file_count >= NITRFS_MAX_FILES)
         return -1;
+    for (size_t i = 0; i < fs->file_count; ++i) {
+        if (strncmp(fs->files[i].name, name, NITRFS_NAME_LEN) == 0)
+            return -1; // duplicate name
+    }
     nitrfs_file_t *f = &fs->files[fs->file_count];
     strncpy(f->name, name, NITRFS_NAME_LEN-1);
     f->name[NITRFS_NAME_LEN-1] = '\0';
