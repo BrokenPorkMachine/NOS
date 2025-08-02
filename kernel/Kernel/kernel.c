@@ -126,6 +126,9 @@ static void print_bootinfo(const bootinfo_t *bi) {
     else if (bi->magic == BOOTINFO_MAGIC_MB2) log_good("[boot] Multiboot2 detected.");
     else log_warn("[boot] Unknown boot magic!");
 
+    if (bi->bootloader_name) { log_line("[boot] bootloader:"); log_line(bi->bootloader_name); }
+    if (bi->cmdline) { log_line("[boot] cmdline:"); log_line(bi->cmdline); }
+
     uint32_t count = bi->mmap_entries;
     log_info("[boot] RAM regions:");
     for (uint32_t i = 0; i < count && i < 2; ++i) {

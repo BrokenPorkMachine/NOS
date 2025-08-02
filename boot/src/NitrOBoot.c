@@ -149,6 +149,27 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     info->magic = BOOTINFO_MAGIC_UEFI;
     info->size = sizeof(bootinfo_t);
     info->bootloader_name = "NitrOBoot UEFI";
+
+    // Retrieve optional command line from UEFI load options
+    EFI_LOADED_IMAGE_PROTOCOL *LoadedImage = NULL;
+    status = BS->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiLoadedImageProtocolGuid,
+                                (VOID**)&LoadedImage);
+    if (status == EFI_SUCCESS && LoadedImage &&
+        LoadedImage->LoadOptions && LoadedImage->LoadOptionsSize > 0) {
+        UINTN opt_chars = LoadedImage->LoadOptionsSize / sizeof(CHAR16);
+        EFI_PHYSICAL_ADDRESS cmd_addr = 0xFFFFFFFF;
+        UINTN cmd_pages = (opt_chars + 1 + 4095) / 4096;
+        if (BS->AllocatePages(EFI_ALLOCATE_MAX_ADDRESS, EfiLoaderData,
+                              cmd_pages, &cmd_addr) == EFI_SUCCESS) {
+            CHAR16 *src = (CHAR16*)LoadedImage->LoadOptions;
+            char *dst = (char*)(UINTN)cmd_addr;
+            UINTN i = 0;
+            for (; i < opt_chars && src[i]; ++i)
+                dst[i] = (char)(src[i] & 0xFF);
+            dst[i] = 0;
+            info->cmdline = dst;
+        }
+    }
     print_hex(ConOut, L"bootinfo ptr: ", (UINTN)info);
     print_hex(ConOut, L"bootinfo size: ", info->size);
     print_hex(ConOut, L"bootinfo magic:", info->magic);
