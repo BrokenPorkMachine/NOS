@@ -1,6 +1,57 @@
 #include "nitrfs.h"
 #include "../../libc/libc.h"
 
+static uint32_t crc32_compute(const uint8_t *data, uint32_t len);
+
+#define NITRFS_JOURNAL_MAX 32
+
+typedef struct {
+    int      handle;
+    uint32_t crc32;
+} journal_entry_t;
+
+static journal_entry_t journal[NITRFS_JOURNAL_MAX];
+static size_t journal_count = 0;
+
+void nitrfs_journal_init(void) {
+    journal_count = 0;
+}
+
+void nitrfs_journal_log(nitrfs_fs_t *fs, int handle) {
+    if (journal_count >= NITRFS_JOURNAL_MAX)
+        return;
+    journal[journal_count].handle = handle;
+    journal[journal_count].crc32  = fs->files[handle].crc32;
+    journal_count++;
+}
+
+static void journal_clear(int handle) {
+    for (size_t i = 0; i < journal_count; ++i) {
+        if (journal[i].handle == handle) {
+            for (size_t j = i; j + 1 < journal_count; ++j)
+                journal[j] = journal[j + 1];
+            journal_count--;
+            break;
+        }
+    }
+}
+
+void nitrfs_journal_recover(nitrfs_fs_t *fs) {
+    for (size_t i = 0; i < journal_count; ++i) {
+        int h = journal[i].handle;
+        if (h < 0 || (size_t)h >= fs->file_count)
+            continue;
+        nitrfs_file_t *f = &fs->files[h];
+        uint32_t current = crc32_compute(f->data, f->size);
+        if (current != journal[i].crc32) {
+            memset(f->data, 0, f->capacity);
+            f->size  = 0;
+            f->crc32 = 0;
+        }
+    }
+    journal_count = 0;
+}
+
 static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
     uint32_t crc = ~0u;
     for (uint32_t i = 0; i < len; ++i) {
@@ -14,6 +65,7 @@ static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
 
 void nitrfs_init(nitrfs_fs_t *fs) {
     memset(fs, 0, sizeof(*fs));
+    nitrfs_journal_init();
 }
 
 int nitrfs_create(nitrfs_fs_t *fs, const char *name, uint32_t capacity, uint32_t perm) {
@@ -40,6 +92,7 @@ int nitrfs_write(nitrfs_fs_t *fs, int handle, uint32_t offset, const void *buf, 
         return -1;
     if (offset + len > f->capacity)
         return -1;
+    nitrfs_journal_log(fs, handle);
     memcpy(f->data + offset, buf, len);
     if (offset + len > f->size)
         f->size = offset + len;
@@ -63,6 +116,7 @@ int nitrfs_compute_crc(nitrfs_fs_t *fs, int handle) {
         return -1;
     nitrfs_file_t *f = &fs->files[handle];
     f->crc32 = crc32_compute(f->data, f->size);
+    journal_clear(handle);
     return 0;
 }
 
@@ -78,6 +132,7 @@ int nitrfs_delete(nitrfs_fs_t *fs, int handle) {
         return -1;
     nitrfs_file_t *f = &fs->files[handle];
     free(f->data);
+    journal_clear(handle);
     for (size_t i = handle; i + 1 < fs->file_count; ++i)
         fs->files[i] = fs->files[i + 1];
     fs->file_count--;
@@ -173,4 +228,27 @@ int nitrfs_load_blocks(nitrfs_fs_t *fs, const uint8_t *blocks, size_t blocks_cnt
         p += fs->files[i].size;
     }
     return 0;
+}
+
+/* Disk device interaction via block driver */
+extern int block_read(uint32_t lba, uint8_t *buf, size_t count);
+extern int block_write(uint32_t lba, const uint8_t *buf, size_t count);
+
+#define NITRFS_DEVICE_MAX_BLOCKS 128
+
+int nitrfs_save_device(nitrfs_fs_t *fs, uint32_t start_lba) {
+    uint8_t buf[NITRFS_DEVICE_MAX_BLOCKS * NITRFS_BLOCK_SIZE];
+    int blocks = nitrfs_save_blocks(fs, buf, NITRFS_DEVICE_MAX_BLOCKS);
+    if (blocks < 0)
+        return -1;
+    for (int i = 0; i < blocks; ++i)
+        block_write(start_lba + i, buf + i * NITRFS_BLOCK_SIZE, 1);
+    return blocks;
+}
+
+int nitrfs_load_device(nitrfs_fs_t *fs, uint32_t start_lba) {
+    uint8_t buf[NITRFS_DEVICE_MAX_BLOCKS * NITRFS_BLOCK_SIZE];
+    for (int i = 0; i < NITRFS_DEVICE_MAX_BLOCKS; ++i)
+        block_read(start_lba + i, buf + i * NITRFS_BLOCK_SIZE, 1);
+    return nitrfs_load_blocks(fs, buf, NITRFS_DEVICE_MAX_BLOCKS);
 }

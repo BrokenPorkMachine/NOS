@@ -129,4 +129,13 @@ int     nitrfs_save_blocks(nitrfs_fs_t *fs, uint8_t *blocks, size_t max_blocks);
  */
 int     nitrfs_load_blocks(nitrfs_fs_t *fs, const uint8_t *blocks, size_t blocks_cnt);
 
+/* -- Disk-backed helpers -- */
+int     nitrfs_save_device(nitrfs_fs_t *fs, uint32_t start_lba);
+int     nitrfs_load_device(nitrfs_fs_t *fs, uint32_t start_lba);
+
+/* -- Journaling -- */
+void    nitrfs_journal_init(void);
+void    nitrfs_journal_log(nitrfs_fs_t *fs, int handle);
+void    nitrfs_journal_recover(nitrfs_fs_t *fs);
+
 #endif /* NITRFS_H */
