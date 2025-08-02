@@ -24,5 +24,8 @@ int main(void) {
     login_done = 0;
     login_server(&q, 0);
     assert(login_done == 1);
+    assert(current_session.active);
+    assert(current_session.uid == 0);
+    assert(strcmp((const char*)current_session.username, "admin") == 0);
     return 0;
 }

@@ -5,7 +5,9 @@
 
 int main(void) {
     ipc_queue_t q;
-    ipc_init(&q, (1u<<1), (1u<<2));
+    ipc_init(&q);
+    ipc_grant(&q, 1, IPC_CAP_SEND);
+    ipc_grant(&q, 2, IPC_CAP_RECV);
 
     ipc_message_t msg = { .type = 1, .len = 4 };
     memcpy(msg.data, "test", 4);

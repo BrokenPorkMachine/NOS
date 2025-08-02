@@ -34,12 +34,22 @@
 
 /** In-memory file descriptor */
 typedef struct {
+    uint32_t uid;   /* User ID */
+    uint32_t perm;  /* Permission mask */
+} nitrfs_acl_entry_t;
+
+#define NITRFS_ACL_MAX 4
+
+typedef struct {
     char     name[NITRFS_NAME_LEN];
     uint8_t *data;         /* Allocated buffer (owned) */
     uint32_t size;         /* Bytes used */
     uint32_t capacity;     /* Bytes allocated */
-    uint32_t perm;         /* Permission flags */
+    uint32_t perm;         /* Default permission flags */
     uint32_t crc32;        /* Data CRC32 */
+    uint32_t owner;        /* Owner UID */
+    nitrfs_acl_entry_t acl[NITRFS_ACL_MAX];
+    size_t   acl_count;
 } nitrfs_file_t;
 
 /** Filesystem root struct */
@@ -137,5 +147,10 @@ int     nitrfs_load_device(nitrfs_fs_t *fs, uint32_t start_lba);
 void    nitrfs_journal_init(void);
 void    nitrfs_journal_log(nitrfs_fs_t *fs, int handle);
 void    nitrfs_journal_recover(nitrfs_fs_t *fs);
+
+/* -- ACL helpers -- */
+int     nitrfs_set_owner(nitrfs_fs_t *fs, int handle, uint32_t owner);
+int     nitrfs_acl_add(nitrfs_fs_t *fs, int handle, uint32_t uid, uint32_t perm);
+int     nitrfs_acl_check(nitrfs_fs_t *fs, int handle, uint32_t uid, uint32_t perm);
 
 #endif /* NITRFS_H */

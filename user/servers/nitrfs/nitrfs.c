@@ -81,6 +81,8 @@ int nitrfs_create(nitrfs_fs_t *fs, const char *name, uint32_t capacity, uint32_t
     f->capacity = capacity;
     f->perm = perm;
     f->crc32 = 0;
+    f->owner = 0;
+    f->acl_count = 0;
     return fs->file_count++;
 }
 
@@ -147,6 +149,38 @@ int nitrfs_rename(nitrfs_fs_t *fs, int handle, const char *new_name) {
     nitrfs_file_t *f = &fs->files[handle];
     strncpy(f->name, new_name, NITRFS_NAME_LEN - 1);
     f->name[NITRFS_NAME_LEN - 1] = '\0';
+    return 0;
+}
+
+int nitrfs_set_owner(nitrfs_fs_t *fs, int handle, uint32_t owner) {
+    if (handle < 0 || (size_t)handle >= fs->file_count)
+        return -1;
+    fs->files[handle].owner = owner;
+    return 0;
+}
+
+int nitrfs_acl_add(nitrfs_fs_t *fs, int handle, uint32_t uid, uint32_t perm) {
+    if (handle < 0 || (size_t)handle >= fs->file_count)
+        return -1;
+    nitrfs_file_t *f = &fs->files[handle];
+    if (f->acl_count >= NITRFS_ACL_MAX)
+        return -1;
+    f->acl[f->acl_count].uid = uid;
+    f->acl[f->acl_count].perm = perm;
+    f->acl_count++;
+    return 0;
+}
+
+int nitrfs_acl_check(nitrfs_fs_t *fs, int handle, uint32_t uid, uint32_t perm) {
+    if (handle < 0 || (size_t)handle >= fs->file_count)
+        return 0;
+    nitrfs_file_t *f = &fs->files[handle];
+    if (uid == f->owner && (f->perm & perm) == perm)
+        return 1;
+    for (size_t i = 0; i < f->acl_count; ++i) {
+        if (f->acl[i].uid == uid && (f->acl[i].perm & perm) == perm)
+            return 1;
+    }
     return 0;
 }
 

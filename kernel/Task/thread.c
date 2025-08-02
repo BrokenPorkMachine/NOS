@@ -112,15 +112,23 @@ void thread_yield(void) {
 // --- THREAD SYSTEM INIT ---
 
 void threads_init(void) {
-    uint32_t mask = (1u << 1) | (1u << 2) | (1u << 5);
-    ipc_init(&fs_queue, mask, mask);
-    thread_create(thread_fs_func);
-    thread_create(thread_init_func);
-    thread_create(thread_login_func);
-    thread_create(thread_shell_func);
-    thread_create(thread_vnc_func);
-    thread_create(thread_ssh_func);
-    thread_create(thread_ftp_func);
+    ipc_init(&fs_queue);
+    thread_t *t;
+
+    t = thread_create(thread_fs_func);
+    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    t = thread_create(thread_init_func);
+    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    t = thread_create(thread_login_func);
+    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    t = thread_create(thread_shell_func);
+    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    t = thread_create(thread_vnc_func);
+    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    t = thread_create(thread_ssh_func);
+    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    t = thread_create(thread_ftp_func);
+    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
     // Insert kernel main thread into the run queue so the first
     // schedule() call can switch away safely.
