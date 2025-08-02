@@ -24,8 +24,9 @@ static void print_hex(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR
     if (prefix) while (prefix[idx]) { buf[idx] = prefix[idx]; idx++; }
     buf[idx] = 0;
     uefi_hex16(buf + idx, val);
-    for (int i = 0; buf[i]; ++i);
-    buf[idx + 18] = L'\r'; buf[idx + 19] = L'\n'; buf[idx + 20] = 0;
+    buf[idx + 18] = L'\r';
+    buf[idx + 19] = L'\n';
+    buf[idx + 20] = 0;
     ConOut->OutputString(ConOut, buf);
 }
 
@@ -83,9 +84,22 @@ static int load_elf64_kernel(
     st = KernelFile->Read(KernelFile, &sz, &eh);
     if (st || sz != sizeof(eh)) { ConOut->OutputString(ConOut, L"ELF header read error\r\n"); return 1; }
     if (memcmp(eh.e_ident, "\x7f""ELF", 4) != 0 || eh.e_ident[4] != 2) {
-        ConOut->OutputString(ConOut, L"Not ELF64\r\n"); return 2;
+        ConOut->OutputString(ConOut, L"Not ELF64\r\n");
+        return 2;
+    }
+    if (eh.e_machine != 0x3E) {
+        ConOut->OutputString(ConOut, L"Unsupported arch\r\n");
+        return 2;
+    }
+    if (eh.e_phentsize != sizeof(Elf64_Phdr) || eh.e_phnum == 0) {
+        ConOut->OutputString(ConOut, L"Bad program header table\r\n");
+        return 2;
     }
     // Load segments
+    if (eh.e_phnum > 64) {
+        ConOut->OutputString(ConOut, L"Too many segments\r\n");
+        return 2;
+    }
     for (UINTN i = 0; i < eh.e_phnum; ++i) {
         Elf64_Phdr ph;
         KernelFile->SetPosition(KernelFile, eh.e_phoff + i * sizeof(ph));
