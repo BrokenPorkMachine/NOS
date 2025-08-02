@@ -199,6 +199,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     UINTN mmap_size = 0, map_key, desc_size;
     UINT32 desc_ver;
     status = BS->GetMemoryMap(&mmap_size, NULL, &map_key, &desc_size, &desc_ver);
+    if (desc_size < sizeof(EFI_MEMORY_DESCRIPTOR)) {
+        ConOut->OutputString(ConOut, L"Memmap descriptor too small\r\n");
+        for(;;);
+    }
     mmap_size += desc_size * 64; // add initial slack for allocations
     EFI_MEMORY_DESCRIPTOR *efi_mmap = NULL;
     UINTN efi_mmap_pages = (mmap_size + 4095) / 4096;
@@ -386,9 +390,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     }
 
     // Copy final memory map to bootinfo (it may have changed)
-    UINTN desc_count_final = mmap_size / desc_size;
+    UINTN desc_count_final_total = mmap_size / desc_size;
+    UINTN desc_count_final = desc_count_final_total;
     if (desc_count_final > reserved_entries)
         desc_count_final = reserved_entries;
+    info->reserved[0] = desc_count_final_total;
     memset(info->mmap, 0, desc_count_final * sizeof(bootinfo_memory_t));
     for (UINTN i = 0; i < desc_count_final; ++i) {
         EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)efi_mmap + i * desc_size);

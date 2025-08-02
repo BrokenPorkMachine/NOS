@@ -166,6 +166,11 @@ static void print_bootinfo(const bootinfo_t *bi) {
     ptoa((uint64_t)bi, buf); log_line("[boot] bootinfo ptr:"); log_line(buf);
     ptoa((uint64_t)bi->mmap, buf); log_line("[boot] mmap ptr:"); log_line(buf);
     utoa(bi->mmap_entries, buf, 10); log_line("[boot] mmap entries:"); log_line(buf);
+    if (bi->reserved[0] > bi->mmap_entries) {
+        utoa(bi->reserved[0], buf, 10);
+        log_warn("[boot] mmap truncated; total descriptors:");
+        log_line(buf);
+    }
     ptoa((uint64_t)bi->framebuffer, buf); log_line("[boot] framebuffer ptr:"); log_line(buf);
     utoa(sizeof(bootinfo_memory_t), buf, 10); log_line("[boot] bootinfo_memory_t size:"); log_line(buf);
     ptoa((uint64_t)bi->kernel_entry, buf); log_line("[boot] kernel entry:"); log_line(buf);
