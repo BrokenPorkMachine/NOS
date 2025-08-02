@@ -42,8 +42,11 @@ OBJS = \
     ../../user/servers/ssh/ssh.o \
     ../../user/servers/ftp/ftp.o \
     ../../user/servers/login/login.o \
+    ../../user/servers/pkg/pkg.o \
+    ../../user/servers/pkg/server.o \
     ../../user/servers/audio/audio.o \
     ../../user/servers/audio/server.o \
+    ../../user/servers/update/server.o \
     ../../user/servers/cp/cp.o \
     ../../user/servers/mv/mv.o \
     ../../user/servers/grep/grep.o \
