@@ -79,15 +79,24 @@
 ## Directory Structure
 
 ```
-/Bootloader    # UEFI bootloader source (main.c, Makefile)
-/kernel        # Kernel sources (kernel.c, idt.c, gdt.c, ...)
-/servers/nitrfs # NitrFS filesystem server
-/servers/shell  # Simple demonstration shell
-/servers/vnc    # Simple VNC demo (port 1 on loopback)
-/servers/ssh    # Echo SSH/SCP demo (port 2 on loopback)
-/servers/ftp    # Minimal FTP demo (port 3 on loopback)
-/agents        # Reference docs and AGENTS.md
-/              # Root: Makefile, linker scripts, README.md
+boot/                # UEFI bootloader source
+kernel/              # Kernel core and subsystems
+  Kernel/            # Core kernel code
+  Task/              # Threading and context switching
+  IPC/               # IPC primitives
+  VM/                # Memory management
+  arch/              # Architecture-specific code
+    ACPI/
+    CPU/
+    GDT/
+    IDT/
+  drivers/           # Hardware drivers
+    IO/
+    Net/
+user/
+  libc/              # Minimal C library for user programs
+  servers/           # User-space services (NitrFS, shell, etc.)
+docs/                # Project documentation
 ```
 
 ---
