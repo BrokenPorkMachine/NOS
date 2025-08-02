@@ -18,6 +18,7 @@ OBJS = \
     ../drivers/IO/mouse.o \
     ../drivers/IO/pci.o \
     ../drivers/IO/serial.o \
+    ../drivers/IO/block.o \
     ../drivers/Net/e1000.o \
     ../drivers/Net/netstack.o \
     ../VM/paging.o \
@@ -41,6 +42,8 @@ OBJS = \
     ../IPC/ipc.o \
     ../IPC/sharedmem.o \
     ../arch/CPU/cpu.o \
+    ../arch/CPU/lapic.o \
+    ../arch/CPU/smp.o \
     ../arch/ACPI/acpi.o \
     ../drivers/IO/video.o \
     ../../libc.o

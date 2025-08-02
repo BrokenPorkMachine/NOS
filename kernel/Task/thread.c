@@ -9,11 +9,12 @@
 #include "../../user/libc/libc.h"
 #include "../drivers/IO/serial.h"
 #include <stdint.h>
+#include "../arch/CPU/smp.h"
 
 #define STACK_SIZE 4096
 
-thread_t *current = NULL;
-static thread_t *tail = NULL;
+thread_t *current_cpu[MAX_CPUS] = {0};
+static thread_t *tail_cpu[MAX_CPUS] = {0};
 static int next_id = 1;
 static thread_t main_thread; // represents kernel_main for initial switch
 
@@ -23,20 +24,20 @@ ipc_queue_t fs_queue;
 
 static void thread_entry(void (*f)(void)) {
     f();
-    // Thread returns: mark as exited, yield
-    current->state = THREAD_EXITED;
+    thread_t *cur = current_cpu[smp_cpu_index()];
+    cur->state = THREAD_EXITED;
     thread_yield();
     for (;;) __asm__ volatile("hlt");
 }
 
 // --- THREAD FUNCTIONS ---
 
-static void thread_fs_func(void)   { nitrfs_server(&fs_queue, current->id); }
-static void thread_shell_func(void){ shell_main(&fs_queue, current->id); }
-static void thread_vnc_func(void)  { vnc_server(NULL, current->id); }
-static void thread_ssh_func(void)  { ssh_server(NULL, current->id); }
-static void thread_ftp_func(void)  { ftp_server(&fs_queue, current->id); }
-static void thread_login_func(void){ login_server(NULL, current->id); }
+static void thread_fs_func(void)   { thread_t *c = current_cpu[smp_cpu_index()]; nitrfs_server(&fs_queue, c->id); }
+static void thread_shell_func(void){ thread_t *c = current_cpu[smp_cpu_index()]; shell_main(&fs_queue, c->id); }
+static void thread_vnc_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; vnc_server(NULL, c->id); }
+static void thread_ssh_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; ssh_server(NULL, c->id); }
+static void thread_ftp_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; ftp_server(&fs_queue, c->id); }
+static void thread_login_func(void){ thread_t *c = current_cpu[smp_cpu_index()]; login_server(NULL, c->id); }
 
 // --- THREAD CREATION ---
 
@@ -63,15 +64,15 @@ thread_t *thread_create(void (*func)(void)) {
     t->id = next_id++;
     t->state = THREAD_READY;
 
-    // Insert into round-robin ring
-    if (!current) {
-        current = t;
+    int cpu = smp_cpu_index();
+    if (!current_cpu[cpu]) {
+        current_cpu[cpu] = t;
         t->next = t;
-        tail = t;
+        tail_cpu[cpu] = t;
     } else {
-        t->next = current;
-        tail->next = t;
-        tail = t;
+        t->next = current_cpu[cpu];
+        tail_cpu[cpu]->next = t;
+        tail_cpu[cpu] = t;
     }
     char buf[32];
     serial_puts("[thread] created id=");
@@ -94,7 +95,7 @@ thread_t *thread_create(void (*func)(void)) {
 
 void thread_block(thread_t *t) {
     t->state = THREAD_BLOCKED;
-    if (t == current)
+    if (t == current_cpu[smp_cpu_index()])
         schedule();
 }
 
@@ -125,32 +126,33 @@ void threads_init(void) {
     main_thread.stack = NULL;
     main_thread.state = THREAD_RUNNING;
 
-    main_thread.next = current; // current points to first created thread
-    tail->next       = &main_thread;
-    tail             = &main_thread;
-    current          = &main_thread;
+    int cpu = smp_cpu_index();
+    main_thread.next = current_cpu[cpu];
+    tail_cpu[cpu]->next = &main_thread;
+    tail_cpu[cpu] = &main_thread;
+    current_cpu[cpu] = &main_thread;
 }
 
 // --- SCHEDULER: simple round-robin, skips non-ready threads ---
 
 void schedule(void) {
-    thread_t *prev = current;
+    int cpu = smp_cpu_index();
+    thread_t *prev = current_cpu[cpu];
     if (prev->state == THREAD_RUNNING)
         prev->state = THREAD_READY;
 
     int found = 0;
-    thread_t *start = current;
+    thread_t *start = current_cpu[cpu];
     do {
-        current = current->next;
-        if (current->state == THREAD_READY) { found = 1; break; }
-    } while (current != start);
+        current_cpu[cpu] = current_cpu[cpu]->next;
+        if (current_cpu[cpu]->state == THREAD_READY) { found = 1; break; }
+    } while (current_cpu[cpu] != start);
 
     if (!found) {
-        // Deadlock! All threads blocked/exited: halt system
         for (;;)
             __asm__ volatile("cli; hlt");
     }
-    current->state = THREAD_RUNNING;
-    context_switch(&prev->rsp, current->rsp);
+    current_cpu[cpu]->state = THREAD_RUNNING;
+    context_switch(&prev->rsp, current_cpu[cpu]->rsp);
 }
 

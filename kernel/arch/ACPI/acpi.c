@@ -1,6 +1,7 @@
 #include "acpi.h"
 #include "../../drivers/IO/serial.h"
 #include "../../../user/libc/libc.h"
+#include "../CPU/lapic.h"
 
 struct rsdp {
     char     signature[8];
@@ -40,7 +41,22 @@ static void print_sig(const char *s) {
     serial_puts(buf);
 }
 
-void acpi_init(const bootinfo_t *bootinfo) {
+struct madt {
+    struct sdt_header header;
+    uint32_t lapic_addr;
+    uint32_t flags;
+    uint8_t  entries[];
+} __attribute__((packed));
+
+struct madt_lapic {
+    uint8_t type;
+    uint8_t length;
+    uint8_t processor_id;
+    uint8_t apic_id;
+    uint32_t flags;
+} __attribute__((packed));
+
+void acpi_init(bootinfo_t *bootinfo) {
     serial_puts("[acpi] init\n");
     if (!bootinfo || !bootinfo->acpi_rsdp) {
         serial_puts("[acpi] no RSDP\n");
@@ -88,6 +104,26 @@ void acpi_init(const bootinfo_t *bootinfo) {
                     serial_puts("[acpi] DSDT invalid\n");
                 }
             }
+        } else if (!memcmp(hdr->signature, "APIC", 4)) {
+            serial_puts("[acpi] MADT found\n");
+            struct madt *m = (struct madt *)hdr;
+            lapic_init(m->lapic_addr);
+            uint32_t count = 0;
+            uint8_t *p = m->entries;
+            uint8_t *end = ((uint8_t*)m) + m->header.length;
+            while (p + sizeof(struct madt_lapic) <= end) {
+                struct madt_lapic *lap = (struct madt_lapic*)p;
+                if (lap->type == 0 && (lap->flags & 1)) {
+                    if (count < BOOTINFO_MAX_CPUS) {
+                        bootinfo->cpus[count].processor_id = lap->processor_id;
+                        bootinfo->cpus[count].apic_id = lap->apic_id;
+                        bootinfo->cpus[count].flags = lap->flags;
+                        count++;
+                    }
+                }
+                p += lap->length ? lap->length : 2;
+            }
+            bootinfo->cpu_count = count ? count : 1;
         }
     }
 }

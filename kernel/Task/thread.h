@@ -1,6 +1,8 @@
 #pragma once
 #include <stdint.h>
 
+#define MAX_CPUS 32
+
 typedef enum {
     THREAD_READY,
     THREAD_RUNNING,
@@ -17,7 +19,7 @@ typedef struct thread {
     struct thread *next; // run queue link
 } thread_t;
 
-extern thread_t *current;
+extern thread_t *current_cpu[MAX_CPUS];
 
 // Initialize threading system and create initial threads
 void threads_init(void);
