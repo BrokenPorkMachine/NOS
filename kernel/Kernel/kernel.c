@@ -275,10 +275,13 @@ void kernel_main(bootinfo_t *bootinfo) {
         parse_cmdline(bootinfo->cmdline);
     acpi_init(bootinfo);
     if (bootinfo && bootinfo->cpu_count == 0) {
+        log_warn("[boot] CPU count missing; using CPUID");
         bootinfo->cpu_count = cpu_detect_logical_count();
         bootinfo->cpus[0].processor_id = 0;
         bootinfo->cpus[0].apic_id = 0;
         bootinfo->cpus[0].flags = 1;
+    } else if (bootinfo) {
+        log_info("[boot] CPU info provided by bootloader");
     }
     print_bootinfo(bootinfo);
     log_line("[Stage 2] Init memory management");
