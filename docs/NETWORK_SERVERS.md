@@ -1,6 +1,11 @@
 # Planned Network Servers
 
-This document outlines the network services for NitrOS. A very small network stack with a loopback device is now present in `Net/`. It can send and receive data within the system but does not talk to real hardware yet.  Each service communicates over a dedicated logical port on the loopback stack so they no longer interfere with one another.  The VNC, SSH, and FTP servers remain simple demonstrations until higher level protocols are implemented.
+This document outlines the network services for NitrOS.  A small loopback
+network stack lives in `Net/` and allows local user-mode servers to exchange
+packets without real hardware.  Each service communicates over a dedicated
+logical port so they no longer interfere with one another.  The VNC, SSH, and
+FTP servers remain simple demonstrations until higher level protocols are
+implemented.
 
 ## VNC Server
 
@@ -17,7 +22,16 @@ This document outlines the network services for NitrOS. A very small network sta
 ## FTP Server
 
 - **Purpose**: Provide file transfer capabilities for legacy clients.
-- **Status**: Handles `LIST`, `RETR`, `STOR`, and `QUIT` over port 3 of the loopback stack using NitrFS. Commands are terminated with CRLF and are trimmed before processing. Real file transfer and TCP/IP remain TODO.
-- **Future work**: Build on the NitrFS filesystem once a TCP/IP stack is available.
+- **Status**: Responds on port 3 of the loopback stack. After a greeting, it processes `LIST`, `RETR`, `STOR`, and `QUIT` commands using the NitrFS server for storage. Commands are terminated with CRLF and trimmed before processing.
+- **Example**:
+  ```text
+  LIST
+      (files listed)
+  STOR demo.txt hello world
+  RETR demo.txt
+  QUIT
+  ```
+- **Limitations**: Only the loopback device is supported and transfers are in-memory; there is no authentication or real TCP/IP stack yet.
+- **Future work**: Build on the NitrFS filesystem once a TCP/IP stack is available and hardware drivers are implemented.
 
 Each of these services is started as a kernel thread during system initialization. They use the loopback network stack (ports 1–3) for testing but remain placeholders until true network drivers and protocols are added.
