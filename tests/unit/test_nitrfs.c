@@ -19,6 +19,11 @@ int main(void) {
     nitrfs_compute_crc(&fs, h);
     assert(nitrfs_verify(&fs, h) == 0);
 
+    /* ACL tests */
+    assert(nitrfs_acl_add(&fs, h, 1, NITRFS_PERM_READ) == 0);
+    assert(nitrfs_acl_check(&fs, h, 1, NITRFS_PERM_READ) == 1);
+    assert(nitrfs_acl_check(&fs, h, 1, NITRFS_PERM_WRITE) == 0);
+
     /* Save to mock device and reload */
     assert(nitrfs_save_device(&fs, 0) > 0);
     nitrfs_fs_t fs2;

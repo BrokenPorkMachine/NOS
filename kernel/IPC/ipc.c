@@ -4,11 +4,23 @@
 /**
  * Initialize an IPC queue for message passing.
  */
-void ipc_init(ipc_queue_t *q, uint32_t send_mask, uint32_t recv_mask) {
+void ipc_init(ipc_queue_t *q) {
     if (!q) return;
     memset(q, 0, sizeof(*q));
-    q->send_mask = send_mask;
-    q->recv_mask = recv_mask;
+}
+
+int ipc_grant(ipc_queue_t *q, uint32_t task_id, uint32_t caps) {
+    if (!q || task_id >= IPC_MAX_TASKS)
+        return -1;
+    q->caps[task_id] |= caps;
+    return 0;
+}
+
+int ipc_revoke(ipc_queue_t *q, uint32_t task_id, uint32_t caps) {
+    if (!q || task_id >= IPC_MAX_TASKS)
+        return -1;
+    q->caps[task_id] &= ~caps;
+    return 0;
 }
 
 /**
@@ -22,7 +34,7 @@ void ipc_init(ipc_queue_t *q, uint32_t send_mask, uint32_t recv_mask) {
  */
 int ipc_send(ipc_queue_t *q, uint32_t sender_id, ipc_message_t *msg) {
     if (!q || !msg) return -4;
-    if (!(q->send_mask & (1u << sender_id)))
+    if (sender_id >= IPC_MAX_TASKS || !(q->caps[sender_id] & IPC_CAP_SEND))
         return -2; // unauthorized sender
     if (msg->len > IPC_MSG_DATA_MAX)
         return -3; // invalid message length
@@ -45,7 +57,7 @@ int ipc_send(ipc_queue_t *q, uint32_t sender_id, ipc_message_t *msg) {
  */
 int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
     if (!q || !msg) return -4;
-    if (!(q->recv_mask & (1u << receiver_id)))
+    if (receiver_id >= IPC_MAX_TASKS || !(q->caps[receiver_id] & IPC_CAP_RECV))
         return -2; // unauthorized receiver
     if (q->tail == q->head)
         return -1; // queue empty

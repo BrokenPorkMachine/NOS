@@ -7,6 +7,13 @@
 #define IPC_MSG_DATA_MAX 64
 #define IPC_QUEUE_SIZE   16
 
+// Capability flags
+#define IPC_CAP_SEND 0x1
+#define IPC_CAP_RECV 0x2
+
+// Maximum tasks supported for capability tracking
+#define IPC_MAX_TASKS 32
+
 /**
  * Structure of a message for IPC.
  */
@@ -20,23 +27,33 @@ typedef struct {
 } ipc_message_t;
 
 /**
- * Simple ring-buffer queue for IPC between threads.
- * send_mask: which thread IDs can send
- * recv_mask: which thread IDs can receive
+ * Simple ring-buffer queue for IPC between threads with
+ * capability-based access control. Each task can be granted
+ * IPC_CAP_SEND and/or IPC_CAP_RECV capabilities.
  */
 typedef struct {
     ipc_message_t msgs[IPC_QUEUE_SIZE];
     size_t head;          // Points to oldest element
     size_t tail;          // Points to next write slot
-    uint32_t send_mask;   // Bitmask of allowed senders
-    uint32_t recv_mask;   // Bitmask of allowed receivers
+    uint32_t caps[IPC_MAX_TASKS]; // Capability bits per task ID
 } ipc_queue_t;
 
 /**
  * Initialize an IPC queue.
- * send_mask/recv_mask: bitmasks of allowed sender/receiver thread IDs
  */
-void ipc_init(ipc_queue_t *q, uint32_t send_mask, uint32_t recv_mask);
+void ipc_init(ipc_queue_t *q);
+
+/**
+ * Grant capabilities to a task on this queue.
+ * caps: IPC_CAP_SEND and/or IPC_CAP_RECV
+ */
+int ipc_grant(ipc_queue_t *q, uint32_t task_id, uint32_t caps);
+
+/**
+ * Revoke capabilities from a task on this queue.
+ * caps: IPC_CAP_SEND and/or IPC_CAP_RECV
+ */
+int ipc_revoke(ipc_queue_t *q, uint32_t task_id, uint32_t caps);
 
 /**
  * Send a message to the queue.
