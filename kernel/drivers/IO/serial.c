@@ -32,3 +32,17 @@ void serial_puts(const char *s) {
         serial_write(*s++);
     }
 }
+
+void serial_puthex(uint32_t value) {
+    char buf[9];
+    for (int i = 7; i >= 0; --i) {
+        buf[i] = "0123456789ABCDEF"[value & 0xF];
+        value >>= 4;
+    }
+    buf[8] = '\0';
+
+    char *p = buf;
+    while (*p == '0' && *(p + 1))
+        p++;
+    serial_puts(p);
+}
