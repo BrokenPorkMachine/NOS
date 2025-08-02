@@ -25,6 +25,24 @@ ipc_queue_t fs_queue;
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
 
+// Simple decimal conversion for logging
+static void utoa_dec(uint32_t val, char *buf) {
+    char tmp[16];
+    int i = 0, j = 0;
+    if (!val) {
+        buf[0] = '0';
+        buf[1] = 0;
+        return;
+    }
+    while (val && i < (int)sizeof(tmp)) {
+        tmp[i++] = '0' + (val % 10);
+        val /= 10;
+    }
+    while (i)
+        buf[j++] = tmp[--i];
+    buf[j] = 0;
+}
+
 // --- THREAD START HELPERS ---
 
 // Entry trampoline for newly created threads. The scheduler initially
@@ -191,10 +209,18 @@ void schedule(void) {
     } while (current_cpu[cpu] != start);
 
     if (!found) {
-        for (;;)
-            __asm__ volatile("cli; hlt");
+        prev->state = THREAD_RUNNING;
+        serial_puts("[sched] idle\n");
+        __asm__ volatile("sti; hlt");
+        return;
     }
     current_cpu[cpu]->state = THREAD_RUNNING;
+    char buf[32];
+    serial_puts("[sched] switch ");
+    utoa_dec(prev->id, buf); serial_puts(buf);
+    serial_puts(" -> ");
+    utoa_dec(current_cpu[cpu]->id, buf); serial_puts(buf);
+    serial_puts("\n");
     context_switch(&prev->rsp, current_cpu[cpu]->rsp);
 }
 
