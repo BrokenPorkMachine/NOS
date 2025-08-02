@@ -281,7 +281,8 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_READ;
     msg.arg1 = stream->handle;
-    msg.arg2 = len;
+    msg.arg2 = stream->pos;
+    msg.len  = len;
     ipc_send(&fs_queue, self_id(), &msg);
     ipc_receive(&fs_queue, self_id(), &reply);
     if (reply.arg1 != 0)
@@ -298,7 +299,7 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_WRITE;
     msg.arg1 = stream->handle;
-    msg.arg2 = len;
+    msg.arg2 = stream->pos;
     memcpy(msg.data, ptr, len);
     msg.len = len;
     ipc_send(&fs_queue, self_id(), &msg);
@@ -332,6 +333,30 @@ int rename(const char *old, const char *new) {
     ipc_send(&fs_queue, self_id(), &msg);
     ipc_receive(&fs_queue, self_id(), &reply);
     return (int)reply.arg1;
+}
+
+long ftell(FILE *stream) {
+    if (!stream)
+        return -1;
+    return (long)stream->pos;
+}
+
+int fseek(FILE *stream, long offset, int whence) {
+    if (!stream)
+        return -1;
+    long base = 0;
+    if (whence == SEEK_SET) {
+        base = 0;
+    } else if (whence == SEEK_CUR) {
+        base = (long)stream->pos;
+    } else {
+        return -1; // SEEK_END not supported
+    }
+    long newpos = base + offset;
+    if (newpos < 0)
+        return -1;
+    stream->pos = (unsigned int)newpos;
+    return 0;
 }
 
 // --- Math helpers ---

@@ -33,15 +33,14 @@ void nitrfs_server(ipc_queue_t *q, uint32_t self_id) {
             break;
         case NITRFS_MSG_WRITE:
             handle = msg.arg1;
-            ret = nitrfs_write(&fs, handle, 0, msg.data, msg.arg2);
+            ret = nitrfs_write(&fs, handle, msg.arg2, msg.data, msg.len);
             reply.arg1 = ret; // 0 = ok
             break;
         case NITRFS_MSG_READ:
             handle = msg.arg1;
-            ret = nitrfs_read(&fs, handle, 0, reply.data, msg.arg2);
+            ret = nitrfs_read(&fs, handle, msg.arg2, reply.data, msg.len);
             reply.arg1 = ret; // 0 = ok
-            reply.arg2 = msg.arg2;
-            reply.len  = (ret == 0) ? msg.arg2 : 0;
+            reply.len  = (ret == 0) ? msg.len : 0;
             break;
         case NITRFS_MSG_DELETE:
             handle = msg.arg1;

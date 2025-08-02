@@ -6,8 +6,8 @@
 // NITRFS IPC message types (match these in your shell/server code)
 enum {
     NITRFS_MSG_CREATE = 1,   // Create file (msg.data=name, arg1=capacity, arg2=perm)
-    NITRFS_MSG_WRITE,        // Write file  (arg1=handle, arg2=len, msg.data=buffer)
-    NITRFS_MSG_READ,         // Read file   (arg1=handle, arg2=len)
+    NITRFS_MSG_WRITE,        // Write file  (arg1=handle, arg2=offset, msg.len=len, msg.data=buffer)
+    NITRFS_MSG_READ,         // Read file   (arg1=handle, arg2=offset, msg.len=len)
     NITRFS_MSG_DELETE,       // Delete file (arg1=handle)
     NITRFS_MSG_RENAME,       // Rename file (arg1=handle, msg.data=new name)
     NITRFS_MSG_LIST,         // List files  (no args)

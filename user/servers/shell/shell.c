@@ -179,8 +179,8 @@ static void cmd_cat(ipc_queue_t *q, uint32_t self_id, const char *name) {
     int h = find_handle(q, self_id, name);
     if (h < 0) { puts_out("not found\n"); return; }
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_READ; msg.arg1 = h; msg.arg2 = IPC_MSG_DATA_MAX;
-    msg.len = 0;
+    msg.type = NITRFS_MSG_READ; msg.arg1 = h; msg.arg2 = 0;
+    msg.len = IPC_MSG_DATA_MAX;
     ipc_send(q, self_id, &msg);
     ipc_receive(q, self_id, &reply);
     if (reply.arg1 != 0) { puts_out("read error\n"); return; }
@@ -210,7 +210,7 @@ static void cmd_write(ipc_queue_t *q, uint32_t self_id, const char *name, const 
     ipc_message_t msg = {0}, reply = {0};
     size_t len = strlen(data);
     if (len > IPC_MSG_DATA_MAX) len = IPC_MSG_DATA_MAX;
-    msg.type = NITRFS_MSG_WRITE; msg.arg1 = h; msg.arg2 = len;
+    msg.type = NITRFS_MSG_WRITE; msg.arg1 = h; msg.arg2 = 0;
     memcpy(msg.data, data, len); msg.len = len;
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     puts_out(reply.arg1 == 0 ? "ok\n" : "error\n");

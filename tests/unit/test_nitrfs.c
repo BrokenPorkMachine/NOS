@@ -21,6 +21,14 @@ int main(void) {
     nitrfs_compute_crc(&fs, h);
     assert(nitrfs_verify(&fs, h) == 0);
 
+    /* Offset write/read */
+    assert(nitrfs_write(&fs, h, 2, "xy", 2) == 0);
+    assert(nitrfs_read(&fs, h, 1, buf, 3) == 0);
+    buf[3] = '\0';
+    assert(strcmp(buf, "ixy") == 0);
+    nitrfs_compute_crc(&fs, h);
+    assert(nitrfs_verify(&fs, h) == 0);
+
     /* ACL tests */
     assert(nitrfs_acl_add(&fs, h, 1, NITRFS_PERM_READ) == 0);
     assert(nitrfs_acl_check(&fs, h, 1, NITRFS_PERM_READ) == 1);
