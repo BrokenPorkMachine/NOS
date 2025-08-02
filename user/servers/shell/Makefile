@@ -6,7 +6,7 @@ OBJS    = shell.o ../../../kernel/IPC/ipc.o ../../libc/libc.o ../nitrfs/nitrfs.o
 all: shell.bin
 
 shell.o: shell.c ../../../kernel/IPC/ipc.h ../nitrfs/nitrfs.h
-	$(CC) $(CFLAGS) -I../../../kernel/IPC -I../../libc -c shell.c -o shell.o
+	$(CC) $(CFLAGS) -I../../../kernel/IPC -I../../libc -I../pkg -I../update -c shell.c -o shell.o
 
 shell.bin: $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) -o shell.bin
