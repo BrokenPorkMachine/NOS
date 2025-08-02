@@ -217,13 +217,18 @@ void kernel_main(bootinfo_t *bootinfo) {
         log_err("bootinfo size mismatch");
         for(;;) __asm__("hlt");
     }
+    if (bootinfo->magic != BOOTINFO_MAGIC_UEFI &&
+        bootinfo->magic != BOOTINFO_MAGIC_MB2) {
+        log_err("bootinfo magic mismatch");
+        for(;;) __asm__("hlt");
+    }
     if (!bootinfo->framebuffer) log_line("No framebuffer!");
     if (!bootinfo->mmap) log_line("No mmap!");
-    if (bootinfo && bootinfo->mmap_entries > 128) {
+    if (bootinfo && bootinfo->mmap_entries > BOOTINFO_MAX_MMAP) {
         log_err("BUG: mmap_entries too high, halting.");
         for(;;) __asm__("hlt");
     }
-    if (bootinfo && bootinfo->mmap_entries >= BOOTINFO_MAX_MMAP)
+    if (bootinfo && bootinfo->mmap_entries == BOOTINFO_MAX_MMAP)
         log_warn("Warning: suspiciously large mmap_entries");
     if (bootinfo && bootinfo->cpu_count > BOOTINFO_MAX_CPUS) {
         log_err("BUG: cpu_count too high, halting.");
