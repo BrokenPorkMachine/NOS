@@ -122,6 +122,7 @@ static void print_bootinfo(const bootinfo_t *bi) {
     utoa(bi->mmap_entries, buf, 10); log_line("[boot] mmap entries:"); log_line(buf);
     ptoa((uint64_t)bi->framebuffer, buf); log_line("[boot] framebuffer ptr:"); log_line(buf);
     utoa(sizeof(bootinfo_memory_t), buf, 10); log_line("[boot] bootinfo_memory_t size:"); log_line(buf);
+    ptoa((uint64_t)bi->kernel_entry, buf); log_line("[boot] kernel entry:"); log_line(buf);
     if (bi->magic == BOOTINFO_MAGIC_UEFI) log_good("[boot] UEFI detected.");
     else if (bi->magic == BOOTINFO_MAGIC_MB2) log_good("[boot] Multiboot2 detected.");
     else log_warn("[boot] Unknown boot magic!");

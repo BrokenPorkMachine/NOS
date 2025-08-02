@@ -206,8 +206,13 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     UINTN desc_count = mmap_size / desc_size;
     // Reserve extra space for final allocations made before ExitBootServices
-    // reserve extra entries for allocations between first and final map
+    // but clamp to BOOTINFO_MAX_MMAP so the kernel never sees an overly
+    // large map and halts.
+    if (desc_count > BOOTINFO_MAX_MMAP)
+        desc_count = BOOTINFO_MAX_MMAP;
     UINTN reserved_entries = desc_count + 64;
+    if (reserved_entries > BOOTINFO_MAX_MMAP)
+        reserved_entries = BOOTINFO_MAX_MMAP;
 
     bootinfo_memory_t *mmap = NULL;
     UINTN mmap_pages = (reserved_entries * sizeof(bootinfo_memory_t) + 4095) / 4096;
@@ -222,7 +227,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     memset(mmap, 0, reserved_entries * sizeof(bootinfo_memory_t));
 
     UINTN mmap_count = 0;
-    for (UINT8 *p = (UINT8*)efi_mmap; p < (UINT8*)efi_mmap + mmap_size; p += desc_size) {
+    for (UINT8 *p = (UINT8*)efi_mmap; p < (UINT8*)efi_mmap + mmap_size &&
+                       mmap_count < reserved_entries; p += desc_size) {
         EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR*)p;
         mmap[mmap_count].addr = d->PhysicalStart;
         mmap[mmap_count].len  = d->NumberOfPages * 4096;
@@ -301,6 +307,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     int elf_status = load_elf64_kernel(KernelFile, ConOut, BS, &kernel_entry);
     KernelFile->Close(KernelFile);
     if (elf_status != 0 || !kernel_entry) { ConOut->OutputString(ConOut, L"Kernel load failed.\r\n"); for(;;); }
+    info->kernel_entry = (void *)(UINTN)kernel_entry;
+    print_hex(ConOut, L"kernel entry: ", (UINTN)kernel_entry);
 
     // --- Allocate a stack for the kernel ---
     EFI_PHYSICAL_ADDRESS stack_base = 0xFFFFFFFF;
@@ -348,17 +356,17 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     // Copy final memory map to bootinfo (it may have changed)
     UINTN desc_count_final = mmap_size / desc_size;
-    if (desc_count_final <= reserved_entries) {
-        memset(info->mmap, 0, desc_count_final * sizeof(bootinfo_memory_t));
-        for (UINTN i = 0; i < desc_count_final; ++i) {
-            EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)efi_mmap + i * desc_size);
-            info->mmap[i].addr = d->PhysicalStart;
-            info->mmap[i].len  = d->NumberOfPages * 4096;
-            info->mmap[i].type = d->Type;
-            info->mmap[i].reserved = 0;
-        }
-        info->mmap_entries = (uint32_t)desc_count_final;
+    if (desc_count_final > reserved_entries)
+        desc_count_final = reserved_entries;
+    memset(info->mmap, 0, desc_count_final * sizeof(bootinfo_memory_t));
+    for (UINTN i = 0; i < desc_count_final; ++i) {
+        EFI_MEMORY_DESCRIPTOR *d = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)efi_mmap + i * desc_size);
+        info->mmap[i].addr = d->PhysicalStart;
+        info->mmap[i].len  = d->NumberOfPages * 4096;
+        info->mmap[i].type = d->Type;
+        info->mmap[i].reserved = 0;
     }
+    info->mmap_entries = (uint32_t)desc_count_final;
 
     g_info = info;
     g_entry = entry_fn;
