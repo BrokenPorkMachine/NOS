@@ -40,13 +40,32 @@ static void *memset(void *d, int v, unsigned n) {
     unsigned char *p = d; for (unsigned i = 0; i < n; ++i) p[i] = v; return d;
 }
 
+// --- Validate ACPI RSDP structure ---
+static int rsdp_valid(const VOID *rsdp) {
+    const unsigned char *p = (const unsigned char *)rsdp;
+    if (!p) return 0;
+    if (memcmp(p, "RSD PTR ", 8) != 0) return 0;
+    unsigned sum = 0;
+    for (int i = 0; i < 20; ++i) sum += p[i];
+    if ((sum & 0xFF) != 0) return 0;
+    if (p[15] >= 2) {
+        unsigned len = *(const uint32_t *)(p + 20);
+        sum = 0;
+        for (unsigned i = 0; i < len; ++i) sum += p[i];
+        if ((sum & 0xFF) != 0) return 0;
+    }
+    return 1;
+}
+
 // --- Find ACPI RSDP from configuration tables ---
 static VOID *find_acpi_rsdp(struct EFI_SYSTEM_TABLE *SystemTable) {
     EFI_CONFIGURATION_TABLE *ct = (EFI_CONFIGURATION_TABLE *)SystemTable->ConfigurationTable;
     for (UINTN i = 0; i < SystemTable->NumberOfTableEntries; ++i) {
         if (!memcmp(&ct[i].VendorGuid, &gEfiAcpi20TableGuid, sizeof(EFI_GUID)) ||
             !memcmp(&ct[i].VendorGuid, &gEfiAcpi10TableGuid, sizeof(EFI_GUID))) {
-            return ct[i].VendorTable;
+            VOID *rsdp = ct[i].VendorTable;
+            if (rsdp_valid(rsdp))
+                return rsdp;
         }
     }
     return NULL;
