@@ -98,6 +98,18 @@ static const char *efi_memtype(uint32_t t) {
     }
 }
 
+// Calculate total usable RAM (ConventionalMemory) from boot memory map
+static uint64_t calc_total_ram(const bootinfo_t *bi) {
+    if (!bi || !bi->mmap) return 0;
+    uint64_t total = 0;
+    for (uint32_t i = 0; i < bi->mmap_entries; ++i) {
+        const bootinfo_memory_t *m = &bi->mmap[i];
+        if (m->type == 7) // EfiConventionalMemory
+            total += m->len;
+    }
+    return total;
+}
+
 // --- Print framebuffer pixels (demo text, color bar) ---
 static void fb_print_text(const bootinfo_framebuffer_t *fb, const char *s) {
     if (!fb || !fb->address || !s) return;
@@ -129,6 +141,9 @@ static void print_bootinfo(const bootinfo_t *bi) {
 
     if (bi->bootloader_name) { log_line("[boot] bootloader:"); log_line(bi->bootloader_name); }
     if (bi->cmdline) { log_line("[boot] cmdline:"); log_line(bi->cmdline); }
+
+    uint64_t ram_bytes = calc_total_ram(bi);
+    utoa(ram_bytes >> 20, buf, 10); log_line("[boot] Total RAM (MiB):"); log_line(buf);
 
     uint32_t count = bi->mmap_entries;
     log_info("[boot] RAM regions:");
