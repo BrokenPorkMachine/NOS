@@ -11,7 +11,6 @@ LDFLAGS=/entry:efi_main \
         /subsystem:efi_application \
         /nodefaultlib \
        /base:0 \
-        /align:32 \
         /filealign:32 \
         /out:NitrOBoot.efi
 
