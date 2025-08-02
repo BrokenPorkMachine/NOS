@@ -9,6 +9,12 @@
 // Port used for FTP traffic on the loopback stack
 #define FTP_PORT 3
 
+static void trim_newline(char *s) {
+    char *p = s + strlen(s);
+    while (p > s && (p[-1] == '\n' || p[-1] == '\r'))
+        *--p = '\0';
+}
+
 static int find_handle(ipc_queue_t *q, uint32_t id, const char *name) {
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_LIST;
@@ -33,6 +39,7 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
         int n = net_socket_recv(sock, buf, sizeof(buf) - 1);
         if (n > 0) {
             buf[n] = '\0';
+            trim_newline(buf);
             if (!strncmp(buf, "QUIT", 4)) {
                 const char bye[] = "221 Bye\r\n";
                 net_socket_send(sock, bye, strlen(bye));
