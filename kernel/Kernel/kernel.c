@@ -190,6 +190,7 @@ void kernel_main(bootinfo_t *bootinfo) {
     }
     if (bootinfo && bootinfo->mmap_entries >= BOOTINFO_MAX_MMAP)
         log_warn("Warning: suspiciously large mmap_entries");
+    acpi_init(bootinfo);
     if (bootinfo && bootinfo->cpu_count == 0) {
         bootinfo->cpu_count = cpu_detect_logical_count();
         bootinfo->cpus[0].processor_id = 0;
@@ -197,7 +198,6 @@ void kernel_main(bootinfo_t *bootinfo) {
         bootinfo->cpus[0].flags = 1;
     }
     print_bootinfo(bootinfo);
-    acpi_init(bootinfo);
     log_line("[Stage 2] Init memory management");
     pmm_init(bootinfo);
     cow_init(pmm_total_frames());
