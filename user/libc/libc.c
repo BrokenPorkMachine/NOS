@@ -1,6 +1,22 @@
 #include "libc.h"
 #include <stdint.h>
 #include "../../kernel/Kernel/syscall.h"
+#include "../../kernel/Task/thread.h"
+#include "../../kernel/IPC/ipc.h"
+#include "../servers/nitrfs/server.h"
+#include "../servers/nitrfs/nitrfs.h"
+
+// Weak fallbacks so unit tests can link without full kernel.
+__attribute__((weak)) ipc_queue_t fs_queue;
+__attribute__((weak)) thread_t *current_cpu[MAX_CPUS];
+__attribute__((weak)) uint32_t smp_cpu_index(void) { return 0; }
+__attribute__((weak)) int ipc_send(ipc_queue_t *q, uint32_t s, ipc_message_t *m) { (void)q; (void)s; (void)m; return -1; }
+__attribute__((weak)) int ipc_receive(ipc_queue_t *q, uint32_t r, ipc_message_t *m) { (void)q; (void)r; (void)m; return -1; }
+
+static inline uint32_t self_id(void) {
+    thread_t *t = current_cpu[smp_cpu_index()];
+    return t ? (uint32_t)t->id : 0;
+}
 
 void *memset(void *s, int c, size_t n) {
     unsigned char *p = (unsigned char *)s;
@@ -80,6 +96,33 @@ char *strchr(const char *s, int c) {
         if (*s == (char)c)
             return (char *)s;
         s++;
+    }
+    return NULL;
+}
+
+char *strcpy(char *dest, const char *src) {
+    char *d = dest;
+    while ((*d++ = *src++)) {
+        /* copy including null terminator */
+    }
+    return dest;
+}
+
+char *strcat(char *dest, const char *src) {
+    char *d = dest + strlen(dest);
+    while ((*d++ = *src++)) {
+        /* append */
+    }
+    return dest;
+}
+
+char *strstr(const char *haystack, const char *needle) {
+    if (!*needle)
+        return (char *)haystack;
+    size_t nlen = strlen(needle);
+    for (; *haystack; haystack++) {
+        if (*haystack == *needle && strncmp(haystack, needle, nlen) == 0)
+            return (char *)haystack;
     }
     return NULL;
 }
@@ -188,6 +231,120 @@ char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
     strncpy(dest, src, n);
     dest[n] = '\0';
     return dest;
+}
+
+// --- File I/O using NitrFS IPC ---
+static int fs_find_handle(const char *name) {
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NITRFS_MSG_LIST;
+    ipc_send(&fs_queue, self_id(), &msg);
+    ipc_receive(&fs_queue, self_id(), &reply);
+    for (int i = 0; i < (int)reply.arg1; i++) {
+        char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
+        if (strncmp(n, name, NITRFS_NAME_LEN) == 0)
+            return i;
+    }
+    return -1;
+}
+
+FILE *fopen(const char *path, const char *mode) {
+    int handle = fs_find_handle(path);
+    if (handle < 0 && mode && strchr(mode, 'w')) {
+        ipc_message_t msg = {0}, reply = {0};
+        msg.type = NITRFS_MSG_CREATE;
+        msg.arg1 = IPC_MSG_DATA_MAX;
+        msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
+        size_t len = strlen(path);
+        if (len > IPC_MSG_DATA_MAX - 1)
+            len = IPC_MSG_DATA_MAX - 1;
+        memcpy(msg.data, path, len);
+        msg.data[len] = '\0';
+        msg.len = len;
+        ipc_send(&fs_queue, self_id(), &msg);
+        ipc_receive(&fs_queue, self_id(), &reply);
+        handle = reply.arg1;
+    }
+    if (handle < 0)
+        return NULL;
+    FILE *f = malloc(sizeof(FILE));
+    if (!f)
+        return NULL;
+    f->handle = handle;
+    f->pos = 0;
+    return f;
+}
+
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+    size_t len = size * nmemb;
+    if (len > IPC_MSG_DATA_MAX)
+        len = IPC_MSG_DATA_MAX;
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NITRFS_MSG_READ;
+    msg.arg1 = stream->handle;
+    msg.arg2 = len;
+    ipc_send(&fs_queue, self_id(), &msg);
+    ipc_receive(&fs_queue, self_id(), &reply);
+    if (reply.arg1 != 0)
+        return 0;
+    memcpy(ptr, reply.data, reply.len);
+    stream->pos += reply.len;
+    return reply.len / size;
+}
+
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+    size_t len = size * nmemb;
+    if (len > IPC_MSG_DATA_MAX)
+        len = IPC_MSG_DATA_MAX;
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NITRFS_MSG_WRITE;
+    msg.arg1 = stream->handle;
+    msg.arg2 = len;
+    memcpy(msg.data, ptr, len);
+    msg.len = len;
+    ipc_send(&fs_queue, self_id(), &msg);
+    ipc_receive(&fs_queue, self_id(), &reply);
+    if (reply.arg1 != 0)
+        return 0;
+    stream->pos += len;
+    return len / size;
+}
+
+int fclose(FILE *stream) {
+    if (!stream)
+        return -1;
+    free(stream);
+    return 0;
+}
+
+int rename(const char *old, const char *new) {
+    int handle = fs_find_handle(old);
+    if (handle < 0)
+        return -1;
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NITRFS_MSG_RENAME;
+    msg.arg1 = handle;
+    size_t len = strlen(new);
+    if (len > IPC_MSG_DATA_MAX - 1)
+        len = IPC_MSG_DATA_MAX - 1;
+    memcpy(msg.data, new, len);
+    msg.data[len] = '\0';
+    msg.len = len;
+    ipc_send(&fs_queue, self_id(), &msg);
+    ipc_receive(&fs_queue, self_id(), &reply);
+    return (int)reply.arg1;
+}
+
+// --- Math helpers ---
+int abs(int x) { return x < 0 ? -x : x; }
+long labs(long x) { return x < 0 ? -x : x; }
+long long llabs(long long x) { return x < 0 ? -x : x; }
+double sqrt(double x) {
+    if (x <= 0)
+        return 0;
+    double r = x;
+    for (int i = 0; i < 20; ++i)
+        r = 0.5 * (r + x / r);
+    return r;
 }
 
 // --- System call wrappers ---
