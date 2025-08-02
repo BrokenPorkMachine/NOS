@@ -85,6 +85,7 @@ static void ptoa(uint64_t val, char *buf) {
 
 static const char *efi_memtype(uint32_t t) {
     switch (t) {
+        case 0: return "Reserved";
         case 1: return "LoaderCode";
         case 2: return "LoaderData";
         case 3: return "BS_Code";
@@ -92,8 +93,13 @@ static const char *efi_memtype(uint32_t t) {
         case 5: return "RT_Code";
         case 6: return "RT_Data";
         case 7: return "ConvRAM";
+        case 8: return "Unusable";
         case 9: return "ACPI_Rclm";
         case 10: return "ACPI_NVS";
+        case 11: return "MMIO";
+        case 12: return "MMIOPort";
+        case 13: return "PalCode";
+        case 14: return "Persistent";
         default: return "?";
     }
 }

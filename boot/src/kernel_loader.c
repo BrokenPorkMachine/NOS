@@ -14,10 +14,11 @@ static void print_hex(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut, const CHAR16 *pre
     CHAR16 buf[64];
     int idx = 0;
     if (prefix) while (prefix[idx]) { buf[idx] = prefix[idx]; idx++; }
-    buf[idx] = 0;
     uefi_hex16(buf + idx, val);
-    for (int i = 0; buf[i]; ++i);
-    buf[idx + 18] = L'\r'; buf[idx + 19] = L'\n'; buf[idx + 20] = 0;
+    idx += 18; // length of hexadecimal string written by uefi_hex16
+    buf[idx++] = L'\r';
+    buf[idx++] = L'\n';
+    buf[idx] = 0;
     ConOut->OutputString(ConOut, buf);
 }
 
