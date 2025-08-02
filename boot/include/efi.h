@@ -353,6 +353,10 @@ typedef struct EFI_LOADED_IMAGE_PROTOCOL {
     EFI_HANDLE ParentHandle;
     struct EFI_SYSTEM_TABLE *SystemTable;
     EFI_HANDLE DeviceHandle;
+    VOID      *FilePath;
+    VOID      *Reserved;
+    UINT32     LoadOptionsSize;
+    VOID      *LoadOptions;
 } EFI_LOADED_IMAGE_PROTOCOL;
 
 // ====================
