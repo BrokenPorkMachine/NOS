@@ -33,8 +33,8 @@ The filesystem server understands the following request types:
 | Type              | Description                          |
 | ----------------- | ------------------------------------ |
 | `NITRFS_MSG_CREATE` | Create a new file with a given size and permissions |
-| `NITRFS_MSG_WRITE`  | Write data to an open file           |
-| `NITRFS_MSG_READ`   | Read data from an open file          |
+| `NITRFS_MSG_WRITE`  | Write data to an open file (arg1=handle, arg2=offset, msg.len=bytes, msg.data=payload) |
+| `NITRFS_MSG_READ`   | Read data from an open file  (arg1=handle, arg2=offset, msg.len=bytes) |
 | `NITRFS_MSG_DELETE` | Delete a file by handle              |
 | `NITRFS_MSG_RENAME` | Rename an existing file              |
 | `NITRFS_MSG_LIST`   | List all file names                  |

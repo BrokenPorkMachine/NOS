@@ -20,11 +20,17 @@ typedef struct {
     unsigned int pos;
 } FILE;
 
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
 FILE *fopen(const char *path, const char *mode);
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
 int fclose(FILE *stream);
 int rename(const char *old, const char *new);
+long ftell(FILE *stream);
+int fseek(FILE *stream, long offset, int whence);
 
 int abs(int x);
 long labs(long x);
