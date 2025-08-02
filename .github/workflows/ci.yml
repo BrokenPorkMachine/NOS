@@ -1,0 +1,16 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y make gcc nasm qemu-system-x86 mtools dosfstools ovmf
+    - name: Run unit tests
+      run: make -C tests
+    - name: Run integration tests
+      run: python3 tests/integration/test_qemu.py
