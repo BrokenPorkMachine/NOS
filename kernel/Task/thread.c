@@ -5,6 +5,8 @@
 #include "../../user/servers/vnc/vnc.h"
 #include "../../user/servers/ssh/ssh.h"
 #include "../../user/servers/ftp/ftp.h"
+#include "../../user/servers/pkg/server.h"
+#include "../../user/servers/update/server.h"
 #include "../../user/servers/login/login.h"
 #include "../../user/servers/init/init.h"
 #include "../../user/libc/libc.h"
@@ -20,6 +22,8 @@ static int next_id = 1;
 static thread_t main_thread; // represents kernel_main for initial switch
 
 ipc_queue_t fs_queue;
+ipc_queue_t pkg_queue;
+ipc_queue_t upd_queue;
 
 // --- THREAD START HELPERS ---
 
@@ -35,7 +39,9 @@ static void thread_entry(void (*f)(void)) {
 
 static void thread_fs_func(void)   { thread_t *c = current_cpu[smp_cpu_index()]; nitrfs_server(&fs_queue, c->id); }
 static void thread_init_func(void) { thread_t *c = current_cpu[smp_cpu_index()]; init_main(&fs_queue, c->id); }
-static void thread_shell_func(void){ thread_t *c = current_cpu[smp_cpu_index()]; shell_main(&fs_queue, c->id); }
+static void thread_shell_func(void){ thread_t *c = current_cpu[smp_cpu_index()]; shell_main(&fs_queue, &pkg_queue, &upd_queue, c->id); }
+static void thread_pkg_func(void)   { thread_t *c = current_cpu[smp_cpu_index()]; pkg_server(&pkg_queue, c->id); }
+static void thread_update_func(void){ thread_t *c = current_cpu[smp_cpu_index()]; update_server(&upd_queue, &pkg_queue, c->id); }
 static void thread_vnc_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; vnc_server(NULL, c->id); }
 static void thread_ssh_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; ssh_server(NULL, c->id); }
 static void thread_ftp_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; ftp_server(&fs_queue, c->id); }
@@ -113,20 +119,37 @@ void thread_yield(void) {
 
 void threads_init(void) {
     ipc_init(&fs_queue);
+    ipc_init(&pkg_queue);
+    ipc_init(&upd_queue);
     thread_t *t;
 
     t = thread_create(thread_fs_func);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
     t = thread_create(thread_init_func);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
     t = thread_create(thread_login_func);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
+    t = thread_create(thread_pkg_func);
+    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
+    t = thread_create(thread_update_func);
+    ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
     t = thread_create(thread_shell_func);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
     t = thread_create(thread_vnc_func);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
     t = thread_create(thread_ssh_func);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
     t = thread_create(thread_ftp_func);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
 

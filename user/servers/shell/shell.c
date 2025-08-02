@@ -1,5 +1,7 @@
 #include "../../../kernel/IPC/ipc.h"
 #include "../../libc/libc.h"
+#include "../pkg/pkg.h"
+#include "../update/update.h"
 #include "../nitrfs/nitrfs.h"
 #include "../nitrfs/server.h"
 #include "../login/login.h"
@@ -294,6 +296,50 @@ static void cmd_mkdir(ipc_queue_t *q, uint32_t self_id, const char *name) {
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     puts_out(reply.arg1 == 0 ? "created\n" : "error\n");
 }
+static void cmd_install_pkg(ipc_queue_t *q, uint32_t self_id, const char *name) {
+    ipc_message_t msg = {0}, reply = {0};
+    size_t len = strlen(name);
+    if (len > PKG_NAME_MAX - 1) len = PKG_NAME_MAX - 1;
+    msg.type = PKG_MSG_INSTALL;
+    memcpy(msg.data, name, len);
+    msg.len = len;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    puts_out(reply.arg1 == 0 ? "installed\n" : "error\n");
+}
+static void cmd_uninstall_pkg(ipc_queue_t *q, uint32_t self_id, const char *name) {
+    ipc_message_t msg = {0}, reply = {0};
+    size_t len = strlen(name);
+    if (len > PKG_NAME_MAX - 1) len = PKG_NAME_MAX - 1;
+    msg.type = PKG_MSG_UNINSTALL;
+    memcpy(msg.data, name, len);
+    msg.len = len;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    puts_out(reply.arg1 == 0 ? "removed\n" : "error\n");
+}
+static void cmd_pkg_list(ipc_queue_t *q, uint32_t self_id) {
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = PKG_MSG_LIST;
+    msg.len = 0;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    for (int i = 0; i < (int)reply.arg1; ++i) {
+        char *n = (char *)reply.data + i * PKG_NAME_MAX;
+        puts_out(n);
+        putc_out('\n');
+    }
+}
+static void cmd_update(ipc_queue_t *q, uint32_t self_id, const char *target) {
+    ipc_message_t msg = {0}, reply = {0};
+    if (!strcmp(target, "kernel")) msg.type = UPDATE_MSG_KERNEL;
+    else if (!strcmp(target, "userland")) msg.type = UPDATE_MSG_USERLAND;
+    else { puts_out("unknown target\n"); return; }
+    msg.len = 0;
+    ipc_send(q, self_id, &msg);
+    ipc_receive(q, self_id, &reply);
+    puts_out(reply.arg1 == 0 ? "updated\n" : "error\n");
+}
 static void cmd_help(void) {
     puts_out("Available commands:\n");
     puts_out("  ls        - list files\n");
@@ -304,13 +350,17 @@ static void cmd_help(void) {
     puts_out("  mv OLD NEW - rename file\n");
     puts_out("  crc FILE  - compute CRC32\n");
     puts_out("  verify FILE - verify CRC32\n");
+    puts_out("  install PKG - install package\n");
+    puts_out("  uninstall PKG - remove package\n");
+    puts_out("  pkglist    - list installed packages\n");
+    puts_out("  update TARGET - update kernel or userland\n");
     puts_out("  cd DIR    - change directory\n");
     puts_out("  mkdir DIR - make directory\n");
     puts_out("  help      - show this message\n");
 }
 
 // --- Shell main loop ---
-void shell_main(ipc_queue_t *q, uint32_t self_id) {
+void shell_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_t self_id) {
     while(!login_done)
         thread_yield();
     vga_clear_screen();
@@ -324,25 +374,33 @@ void shell_main(ipc_queue_t *q, uint32_t self_id) {
         int argc = tokenize(line, argv, 4);
         if (argc == 0) continue;
         if (!strcmp(argv[0], "ls") || !strcmp(argv[0], "dir")) {
-            cmd_ls(q, self_id);
+            cmd_ls(fs_q, self_id);
         } else if (!strcmp(argv[0], "cat") && argc > 1) {
-            cmd_cat(q, self_id, argv[1]);
+            cmd_cat(fs_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "create") && argc > 1) {
-            cmd_create(q, self_id, argv[1]);
+            cmd_create(fs_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "write") && argc > 2) {
-            cmd_write(q, self_id, argv[1], argv[2]);
+            cmd_write(fs_q, self_id, argv[1], argv[2]);
         } else if (!strcmp(argv[0], "rm") && argc > 1) {
-            cmd_rm(q, self_id, argv[1]);
+            cmd_rm(fs_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "mv") && argc > 2) {
-            cmd_mv(q, self_id, argv[1], argv[2]);
+            cmd_mv(fs_q, self_id, argv[1], argv[2]);
         } else if (!strcmp(argv[0], "crc") && argc > 1) {
-            cmd_crc(q, self_id, argv[1]);
+            cmd_crc(fs_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "verify") && argc > 1) {
-            cmd_verify(q, self_id, argv[1]);
+            cmd_verify(fs_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "cd") && argc > 1) {
-            cmd_cd(q, self_id, argv[1]);
+            cmd_cd(fs_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "mkdir") && argc > 1) {
-            cmd_mkdir(q, self_id, argv[1]);
+            cmd_mkdir(fs_q, self_id, argv[1]);
+        } else if (!strcmp(argv[0], "install") && argc > 1) {
+            cmd_install_pkg(pkg_q, self_id, argv[1]);
+        } else if (!strcmp(argv[0], "uninstall") && argc > 1) {
+            cmd_uninstall_pkg(pkg_q, self_id, argv[1]);
+        } else if (!strcmp(argv[0], "pkglist")) {
+            cmd_pkg_list(pkg_q, self_id);
+        } else if (!strcmp(argv[0], "update") && argc > 1) {
+            cmd_update(upd_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "help")) {
             cmd_help();
         } else {
