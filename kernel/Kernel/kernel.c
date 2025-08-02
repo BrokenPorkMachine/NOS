@@ -16,6 +16,7 @@
 #include "../VM/numa.h"
 #include "../arch/CPU/cpu.h"
 #include "../arch/ACPI/acpi.h"
+#include "../arch/CPU/smp.h"
 
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
@@ -216,6 +217,7 @@ void kernel_main(bootinfo_t *bootinfo) {
     net_init();
     log_good("[net] Network stack ready");
 
+    smp_bootstrap(bootinfo);
     log_line("[Stage 4] Launch servers");
     threads_init();
 

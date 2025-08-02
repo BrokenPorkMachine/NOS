@@ -92,3 +92,13 @@ isr_page_fault_stub:
     add rsp, 8          ; pop address
     pop rax
     iretq
+
+global isr_ipi_stub
+isr_ipi_stub:
+    push rbp
+    mov rbp, rsp
+    cli
+    extern isr_ipi_handler
+    call isr_ipi_handler
+    leave
+    iretq

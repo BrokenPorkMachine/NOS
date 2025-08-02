@@ -12,6 +12,7 @@ extern void isr_syscall_stub(void); // Syscall handler (int 0x80)
 extern void isr_keyboard_stub(void); // Keyboard IRQ1 handler
 extern void isr_mouse_stub(void);    // Mouse IRQ12 handler
 extern void isr_page_fault_stub(void); // Page fault handler
+extern void isr_ipi_stub(void);      // IPI handler
 
 void set_idt_entry(int vec, void* isr, uint8_t type_attr) {
     uintptr_t addr = (uintptr_t)isr;
@@ -36,6 +37,7 @@ void idt_install(void) {
     set_idt_entry(44, isr_mouse_stub, 0x8E);      // IRQ12
     set_idt_entry(14, isr_page_fault_stub, 0x8E); // Page fault
     set_idt_entry(0x80, isr_syscall_stub, 0xEE);  // Ring 3 syscall (DPL=3)
+    set_idt_entry(0xF0, isr_ipi_stub, 0x8E);      // IPI
 
     idtp.limit = sizeof(idt) - 1;
     idtp.base  = (uintptr_t)&idt;
