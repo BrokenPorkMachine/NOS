@@ -10,6 +10,8 @@ int main(void) {
     nitrfs_init(&fs);
     int h = nitrfs_create(&fs, "file.txt", 16, NITRFS_PERM_READ | NITRFS_PERM_WRITE);
     assert(h >= 0);
+    /* duplicate name should fail */
+    assert(nitrfs_create(&fs, "file.txt", 16, NITRFS_PERM_READ) == -1);
     const char *data = "hi";
     assert(nitrfs_write(&fs, h, 0, data, 2) == 0);
     char buf[4];
