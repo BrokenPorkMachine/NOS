@@ -5,6 +5,10 @@ global context_switch
 
 section .text
 context_switch:
+    ; Save current flags and disable interrupts to ensure an atomic switch
+    pushfq
+    cli
+
     ; Save callee-saved registers as per System V AMD64 ABI
     push rbp
     push rbx
@@ -26,5 +30,8 @@ context_switch:
     pop r12
     pop rbx
     pop rbp
+
+    ; Restore saved flags
+    popfq
 
     ret

@@ -81,11 +81,12 @@ thread_t *thread_create(void (*func)(void)) {
     t->stack = malloc(STACK_SIZE);
     if (!t->stack) { free(t); return NULL; }
 
-    // Setup stack for context_switch: r15..rbp, return, argument
+    // Setup stack for context_switch: r15..rbp, rflags, return, argument
     uint64_t *sp = (uint64_t *)(t->stack + STACK_SIZE);
 
     *--sp = (uint64_t)func;         // function argument for thread_entry
     *--sp = (uint64_t)thread_entry; // initial return address
+    *--sp = 0x202;                  // rflags with interrupts enabled
     *--sp = 0; // rbp
     *--sp = 0; // rbx
     *--sp = 0; // r12
