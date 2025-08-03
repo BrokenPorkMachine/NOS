@@ -1,9 +1,9 @@
 #include "ipc.h"
 #include "../../user/libc/libc.h"
 
-// thread_yield can be provided by the threading subsystem. If not present
-// (e.g., in unit tests), it will resolve to NULL and simply not be called.
-__attribute__((weak)) void thread_yield(void);
+// thread_yield can be provided by the threading subsystem. Provide a weak
+// no-op so unit tests link even without the scheduler.
+__attribute__((weak)) void thread_yield(void) {}
 
 /**
  * Initialize an IPC queue for message passing.
@@ -64,8 +64,7 @@ int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
     if (receiver_id >= IPC_MAX_TASKS || !(q->caps[receiver_id] & IPC_CAP_RECV))
         return -2; // unauthorized receiver
     if (q->tail == q->head) {
-        if (thread_yield)
-            thread_yield();
+        thread_yield();
         return -1; // queue empty
     }
     *msg = q->msgs[q->tail];
