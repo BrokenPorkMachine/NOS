@@ -16,11 +16,11 @@ static void utoa_dec(uint32_t val, char *buf) {
 __attribute__((weak)) void serial_puts(const char *s) { (void)s; }
 #endif
 
-// The IPC routines are used both in the kernel and in unit tests.  When the
-// threading subsystem is not linked (as in the tests) we still need a
-// definition of thread_yield().  Provide a weak no-op stub so the code links
-// without the full scheduler.
-__attribute__((weak)) void thread_yield(void) {}
+// The IPC routines are used both in the kernel and in unit tests. When the
+// threading subsystem is absent (e.g. in unit tests) there may be no
+// implementation of thread_yield().  Declare it as a weak symbol so the code
+// links without the scheduler, but only call it when it exists.
+__attribute__((weak)) void thread_yield(void);
 
 /**
  * Initialize an IPC queue for message passing.
@@ -119,7 +119,8 @@ int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
 #ifdef IPC_DEBUG
         serial_puts("[ipc] recv empty\n");
 #endif
-        thread_yield();
+        if (thread_yield)
+            thread_yield();
         return -1; // queue empty
     }
     *msg = q->msgs[q->tail];
