@@ -18,9 +18,10 @@ __attribute__((weak)) void serial_puts(const char *s) { (void)s; }
 
 // The IPC routines are used both in the kernel and in unit tests. When the
 // threading subsystem is absent (e.g. in unit tests) there may be no
-// implementation of thread_yield().  Declare it as a weak symbol so the code
-// links without the scheduler, but only call it when it exists.
-__attribute__((weak)) void thread_yield(void);
+// implementation of thread_yield().  Provide a weak stub so the code links
+// without the scheduler; the real implementation in the kernel will override
+// this definition at link time.
+__attribute__((weak)) void thread_yield(void) {}
 
 /**
  * Initialize an IPC queue for message passing.
