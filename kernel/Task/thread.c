@@ -128,16 +128,26 @@ thread_t *thread_create(void (*func)(void)) {
 // --- THREAD CONTROL ---
 
 void thread_block(thread_t *t) {
+    char buf[16];
+    serial_puts("[thread] block id=");
+    utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
     t->state = THREAD_BLOCKED;
     if (t == current_cpu[smp_cpu_index()])
         schedule();
 }
 
 void thread_unblock(thread_t *t) {
+    char buf[16];
+    serial_puts("[thread] unblock id=");
+    utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
     t->state = THREAD_READY;
 }
 
 void thread_yield(void) {
+    char buf[16];
+    thread_t *cur = current_cpu[smp_cpu_index()];
+    serial_puts("[thread] yield id=");
+    utoa_dec(cur->id, buf); serial_puts(buf); serial_puts("\n");
     schedule();
 }
 
@@ -203,8 +213,14 @@ void schedule(void) {
 
     int found = 0;
     thread_t *start = current_cpu[cpu];
+    char buf[32];
     do {
         current_cpu[cpu] = current_cpu[cpu]->next;
+        serial_puts("[sched] consider id=");
+        utoa_dec(current_cpu[cpu]->id, buf); serial_puts(buf);
+        serial_puts(" state=");
+        utoa_dec(current_cpu[cpu]->state, buf); serial_puts(buf);
+        serial_puts("\n");
         if (current_cpu[cpu]->state == THREAD_READY) { found = 1; break; }
     } while (current_cpu[cpu] != start);
 
@@ -215,7 +231,6 @@ void schedule(void) {
         return;
     }
     current_cpu[cpu]->state = THREAD_RUNNING;
-    char buf[32];
     serial_puts("[sched] switch ");
     utoa_dec(prev->id, buf); serial_puts(buf);
     serial_puts(" -> ");
