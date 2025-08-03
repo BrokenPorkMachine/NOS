@@ -18,6 +18,8 @@ SECTIONS
     /* Data section */
     .data ALIGN(4K) : AT(ADDR(.data)) {
         *(.data*)
+        *(.got*)
+        *(.got.plt)
     }
 
     /* BSS section (no file space taken) */
