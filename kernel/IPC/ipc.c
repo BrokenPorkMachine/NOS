@@ -1,9 +1,8 @@
 #include "ipc.h"
 #include "../../user/libc/libc.h"
+#include "../drivers/IO/serial.h"
 
 // thread_yield can be provided by the threading subsystem. Provide a weak
-// no-op so unit tests link even without the scheduler.
-__attribute__((weak)) void thread_yield(void) {}
 
 /**
  * Initialize an IPC queue for message passing.
@@ -45,6 +44,18 @@ int ipc_send(ipc_queue_t *q, uint32_t sender_id, ipc_message_t *msg) {
     size_t next = (q->head + 1) % IPC_QUEUE_SIZE;
     if (next == q->tail)
         return -1; // queue full
+    serial_puts("[ipc] send from ");
+    {
+        char buf[16];
+        utoa_dec(sender_id, buf); serial_puts(buf);
+        serial_puts(" len=");
+        utoa_dec(msg->len, buf); serial_puts(buf);
+        serial_puts(" head=");
+        utoa_dec(q->head, buf); serial_puts(buf);
+        serial_puts(" tail=");
+        utoa_dec(q->tail, buf); serial_puts(buf);
+        serial_puts("\n");
+    }
     msg->sender = sender_id;
     q->msgs[q->head] = *msg;
     q->head = next;
@@ -68,6 +79,16 @@ int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
         return -1; // queue empty
     }
     *msg = q->msgs[q->tail];
+    serial_puts("[ipc] recv deliver to ");
+    {
+        char buf[16];
+        utoa_dec(receiver_id, buf); serial_puts(buf);
+        serial_puts(" from ");
+        utoa_dec(msg->sender, buf); serial_puts(buf);
+        serial_puts(" idx=");
+        utoa_dec(q->tail, buf); serial_puts(buf);
+        serial_puts("\n");
+    }
     q->tail = (q->tail + 1) % IPC_QUEUE_SIZE;
     return 0;
 }
