@@ -204,14 +204,7 @@ void threads_init(void) {
 }
 
 // --- SCHEDULER: simple round-robin, skips non-ready threads ---
-
-void schedule(void) {
-    int cpu = smp_cpu_index();
-    thread_t *prev = current_cpu[cpu];
-    if (prev->state == THREAD_RUNNING)
-        prev->state = THREAD_READY;
-
-    int found = 0;
+static thread_t *pick_next(int cpu) {
     thread_t *start = current_cpu[cpu];
     char buf[32];
     do {
@@ -221,21 +214,57 @@ void schedule(void) {
         serial_puts(" state=");
         utoa_dec(current_cpu[cpu]->state, buf); serial_puts(buf);
         serial_puts("\n");
-        if (current_cpu[cpu]->state == THREAD_READY) { found = 1; break; }
+        if (current_cpu[cpu]->state == THREAD_READY)
+            return current_cpu[cpu];
     } while (current_cpu[cpu] != start);
+    current_cpu[cpu] = start;
+    return NULL;
+}
 
-    if (!found || current_cpu[cpu] == prev) {
+void schedule(void) {
+    int cpu = smp_cpu_index();
+    thread_t *prev = current_cpu[cpu];
+    if (prev->state == THREAD_RUNNING)
+        prev->state = THREAD_READY;
+
+    thread_t *next = pick_next(cpu);
+    if (!next) {
         prev->state = THREAD_RUNNING;
         serial_puts("[sched] idle\n");
         __asm__ volatile("sti; hlt");
         return;
     }
-    current_cpu[cpu]->state = THREAD_RUNNING;
+
+    next->state = THREAD_RUNNING;
+    char buf[32];
     serial_puts("[sched] switch ");
     utoa_dec(prev->id, buf); serial_puts(buf);
     serial_puts(" -> ");
-    utoa_dec(current_cpu[cpu]->id, buf); serial_puts(buf);
+    utoa_dec(next->id, buf); serial_puts(buf);
     serial_puts("\n");
-    context_switch(&prev->rsp, current_cpu[cpu]->rsp);
+    context_switch(&prev->rsp, next->rsp);
+}
+
+uint64_t schedule_from_isr(uint64_t *old_rsp) {
+    int cpu = smp_cpu_index();
+    thread_t *prev = current_cpu[cpu];
+    prev->rsp = (uint64_t)old_rsp;
+    if (prev->state == THREAD_RUNNING)
+        prev->state = THREAD_READY;
+
+    thread_t *next = pick_next(cpu);
+    if (!next) {
+        prev->state = THREAD_RUNNING;
+        return (uint64_t)old_rsp;
+    }
+
+    next->state = THREAD_RUNNING;
+    char buf[32];
+    serial_puts("[sched] preempt ");
+    utoa_dec(prev->id, buf); serial_puts(buf);
+    serial_puts(" -> ");
+    utoa_dec(next->id, buf); serial_puts(buf);
+    serial_puts("\n");
+    return next->rsp;
 }
 
