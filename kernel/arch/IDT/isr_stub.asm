@@ -4,13 +4,9 @@ isr_timer_stub:
     mov rbp, rsp
     extern isr_timer_handler
     call isr_timer_handler
-    ; Acknowledge the PIC before switching threads
+    ; Acknowledge the PIC and return
     mov al, 0x20
     out 0x20, al
-    ; Yield to the scheduler to pick the next thread
-    extern thread_yield
-    call thread_yield
-    ; Execution resumes here when the preempted thread runs again
     leave
     iretq
 
