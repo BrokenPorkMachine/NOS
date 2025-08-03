@@ -3,24 +3,6 @@
 #include "../drivers/IO/serial.h"
 
 // thread_yield can be provided by the threading subsystem. Provide a weak
-// no-op so unit tests link even without the scheduler. Mark it noinline so
-// the call site isn't optimized away and a real implementation can override
-// it at link time.
-__attribute__((weak, noinline)) void thread_yield(void) {}
-
-// Provide a weak stub for serial_puts so tests can link without the real
-// serial driver. The real implementation in the kernel will override it.
-__attribute__((weak, noinline)) void serial_puts(const char *s) { (void)s; }
-
-// Simple decimal conversion for logging
-static void utoa_dec(uint32_t val, char *buf) {
-    char tmp[16];
-    int i = 0, j = 0;
-    if (!val) { buf[0] = '0'; buf[1] = 0; return; }
-    while (val && i < (int)sizeof(tmp)) { tmp[i++] = '0' + (val % 10); val /= 10; }
-    while (i) buf[j++] = tmp[--i];
-    buf[j] = 0;
-}
 
 /**
  * Initialize an IPC queue for message passing.
@@ -93,10 +75,6 @@ int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
     if (receiver_id >= IPC_MAX_TASKS || !(q->caps[receiver_id] & IPC_CAP_RECV))
         return -2; // unauthorized receiver
     if (q->tail == q->head) {
-        serial_puts("[ipc] recv empty for ");
-        char buf[16];
-        utoa_dec(receiver_id, buf); serial_puts(buf);
-        serial_puts(", yielding\n");
         thread_yield();
         return -1; // queue empty
     }
