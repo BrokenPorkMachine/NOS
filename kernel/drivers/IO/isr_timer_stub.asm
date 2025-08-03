@@ -11,3 +11,6 @@ isr_timer_stub:
     out 0x20, al
     leave
     iretq
+
+; Indicate that this object file does not require an executable stack
+section .note.GNU-stack noalloc nobits align=1

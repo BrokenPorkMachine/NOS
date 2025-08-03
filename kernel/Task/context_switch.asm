@@ -35,3 +35,6 @@ context_switch:
     popfq
 
     ret
+
+; Indicate that this object file does not require an executable stack
+section .note.GNU-stack noalloc nobits align=1
