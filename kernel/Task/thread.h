@@ -39,6 +39,10 @@ void thread_yield(void);
 // Run the scheduler (internal, also used by yield/block/unblock)
 void schedule(void);
 
+// Scheduler entry from interrupt context. Takes the stack pointer saved
+// by the interrupt stub and returns the stack of the next thread.
+uint64_t schedule_from_isr(uint64_t *old_rsp);
+
 // Switch stack (old_rsp, new_rsp): implemented in asm and returns to caller
 void context_switch(uint64_t *old_rsp, uint64_t new_rsp);
 

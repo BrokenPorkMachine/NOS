@@ -19,15 +19,14 @@ isr_timer_stub:
     push r15
     extern isr_timer_handler
     call isr_timer_handler
+    mov rdi, rsp            ; pass pointer to saved context
+    extern schedule_from_isr
+    call schedule_from_isr
+    mov rsp, rax            ; switch to next thread stack
     ; Send End of Interrupt to PIC
     mov al, 0x20
     out 0x20, al
-    ; Preemptive scheduling is not yet supported here. Calling the
-    ; scheduler from interrupt context corrupts the stack because the
-    ; context switch routine expects a normal function call frame.  For
-    ; now simply return to the interrupted thread after updating the
-    ; timer tick.
-    ; Restore registers and return to the interrupted thread
+    ; Restore registers and return to the selected thread
     pop r15
     pop r14
     pop r13
