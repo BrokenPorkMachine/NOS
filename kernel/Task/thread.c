@@ -224,7 +224,7 @@ void schedule(void) {
         if (current_cpu[cpu]->state == THREAD_READY) { found = 1; break; }
     } while (current_cpu[cpu] != start);
 
-    if (!found) {
+    if (!found || current_cpu[cpu] == prev) {
         prev->state = THREAD_RUNNING;
         serial_puts("[sched] idle\n");
         __asm__ volatile("sti; hlt");
