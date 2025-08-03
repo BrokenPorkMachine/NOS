@@ -3,6 +3,8 @@
 #include "../../kernel/IPC/ipc.h"
 #include "../../user/libc/libc.h"
 
+void thread_yield(void) {}
+
 int main(void) {
     ipc_queue_t q;
     ipc_init(&q);
