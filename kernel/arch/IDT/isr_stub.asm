@@ -7,8 +7,7 @@ isr_timer_stub:
     ; Acknowledge the PIC before switching threads
     mov al, 0x20
     out 0x20, al
-    ; Re-enable interrupts for the next thread
-    sti
+    ; Yield to the scheduler to pick the next thread
     extern thread_yield
     call thread_yield
     ; Execution resumes here when the preempted thread runs again
