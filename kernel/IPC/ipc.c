@@ -119,8 +119,7 @@ int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
 #ifdef IPC_DEBUG
         serial_puts("[ipc] recv empty\n");
 #endif
-        if (thread_yield)
-            thread_yield();
+        thread_yield();
         return -1; // queue empty
     }
     *msg = q->msgs[q->tail];
