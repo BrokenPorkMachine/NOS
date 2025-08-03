@@ -51,14 +51,20 @@ static void utoa_dec(uint32_t val, char *buf) {
 // function pointer the thread should run. We pop that function pointer and
 // invoke it. When the function returns the thread marks itself as exited
 // and yields back to the scheduler.
-static void thread_entry(void) {
-    void (*f)(void);
-    __asm__ volatile("pop %0" : "=r"(f));
+static void thread_start(void (*f)(void)) {
     f();
     thread_t *cur = current_cpu[smp_cpu_index()];
     cur->state = THREAD_EXITED;
     thread_yield();
     for (;;) __asm__ volatile("hlt");
+}
+
+static void __attribute__((naked)) thread_entry(void) {
+    __asm__ volatile(
+        "pop %rdi\n"
+        "call thread_start\n"
+        "hlt\n"
+    );
 }
 
 // --- THREAD FUNCTIONS ---
