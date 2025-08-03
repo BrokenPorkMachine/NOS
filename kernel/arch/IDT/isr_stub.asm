@@ -22,9 +22,12 @@ isr_timer_stub:
     ; Send End of Interrupt to PIC
     mov al, 0x20
     out 0x20, al
-    extern schedule
-    call schedule
-    ; Restore registers and return to scheduled thread
+    ; Preemptive scheduling is not yet supported here. Calling the
+    ; scheduler from interrupt context corrupts the stack because the
+    ; context switch routine expects a normal function call frame.  For
+    ; now simply return to the interrupted thread after updating the
+    ; timer tick.
+    ; Restore registers and return to the interrupted thread
     pop r15
     pop r14
     pop r13
