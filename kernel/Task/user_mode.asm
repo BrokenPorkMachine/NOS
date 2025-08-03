@@ -35,3 +35,6 @@ enter_user_mode:
     hlt
     jmp $
 
+; Indicate that this object file does not require an executable stack
+section .note.GNU-stack noalloc nobits align=1
+

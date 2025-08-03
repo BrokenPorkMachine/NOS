@@ -14,3 +14,6 @@ _start:
     cli
     hlt
     jmp .hang
+
+; Indicate that this object file does not require an executable stack
+section .note.GNU-stack noalloc nobits align=1

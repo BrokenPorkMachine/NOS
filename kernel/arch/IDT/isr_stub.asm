@@ -135,3 +135,6 @@ isr_ipi_stub:
     call isr_ipi_handler
     leave
     iretq
+
+; Indicate that this object file does not require an executable stack
+section .note.GNU-stack noalloc nobits align=1

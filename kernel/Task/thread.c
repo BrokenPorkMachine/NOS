@@ -51,7 +51,7 @@ static void utoa_dec(uint32_t val, char *buf) {
 // function pointer the thread should run. We pop that function pointer and
 // invoke it. When the function returns the thread marks itself as exited
 // and yields back to the scheduler.
-static void thread_start(void (*f)(void)) {
+__attribute__((used)) static void thread_start(void (*f)(void)) {
     f();
     thread_t *cur = current_cpu[smp_cpu_index()];
     cur->state = THREAD_EXITED;
