@@ -1,14 +1,15 @@
 #include "login.h"
-#include "../../../kernel/drivers/IO/keyboard.h"
-#include "../../../kernel/drivers/IO/serial.h"
-#include "../../../kernel/drivers/IO/video.h"
+#include "../../../kernel/drivers/IO/tty.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../libc/libc.h"
-#include "font8x8_basic.h"
+#include "../shell/shell.h"
 #include <stddef.h>
 
-volatile int login_done = 0;
 volatile login_session_t current_session = {0};
+
+extern ipc_queue_t fs_queue;
+extern ipc_queue_t pkg_queue;
+extern ipc_queue_t upd_queue;
 
 typedef struct {
     const char *user;
@@ -33,83 +34,15 @@ static int authenticate(const char *user, const char *pass, const credential_t *
     return -1;
 }
 
-#define VGA_TEXT_BUF 0xB8000
-#define VGA_COLS 80
-#define VGA_ROWS 25
-
-static int row = 0, col = 0;
-static int fb_row = 0, fb_col = 0;
-
-static void clear_screen(void)
-{
-    video_clear(0); /* Clear framebuffer to black */
-    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
-    for (int i = 0; i < VGA_COLS * VGA_ROWS; ++i)
-        vga[i] = (0x0F << 8) | ' ';
-    row = col = 0;
-    fb_row = fb_col = 0;
-}
-
-/* Simple 2x scaled 8x8 font for better readability */
-#define FONT_SCALE 2
-#define FB_CHAR_W (8 * FONT_SCALE)
-#define FB_CHAR_H (8 * FONT_SCALE)
-
-static void draw_char_fb(uint32_t x, uint32_t y, char c)
-{
-    const uint8_t *glyph = font8x8_basic[(unsigned char)c];
-    for (int yy = 0; yy < 8; ++yy) {
-        for (int xx = 0; xx < 8; ++xx) {
-            uint32_t color = (glyph[yy] & (1 << xx)) ? 0xFFFFFFFF : 0x000000;
-            for (int dy = 0; dy < FONT_SCALE; ++dy)
-                for (int dx = 0; dx < FONT_SCALE; ++dx)
-                    video_draw_pixel(x + xx * FONT_SCALE + dx,
-                                     y + yy * FONT_SCALE + dy,
-                                     color);
-        }
-    }
-}
-
-static void putc_console(char c)
-{
-    const bootinfo_framebuffer_t *fb = video_get_info();
-    if (fb && fb->address) {
-        if (c == '\n') { fb_col = 0; fb_row++; return; }
-        if (c == '\b') {
-            if (fb_col > 0) fb_col--;
-            video_fill_rect(fb_col * FB_CHAR_W, fb_row * FB_CHAR_H,
-                            FB_CHAR_W, FB_CHAR_H, 0x000000);
-            return;
-        }
-        draw_char_fb(fb_col * FB_CHAR_W, fb_row * FB_CHAR_H, c);
-        if (++fb_col >= (int)(fb->width / FB_CHAR_W)) {
-            fb_col = 0; fb_row++;
-        }
-        return;
-    }
-    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
-    if(c=='\n') {
-        col = 0;
-        if(++row >= VGA_ROWS-1) row = VGA_ROWS-2;
-        return;
-    }
-    vga[row*VGA_COLS + col] = (0x0F << 8) | c;
-    if(++col >= VGA_COLS) { col = 0; if(++row >= VGA_ROWS-1) row = VGA_ROWS-2; }
-}
-
 static void puts_out(const char *s)
 {
-    serial_puts(s);
-    const char *p = s;
-    while (*p) {
-        putc_console(*p++);
-    }
+    tty_write(s);
 }
 
 static char getchar_block(void)
 {
     int ch = -1;
-    while((ch = keyboard_getchar()) < 0)
+    while((ch = tty_getchar()) < 0)
         thread_yield();
     return (char)ch;
 }
@@ -140,7 +73,7 @@ static void read_line(char *buf, size_t len, int hide)
 void login_server(ipc_queue_t *q, uint32_t self_id)
 {
     (void)q; (void)self_id;
-    clear_screen();
+    tty_clear();
     puts_out("[login] login server starting\n");
     /* Give other threads a chance to run so the start message is visible */
     thread_yield();
@@ -158,11 +91,11 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
             strncpy((char*)current_session.username, cred->user, sizeof(current_session.username)-1);
             current_session.session_id++;
             current_session.active = 1;
-            login_done = 1;
             break;
         } else {
             puts_out("Login failed\n");
         }
     }
-    serial_puts("[login] exiting\n");
+    puts_out("[login] starting shell\n");
+    shell_main(&fs_queue, &pkg_queue, &upd_queue, self_id);
 }

@@ -3,8 +3,6 @@
 #include "../../../kernel/IPC/ipc.h"
 #include <stdint.h>
 
-extern volatile int login_done;
-
 typedef struct {
     uint32_t uid;
     char username[32];

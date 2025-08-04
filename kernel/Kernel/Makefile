@@ -19,6 +19,7 @@ OBJS = \
     ../drivers/IO/pci.o \
     ../drivers/IO/usb.o \
     ../drivers/IO/serial.o \
+    ../drivers/IO/tty.o \
     ../drivers/IO/block.o \
     ../drivers/Net/e1000.o \
     ../drivers/Net/netstack.o \

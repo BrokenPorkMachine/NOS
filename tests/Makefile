@@ -21,7 +21,7 @@ test_syscall: unit/test_syscall.c ../kernel/Kernel/syscall.c ../kernel/Kernel/el
 test_nitrfs: unit/test_nitrfs.c ../user/servers/nitrfs/nitrfs.c ../user/libc/libc.c ../kernel/drivers/IO/block.c
 	$(CC) $(CFLAGS) $^ -o $@
 
-test_login: unit/test_login.c ../user/servers/login/login.c ../user/libc/libc.c ../kernel/IPC/ipc.c ../kernel/drivers/IO/video.c
+test_login: unit/test_login.c ../user/servers/login/login.c ../user/libc/libc.c ../kernel/IPC/ipc.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_ftp: unit/test_ftp.c ../user/servers/ftp/ftp.c ../kernel/IPC/ipc.c ../user/libc/libc.c
