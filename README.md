@@ -20,8 +20,9 @@
 * NitrFS secure in-memory filesystem server with optional block storage
 * Simple secure heap allocator for user-space memory
 * All device drivers, filesystems, and networking to run as user-mode agents
-* Minimal network stack with NIC detection
-* Stub VNC, SSH(SCP), and FTP servers (no real networking yet)
+* Minimal network stack with loopback support, IPv4 addressing and ARP replies
+* Credential-driven login server that prints the current IP before launching the shell
+* Stub VNC, SSH(SCP), and FTP servers that ride on the loopback stack and store files in NitrFS (no real networking yet)
 * Experimental copy-on-write paging and basic demand paging
 * Early NUMA node enumeration from bootloader memory map
 * IPC shared memory channels with rights masks
