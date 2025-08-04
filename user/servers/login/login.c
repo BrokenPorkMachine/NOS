@@ -1,8 +1,10 @@
 #include "login.h"
 #include "../../../kernel/drivers/IO/keyboard.h"
 #include "../../../kernel/drivers/IO/serial.h"
+#include "../../../kernel/drivers/IO/video.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../libc/libc.h"
+#include "font8x8_basic.h"
 #include <stddef.h>
 
 volatile int login_done = 0;
@@ -36,18 +38,38 @@ static int authenticate(const char *user, const char *pass, const credential_t *
 #define VGA_ROWS 25
 
 static int row = 0, col = 0;
+static int fb_row = 0, fb_col = 0;
 
-static void clear_vga(void)
+static void clear_screen(void)
 {
+    video_clear(0); /* Clear framebuffer to black */
     volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
     for (int i = 0; i < VGA_COLS * VGA_ROWS; ++i)
         vga[i] = (0x0F << 8) | ' ';
-    row = 0;
-    col = 0;
+    row = col = 0;
+    fb_row = fb_col = 0;
 }
 
-static void putc_vga(char c)
+static void draw_char_fb(uint32_t x, uint32_t y, char c)
 {
+    const uint8_t *glyph = font8x8_basic[(unsigned char)c];
+    for (int yy = 0; yy < 8; ++yy) {
+        for (int xx = 0; xx < 8; ++xx) {
+            uint32_t color = (glyph[yy] & (1 << xx)) ? 0xFFFFFFFF : 0x000000;
+            video_draw_pixel(x + xx, y + yy, color);
+        }
+    }
+}
+
+static void putc_console(char c)
+{
+    const bootinfo_framebuffer_t *fb = video_get_info();
+    if (fb && fb->address) {
+        if (c == '\n') { fb_col = 0; fb_row++; return; }
+        draw_char_fb(fb_col * 8, fb_row * 8, c);
+        if (++fb_col >= (int)(fb->width / 8)) { fb_col = 0; fb_row++; }
+        return;
+    }
     volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
     if(c=='\n') {
         col = 0;
@@ -61,7 +83,7 @@ static void putc_vga(char c)
 static void puts_out(const char *s)
 {
     serial_puts(s);
-    while(*s) { putc_vga(*s++); }
+    while(*s) { putc_console(*s++); }
 }
 
 static char getchar_block(void)
@@ -98,7 +120,7 @@ static void read_line(char *buf, size_t len, int hide)
 void login_server(ipc_queue_t *q, uint32_t self_id)
 {
     (void)q; (void)self_id;
-    clear_vga();
+    clear_screen();
     puts_out("[login] login server starting\n");
     /* Give other threads a chance to run so the start message is visible */
     thread_yield();
