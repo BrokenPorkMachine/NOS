@@ -270,6 +270,10 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
 
     thread_t *next = pick_next(cpu);
     if (!next || !next->started) {
+        // pick_next advances current_cpu even if we do not switch
+        // threads. Restore the pointer so the scheduler state remains
+        // consistent with the actually running thread.
+        current_cpu[cpu] = prev;
         prev->state = THREAD_RUNNING;
         return (uint64_t)old_rsp;
     }
