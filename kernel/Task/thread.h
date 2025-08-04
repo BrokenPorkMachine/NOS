@@ -16,7 +16,8 @@ typedef struct thread {
     char *stack;
     int id;
     thread_state_t state;
-    struct thread *next; // run queue link
+    int started;            // has the thread begun execution
+    struct thread *next;    // run queue link
 } thread_t;
 
 extern thread_t *current_cpu[MAX_CPUS];

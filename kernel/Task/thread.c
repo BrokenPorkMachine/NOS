@@ -106,6 +106,7 @@ thread_t *thread_create(void (*func)(void)) {
     t->func = func;
     t->id = next_id++;
     t->state = THREAD_READY;
+    t->started = 0;
 
     int cpu = smp_cpu_index();
     if (!current_cpu[cpu]) {
@@ -204,6 +205,7 @@ void threads_init(void) {
     main_thread.func  = NULL;
     main_thread.stack = NULL;
     main_thread.state = THREAD_RUNNING;
+    main_thread.started = 1;
 
     int cpu = smp_cpu_index();
     main_thread.next = current_cpu[cpu];
@@ -245,6 +247,7 @@ void schedule(void) {
     }
 
     next->state = THREAD_RUNNING;
+    next->started = 1;
     char buf[32];
     serial_puts("[sched] switch ");
     utoa_dec(prev->id, buf); serial_puts(buf);
@@ -262,7 +265,7 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
         prev->state = THREAD_READY;
 
     thread_t *next = pick_next(cpu);
-    if (!next) {
+    if (!next || !next->started) {
         prev->state = THREAD_RUNNING;
         return (uint64_t)old_rsp;
     }
