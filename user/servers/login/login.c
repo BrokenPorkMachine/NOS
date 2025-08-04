@@ -88,7 +88,9 @@ static void read_line(char *buf, size_t len, int hide)
 void login_server(ipc_queue_t *q, uint32_t self_id)
 {
     (void)q; (void)self_id;
-    serial_puts("[login] login server starting\n");
+    puts_out("[login] login server starting\n");
+    /* Give other threads a chance to run so the start message is visible */
+    thread_yield();
     char user[32];
     char pass[32];
     for(;;) {
