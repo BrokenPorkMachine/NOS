@@ -8,6 +8,7 @@
 #include "../drivers/IO/keyboard.h"
 #include "../drivers/IO/mouse.h"
 #include "../drivers/IO/serial.h"
+#include "../drivers/IO/tty.h"
 #include "../drivers/Net/netstack.h"
 #include "../drivers/IO/video.h"
 #include "../Task/thread.h"
@@ -317,6 +318,10 @@ void kernel_main(bootinfo_t *bootinfo) {
     log_line("  mouse_init start");
     mouse_init();
     log_good("[mou] Mouse initialized");
+
+    log_line("  tty_init start");
+    tty_init();
+    log_good("[tty] TTY initialized");
 
     log_line("  net_init start");
     net_init();
