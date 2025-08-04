@@ -16,6 +16,7 @@ OBJS = \
     ../drivers/IO/pit.o \
     ../drivers/IO/keyboard.o \
     ../drivers/IO/mouse.o \
+    ../drivers/IO/ps2.o \
     ../drivers/IO/pci.o \
     ../drivers/IO/usb.o \
     ../drivers/IO/serial.o \
