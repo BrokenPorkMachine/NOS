@@ -20,16 +20,39 @@ static inline uint32_t self_id(void) {
 
 void *memset(void *s, int c, size_t n) {
     unsigned char *p = (unsigned char *)s;
-    for (size_t i = 0; i < n; i++)
-        p[i] = (unsigned char)c;
+    unsigned char val = (unsigned char)c;
+    uint64_t pattern = 0;
+    for (int i = 0; i < 8; ++i)
+        pattern = (pattern << 8) | val;
+
+    while (n >= sizeof(uint64_t)) {
+        *(uint64_t *)p = pattern;
+        p += sizeof(uint64_t);
+        n -= sizeof(uint64_t);
+    }
+    while (n--)
+        *p++ = val;
     return s;
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {
     unsigned char *d = (unsigned char *)dest;
     const unsigned char *s = (const unsigned char *)src;
-    for (size_t i = 0; i < n; i++)
-        d[i] = s[i];
+
+    while (n >= sizeof(uint64_t)) {
+        *(uint64_t *)d = *(const uint64_t *)s;
+        d += sizeof(uint64_t);
+        s += sizeof(uint64_t);
+        n -= sizeof(uint64_t);
+    }
+    while (n >= sizeof(uint32_t)) {
+        *(uint32_t *)d = *(const uint32_t *)s;
+        d += sizeof(uint32_t);
+        s += sizeof(uint32_t);
+        n -= sizeof(uint32_t);
+    }
+    while (n--)
+        *d++ = *s++;
     return dest;
 }
 
@@ -37,9 +60,28 @@ void *memmove(void *dest, const void *src, size_t n) {
     unsigned char *d = (unsigned char *)dest;
     const unsigned char *s = (const unsigned char *)src;
     if (d < s) {
-        for (size_t i = 0; i < n; i++) d[i] = s[i];
+        while (n >= sizeof(uint64_t)) {
+            *(uint64_t *)d = *(const uint64_t *)s;
+            d += sizeof(uint64_t);
+            s += sizeof(uint64_t);
+            n -= sizeof(uint64_t);
+        }
+        while (n--)
+            *d++ = *s++;
     } else if (d > s) {
-        for (size_t i = n; i != 0; i--) d[i-1] = s[i-1];
+        d += n;
+        s += n;
+        while (n >= sizeof(uint64_t)) {
+            d -= sizeof(uint64_t);
+            s -= sizeof(uint64_t);
+            *(uint64_t *)d = *(const uint64_t *)s;
+            n -= sizeof(uint64_t);
+        }
+        while (n--) {
+            d--;
+            s--;
+            *d = *s;
+        }
     }
     return dest;
 }
