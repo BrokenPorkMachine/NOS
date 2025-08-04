@@ -151,7 +151,7 @@ void net_init(void) {
 }
 
 int net_send(unsigned port, const void *data, size_t len) {
-    if (port >= NET_PORTS)
+    if (port >= NET_PORTS || socket_type[port] == 0)
         return 0;
     const uint8_t *d = (const uint8_t *)data;
     size_t space = NETBUF_SIZE - netbuf_avail(port);
@@ -166,7 +166,7 @@ int net_send(unsigned port, const void *data, size_t len) {
 }
 
 int net_receive(unsigned port, void *buf, size_t buflen) {
-    if (port >= NET_PORTS)
+    if (port >= NET_PORTS || socket_type[port] == 0)
         return 0;
     uint8_t *b = (uint8_t *)buf;
     size_t avail = netbuf_avail(port);
@@ -194,6 +194,7 @@ void net_set_ip(uint32_t ip) {
 
 int net_socket_open(uint16_t port, net_socket_type_t type) {
     if (port >= NET_PORTS) return -1;
+    if (socket_type[port] != 0) return -1; // already bound
     socket_type[port] = (uint8_t)type;
     head[port] = tail[port] = 0;
     return (int)port;

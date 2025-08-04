@@ -91,6 +91,24 @@ int main(void) {
     net_set_ip(0x0A00020F);
     uint8_t payload[3] = {1,2,3};
 
+    /* Basic socket open/close and loopback send/recv */
+    int s = net_socket_open(1, NET_SOCK_DGRAM);
+    assert(s == 1);
+    const char msg[] = "hello";
+    net_socket_send(s, msg, sizeof(msg));
+    char rbuf[16];
+    int rn = net_socket_recv(s, rbuf, sizeof(rbuf));
+    assert(rn == (int)sizeof(msg));
+    assert(memcmp(rbuf, msg, sizeof(msg)) == 0);
+    /* cannot bind same port twice */
+    assert(net_socket_open(1, NET_SOCK_STREAM) == -1);
+    net_socket_close(s);
+    rn = net_socket_recv(s, rbuf, sizeof(rbuf));
+    assert(rn == 0);
+    s = net_socket_open(1, NET_SOCK_STREAM);
+    assert(s == 1);
+    net_socket_close(s);
+
     net_send_ipv4_udp(0x0A000201, 1111, 2222, payload, sizeof(payload));
     assert(frame_len == sizeof(struct eth_hdr) + sizeof(struct ipv4_hdr) +
                           sizeof(struct udp_hdr) + sizeof(payload));
