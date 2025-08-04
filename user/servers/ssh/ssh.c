@@ -19,6 +19,9 @@ void ssh_server(ipc_queue_t *q, uint32_t self_id) {
     int sock = net_socket_open(SSH_PORT, NET_SOCK_STREAM);
     const char banner[] = "NOS SSH\r\n";
     net_socket_send(sock, banner, strlen(banner));
+    // Yield once after initialisation so other threads can run even if
+    // the networking calls above block or take time to complete.
+    thread_yield();
     char buf[128];
     for (;;) {
         int n = net_socket_recv(sock, buf, sizeof(buf) - 1);
