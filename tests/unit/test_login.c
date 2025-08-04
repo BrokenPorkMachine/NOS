@@ -6,11 +6,16 @@
 
 static const char *input = "admin\nadmin\n";
 static size_t pos = 0;
+static int first_poll = 1;
 
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
 
 int tty_getchar(void) {
+    if (first_poll) {
+        first_poll = 0;
+        return -1; // simulate initial lack of input
+    }
     if (pos >= strlen(input)) return -1;
     return (unsigned char)input[pos++];
 }
