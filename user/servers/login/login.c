@@ -42,8 +42,10 @@ static void puts_out(const char *s)
 static char getchar_block(void)
 {
     int ch = -1;
-    while((ch = tty_getchar()) < 0)
+    do {
         thread_yield();
+        ch = tty_getchar();
+    } while (ch < 0);
     return (char)ch;
 }
 
