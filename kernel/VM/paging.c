@@ -2,14 +2,7 @@
 #include "pmm.h"
 #include "../../user/libc/libc.h"
 #include <stdint.h>
-
-static inline void cpuid(uint32_t eax_in, uint32_t ecx_in,
-                         uint32_t *eax, uint32_t *ebx,
-                         uint32_t *ecx_out, uint32_t *edx) {
-    __asm__ volatile("cpuid"
-                     : "=a"(*eax), "=b"(*ebx), "=c"(*ecx_out), "=d"(*edx)
-                     : "a"(eax_in), "c"(ecx_in));
-}
+#include "../../include/cpuid.h"
 
 // Static page tables (identity map first 4GB)
 static uint64_t __attribute__((aligned(PAGE_SIZE))) pml4[512];
