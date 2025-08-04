@@ -121,6 +121,7 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
     puts_out("IP ");
     puts_out(ipbuf);
     puts_out(" (SSH/VNC)\n");
+    thread_yield();
 
     char user[32];
     char pass[32];
@@ -137,8 +138,8 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
         if (authenticate(user, pass, &cred) == 0) {
             puts_out("Login successful\n");
             current_session.uid = cred->uid;
-            strncpy(current_session.username, cred->user, sizeof(current_session.username) - 1);
-            current_session.username[sizeof(current_session.username) - 1] = '\0';
+            strncpy((char*)current_session.username, cred->user, sizeof(current_session.username) - 1);
+            ((char*)current_session.username)[sizeof(current_session.username) - 1] = '\0';
             current_session.session_id++;
             current_session.active = 1;
             break;
