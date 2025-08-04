@@ -38,11 +38,20 @@ void keyboard_init(void) {
     outb(0x64, 0xAE);
     io_wait();
 
-    // Reset to defaults and enable scanning
+    // Reset to defaults
     outb(0x60, 0xF6); // set defaults
     io_wait();
     (void)inb(0x60); // ack
 
+    // Ensure we use scancode set 1 so the keymap matches the hardware
+    outb(0x60, 0xF0); // select scancode set command
+    io_wait();
+    (void)inb(0x60); // ack
+    outb(0x60, 0x01); // use set 1
+    io_wait();
+    (void)inb(0x60); // ack
+
+    // Enable scanning
     outb(0x60, 0xF4); // enable scanning
     io_wait();
     (void)inb(0x60); // ack
