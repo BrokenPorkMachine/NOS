@@ -1,7 +1,6 @@
 #include "io.h"
 #include "keyboard.h"
 #include "pic.h"
-#include "serial.h"
 #include <stddef.h>
 
 #define KEYBUF_SIZE 32
@@ -52,7 +51,7 @@ static char scancode_ascii(uint8_t sc) {
 int keyboard_getchar(void) {
     int sc = keyboard_read_scancode();
     if (sc < 0)
-        return serial_read();
+        return -1;
     if (sc == 0x2A || sc == 0x36) {
         shift_state = 1;
         return -1;
