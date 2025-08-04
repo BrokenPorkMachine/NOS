@@ -50,13 +50,22 @@ static void clear_screen(void)
     fb_row = fb_col = 0;
 }
 
+/* Simple 2x scaled 8x8 font for better readability */
+#define FONT_SCALE 2
+#define FB_CHAR_W (8 * FONT_SCALE)
+#define FB_CHAR_H (8 * FONT_SCALE)
+
 static void draw_char_fb(uint32_t x, uint32_t y, char c)
 {
     const uint8_t *glyph = font8x8_basic[(unsigned char)c];
     for (int yy = 0; yy < 8; ++yy) {
         for (int xx = 0; xx < 8; ++xx) {
             uint32_t color = (glyph[yy] & (1 << xx)) ? 0xFFFFFFFF : 0x000000;
-            video_draw_pixel(x + xx, y + yy, color);
+            for (int dy = 0; dy < FONT_SCALE; ++dy)
+                for (int dx = 0; dx < FONT_SCALE; ++dx)
+                    video_draw_pixel(x + xx * FONT_SCALE + dx,
+                                     y + yy * FONT_SCALE + dy,
+                                     color);
         }
     }
 }
@@ -66,8 +75,16 @@ static void putc_console(char c)
     const bootinfo_framebuffer_t *fb = video_get_info();
     if (fb && fb->address) {
         if (c == '\n') { fb_col = 0; fb_row++; return; }
-        draw_char_fb(fb_col * 8, fb_row * 8, c);
-        if (++fb_col >= (int)(fb->width / 8)) { fb_col = 0; fb_row++; }
+        if (c == '\b') {
+            if (fb_col > 0) fb_col--;
+            video_fill_rect(fb_col * FB_CHAR_W, fb_row * FB_CHAR_H,
+                            FB_CHAR_W, FB_CHAR_H, 0x000000);
+            return;
+        }
+        draw_char_fb(fb_col * FB_CHAR_W, fb_row * FB_CHAR_H, c);
+        if (++fb_col >= (int)(fb->width / FB_CHAR_W)) {
+            fb_col = 0; fb_row++;
+        }
         return;
     }
     volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
