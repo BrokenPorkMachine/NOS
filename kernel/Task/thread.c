@@ -1,9 +1,5 @@
 #include "thread.h"
 #include "../IPC/ipc.h"
-#include "../../user/servers/nitrfs/server.h"
-#include "../../user/servers/ftp/ftp.h"
-#include "../../user/servers/pkg/server.h"
-#include "../../user/servers/update/server.h"
 #include "../../user/servers/init/init.h"
 #include "../../user/libc/libc.h"
 #include "../drivers/IO/serial.h"
@@ -65,11 +61,13 @@ static void __attribute__((naked)) thread_entry(void) {
 
 // --- THREAD FUNCTIONS ---
 
-static void thread_fs_func(void)   { thread_t *c = current_cpu[smp_cpu_index()]; nitrfs_server(&fs_queue, c->id); }
-static void thread_init_func(void) { thread_t *c = current_cpu[smp_cpu_index()]; init_main(&fs_queue, c->id); }
-static void thread_pkg_func(void)   { thread_t *c = current_cpu[smp_cpu_index()]; pkg_server(&pkg_queue, c->id); }
-static void thread_update_func(void){ thread_t *c = current_cpu[smp_cpu_index()]; update_server(&upd_queue, &pkg_queue, c->id); }
-static void thread_ftp_func(void)  { thread_t *c = current_cpu[smp_cpu_index()]; ftp_server(&fs_queue, c->id); }
+// Return the currently running thread
+thread_t *thread_current(void) { return current_cpu[smp_cpu_index()]; }
+
+// Return ID of current thread
+uint32_t thread_self(void) { return thread_current()->id; }
+
+static void thread_init_func(void) { init_main(); }
 
 // --- THREAD CREATION ---
 
@@ -110,18 +108,9 @@ thread_t *thread_create(void (*func)(void)) {
         tail_cpu[cpu]->next = t;
         tail_cpu[cpu] = t;
     }
-    char buf[32];
+    char buf[16];
     serial_puts("[thread] created id=");
-    buf[0] = '\0';
-    {
-        int id = t->id;
-        int pos = 0;
-        char tmp[16];
-        if (id == 0) { tmp[pos++] = '0'; }
-        while (id > 0 && pos < 15) { tmp[pos++] = '0' + (id % 10); id /= 10; }
-        for (int i = pos-1, j=0; i>=0; --i,++j) buf[j]=tmp[i];
-        buf[pos] = 0;
-    }
+    utoa_dec(t->id, buf);
     serial_puts(buf);
     serial_puts("\n");
     return t;
@@ -161,21 +150,10 @@ void threads_init(void) {
     ipc_init(&upd_queue);
     thread_t *t;
 
-    t = thread_create(thread_fs_func);
-    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-
     t = thread_create(thread_init_func);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-
-    t = thread_create(thread_pkg_func);
     ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-
-    t = thread_create(thread_update_func);
     ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-
-    t = thread_create(thread_ftp_func);
-    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
     // Insert kernel main thread into the run queue so the first
     // schedule() call can switch away safely.
