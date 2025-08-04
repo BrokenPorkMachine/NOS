@@ -31,8 +31,9 @@ run: disk.img
 		-drive file=disk.img,format=raw \
 		-m 512M \
 		-netdev user,id=n0 \
-		-device e1000,netdev=n0 \
-		-device isa-keyboard \
-		-serial stdio -display sdl
+    -device e1000,netdev=n0 \
+    -device i8042 \
+    -serial stdio -display sdl \
+		-device e1000,netdev=n0 
 
 .PHONY: all libc kernel boot clean run
