@@ -64,15 +64,15 @@
    qemu-system-x86_64 -drive format=raw,file=disk.img \
      -bios /usr/share/OVMF/OVMF_CODE.fd \
      -netdev user,id=n0 -device e1000,netdev=n0 \
-     -device isa-keyboard \
+    -device i8042 \
      -serial stdio -display sdl
    ```
 
    The `-serial stdio` option attaches COM1 to your terminal so early boot
    logs appear even before the framebuffer is initialized. The
-   `-device isa-keyboard` flag explicitly adds a PS/2 keyboard device, which
-   QEMU may omit if no graphical display is present. Keep a graphical window
-   such as `-display sdl` so the login prompt can receive keyboard input;
+   `-device i8042` flag explicitly adds the legacy PS/2 controller so the login
+   server can receive keyboard scancodes. Keep a graphical window such as
+   `-display sdl` so the login prompt can receive keyboard input;
    running with `-display none` will leave the prompt unresponsive. See
    [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details.
   Networking support is under active development. See
