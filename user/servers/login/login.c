@@ -100,7 +100,10 @@ static void putc_console(char c)
 static void puts_out(const char *s)
 {
     serial_puts(s);
-    while(*s) { putc_console(*s++); }
+    const char *p = s;
+    while (*p) {
+        putc_console(*p++);
+    }
 }
 
 static char getchar_block(void)
