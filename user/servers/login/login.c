@@ -75,8 +75,7 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
     (void)q; (void)self_id;
     tty_clear();
     puts_out("[login] login server starting\n");
-    /* Give other threads a chance to run so the start message is visible */
-    thread_yield();
+    /* Removed extra yield to avoid stalling before the prompt */
     char user[32];
     char pass[32];
     for(;;) {

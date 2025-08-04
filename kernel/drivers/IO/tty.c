@@ -19,7 +19,10 @@ static void draw_char_fb(char c, int r, int cpos) {
         uint8_t line = glyph[y];
         for (int x = 0; x < 8; ++x) {
             uint32_t color = (line & (1u << x)) ? 0xFFFFFF : 0x000000;
-            video_draw_pixel(cpos * 8 + x, r * 8 + y, color);
+            int px = cpos * 8 + x;
+            int py = r * 16 + y * 2;
+            video_draw_pixel(px, py, color);
+            video_draw_pixel(px, py + 1, color);
         }
     }
 }
@@ -28,7 +31,7 @@ void tty_init(void) {
     fb_info = video_get_info();
     if (fb_info) {
         fb_cols = fb_info->width / 8;
-        fb_rows = fb_info->height / 8;
+        fb_rows = fb_info->height / 16;
     }
     tty_clear();
 }
