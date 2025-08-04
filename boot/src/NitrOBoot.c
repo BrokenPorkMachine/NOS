@@ -1,5 +1,6 @@
 #include "../include/efi.h"
 #include "../include/bootinfo.h"
+#include "../../include/cpuid.h"
 
 static bootinfo_t *g_info = NULL;
 static void (*g_entry)(bootinfo_t *) = NULL;
@@ -70,41 +71,7 @@ static VOID *find_acpi_rsdp(struct EFI_SYSTEM_TABLE *SystemTable) {
     return NULL;
 }
 
-// --- Minimal CPUID helpers for basic CPU info ---
-static inline void cpuid(UINT32 eax_in, UINT32 ecx_in,
-                         UINT32 *eax, UINT32 *ebx,
-                         UINT32 *ecx_out, UINT32 *edx)
-{
-    __asm__ __volatile__("cpuid"
-                         : "=a"(*eax), "=b"(*ebx), "=c"(*ecx_out), "=d"(*edx)
-                         : "a"(eax_in), "c"(ecx_in));
-}
-
-static UINT32 detect_logical_cpus(void)
-{
-    UINT32 max_leaf, eax, ebx, ecx, edx;
-    cpuid(0, 0, &max_leaf, &ebx, &ecx, &edx);
-    if (max_leaf >= 0x0B) {
-        cpuid(0x0B, 0, &eax, &ebx, &ecx, &edx);
-        UINT32 count = ebx & 0xFFFF;
-        if (count == 0) count = 1;
-        return count;
-    }
-    if (max_leaf >= 1) {
-        cpuid(1, 0, &eax, &ebx, &ecx, &edx);
-        UINT32 count = (ebx >> 16) & 0xFF;
-        if (count == 0) count = 1;
-        return count;
-    }
-    return 1;
-}
-
-static UINT32 detect_bsp_apic_id(void)
-{
-    UINT32 eax, ebx, ecx, edx;
-    cpuid(1, 0, &eax, &ebx, &ecx, &edx);
-    return (ebx >> 24) & 0xFF;
-}
+// CPUID helpers are now provided by a shared header
 
 // --- ELF structs ---
 typedef struct {
@@ -205,10 +172,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     info->bootloader_name = "NitrOBoot UEFI";
 
     // Detect basic CPU information for the kernel
-    info->cpu_count = detect_logical_cpus();
+    info->cpu_count = cpuid_logical_cpu_count();
     if (info->cpu_count > 0) {
         info->cpus[0].processor_id = 0;
-        info->cpus[0].apic_id = detect_bsp_apic_id();
+        info->cpus[0].apic_id = cpuid_bsp_apic_id();
         info->cpus[0].flags = 1;
     }
     print_hex(ConOut, L"cpu count: ", info->cpu_count);
