@@ -56,6 +56,9 @@ static void vga_puts(const char *s, int row, int color) {
         vga[i] = (color << 8) | (unsigned char)s[i];
         i++;
     }
+    for (; i < VGA_COLS; ++i) {
+        vga[i] = (color << 8) | ' ';
+    }
 }
 
 static void log_line_color_level(const char *s, int color, int level) {
