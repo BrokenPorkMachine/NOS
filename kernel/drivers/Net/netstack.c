@@ -17,6 +17,7 @@ static uint8_t socket_type[NET_PORTS];
 static uint8_t netbuf[NET_PORTS][NETBUF_SIZE];
 static size_t head[NET_PORTS];
 static size_t tail[NET_PORTS];
+static size_t count[NET_PORTS];
 static uint8_t our_mac[6];
 static uint32_t ip_addr = 0x0A00020F; // default 10.0.2.15
 
@@ -117,11 +118,7 @@ static uint16_t checksum(const void *buf, size_t len) {
 }
 
 static size_t netbuf_avail(unsigned p) {
-    size_t h = head[p];
-    size_t t = tail[p];
-    if (h >= t)
-        return h - t;
-    return NETBUF_SIZE - t + h;
+    return count[p];
 }
 
 void net_init(void) {
@@ -147,7 +144,7 @@ void net_init(void) {
         }
     }
     for (unsigned i = 0; i < NET_PORTS; ++i)
-        head[i] = tail[i] = socket_type[i] = 0;
+        head[i] = tail[i] = count[i] = socket_type[i] = 0;
 }
 
 int net_send(unsigned port, const void *data, size_t len) {
@@ -162,6 +159,7 @@ int net_send(unsigned port, const void *data, size_t len) {
         if (head[port] >= NETBUF_SIZE)
             head[port] = 0;
     }
+    count[port] += len;
     return (int)len;
 }
 
@@ -179,6 +177,7 @@ int net_receive(unsigned port, void *buf, size_t buflen) {
         if (tail[port] >= NETBUF_SIZE)
             tail[port] = 0;
     }
+    count[port] -= avail;
     return (int)avail;
 }
 
@@ -196,14 +195,14 @@ int net_socket_open(uint16_t port, net_socket_type_t type) {
     if (port >= NET_PORTS) return -1;
     if (socket_type[port] != 0) return -1; // already bound
     socket_type[port] = (uint8_t)type;
-    head[port] = tail[port] = 0;
+    head[port] = tail[port] = count[port] = 0;
     return (int)port;
 }
 
 int net_socket_close(int sock) {
     if (sock < 0 || sock >= (int)NET_PORTS) return -1;
     socket_type[sock] = 0;
-    head[sock] = tail[sock] = 0;
+    head[sock] = tail[sock] = count[sock] = 0;
     return 0;
 }
 

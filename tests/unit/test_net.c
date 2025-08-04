@@ -109,6 +109,19 @@ int main(void) {
     assert(s == 1);
     net_socket_close(s);
 
+    /* Ring buffer should handle full capacity without appearing empty */
+    s = net_socket_open(2, NET_SOCK_DGRAM);
+    assert(s == 2);
+    char big[512];
+    memset(big, 'A', sizeof(big));
+    int sn = net_socket_send(s, big, sizeof(big));
+    assert(sn == (int)sizeof(big));
+    char bigrecv[512];
+    int rn2 = net_socket_recv(s, bigrecv, sizeof(bigrecv));
+    assert(rn2 == (int)sizeof(big));
+    assert(memcmp(big, bigrecv, sizeof(big)) == 0);
+    net_socket_close(s);
+
     net_send_ipv4_udp(0x0A000201, 1111, 2222, payload, sizeof(payload));
     assert(frame_len == sizeof(struct eth_hdr) + sizeof(struct ipv4_hdr) +
                           sizeof(struct udp_hdr) + sizeof(payload));
