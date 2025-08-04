@@ -97,6 +97,9 @@ void tty_write(const char *s) {
 }
 
 int tty_getchar(void) {
-    return keyboard_getchar();
+    int ch = keyboard_getchar();
+    if (ch >= 0)
+        return ch;
+    return serial_read();
 }
 
