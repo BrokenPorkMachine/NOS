@@ -51,7 +51,8 @@ static void putc_vga(char c)
 
 static void puts_out(const char *s)
 {
-    while(*s) { serial_write(*s); putc_vga(*s++); }
+    serial_puts(s);
+    while(*s) { putc_vga(*s++); }
 }
 
 static char getchar_block(void)
