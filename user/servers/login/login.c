@@ -37,6 +37,15 @@ static int authenticate(const char *user, const char *pass, const credential_t *
 
 static int row = 0, col = 0;
 
+static void clear_vga(void)
+{
+    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
+    for (int i = 0; i < VGA_COLS * VGA_ROWS; ++i)
+        vga[i] = (0x0F << 8) | ' ';
+    row = 0;
+    col = 0;
+}
+
 static void putc_vga(char c)
 {
     volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
@@ -89,6 +98,7 @@ static void read_line(char *buf, size_t len, int hide)
 void login_server(ipc_queue_t *q, uint32_t self_id)
 {
     (void)q; (void)self_id;
+    clear_vga();
     puts_out("[login] login server starting\n");
     /* Give other threads a chance to run so the start message is visible */
     thread_yield();
