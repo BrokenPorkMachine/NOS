@@ -87,14 +87,26 @@ thread_t *thread_create(void (*func)(void)) {
     t->stack = malloc(STACK_SIZE);
     if (!t->stack) { free(t); return NULL; }
 
-    // Setup stack for context_switch: r15..rbp, rflags, return, argument
+    // Setup stack to match interrupt frame used by schedule_from_isr.
+    // Layout grows downward and ends with r15 on top:
+    //   [r15 ... rax, rflags, cs, rip, arg]
     uint64_t *sp = (uint64_t *)(t->stack + STACK_SIZE);
 
-    *--sp = (uint64_t)func;         // function argument for thread_entry
-    *--sp = (uint64_t)thread_entry; // initial return address
-    *--sp = 0x202;                  // rflags with interrupts enabled
-    *--sp = 0; // rbp
+    *--sp = (uint64_t)func;         // argument for thread_entry
+    *--sp = (uint64_t)thread_entry; // RIP
+    *--sp = 0x08;                   // CS (kernel code segment)
+    *--sp = 0x202;                  // RFLAGS with IF set
+    *--sp = 0; // rax
     *--sp = 0; // rbx
+    *--sp = 0; // rcx
+    *--sp = 0; // rdx
+    *--sp = 0; // rsi
+    *--sp = 0; // rdi
+    *--sp = 0; // r8
+    *--sp = 0; // r9
+    *--sp = 0; // r10
+    *--sp = 0; // r11
+    *--sp = 0; // rbp
     *--sp = 0; // r12
     *--sp = 0; // r13
     *--sp = 0; // r14
