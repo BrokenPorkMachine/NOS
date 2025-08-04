@@ -39,5 +39,6 @@ void ssh_server(ipc_queue_t *q, uint32_t self_id) {
         }
         thread_yield();
     }
+    net_socket_close(sock);
     serial_puts("[ssh] server exiting\n");
 }
