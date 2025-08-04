@@ -4,64 +4,16 @@
 #include "../update/update.h"
 #include "../nitrfs/nitrfs.h"
 #include "../nitrfs/server.h"
-#include "../login/login.h"
-#include "../../../kernel/drivers/IO/keyboard.h"
-#include "../../../kernel/drivers/IO/serial.h"
-#include "../../../kernel/Task/thread.h"
+#include "../../../kernel/drivers/IO/tty.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 
 // Optional: #include "console.h" for log colors (see LOG_* macros at bottom)
 
-#define VGA_TEXT_BUF 0xB8000
-#define VGA_COLS 80
-#define VGA_ROWS 25
-
-static int row = 0, col = 0;
-
-static void vga_clear_screen(void) {
-    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
-    for (int i = 0; i < VGA_COLS * VGA_ROWS; ++i)
-        vga[i] = (0x0F << 8) | ' ';
-    row = 0;
-    col = 0;
-}
-
-static void vga_scroll() {
-    volatile uint16_t *vga = (uint16_t*)VGA_TEXT_BUF;
-    for (int r = 1; r < VGA_ROWS-1; ++r)
-        for (int c = 0; c < VGA_COLS; ++c)
-            vga[r*VGA_COLS + c] = vga[(r+1)*VGA_COLS + c];
-    for (int c = 0; c < VGA_COLS; ++c)
-        vga[(VGA_ROWS-1)*VGA_COLS + c] = (0x0F << 8) | ' ';
-    if (row > 1) row--;
-}
-
-static void putc_vga(char c) {
-    volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF;
-    if (c == '\n') {
-        col = 0;
-        if (++row >= VGA_ROWS - 1) {
-            vga_scroll();
-            row = VGA_ROWS - 2;
-        }
-        return;
-    }
-    vga[row * VGA_COLS + col] = (0x0F << 8) | c;
-    if (++col >= VGA_COLS) {
-        col = 0;
-        if (++row >= VGA_ROWS - 1) {
-            vga_scroll();
-            row = VGA_ROWS - 2;
-        }
-    }
-}
-
-
-// Write to both serial and VGA
-static void putc_out(char c) { serial_write(c); putc_vga(c); }
-static void puts_out(const char *s) { while (*s) putc_out(*s++); }
+// Write to TTY
+static void putc_out(char c) { tty_putc(c); }
+static void puts_out(const char *s) { tty_write(s); }
 
 static char cwd[NITRFS_NAME_LEN] = "";
 
@@ -95,7 +47,7 @@ static void u32_hex(uint32_t v, char buf[9]) {
 static char getchar_block(void) {
     int ch = -1;
     while (ch < 0) {
-        ch = keyboard_getchar();
+        ch = tty_getchar();
         if (ch < 0)
             sys_yield();
     }
@@ -360,10 +312,7 @@ static void cmd_help(void) {
 
 // --- Shell main loop ---
 void shell_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_t self_id) {
-    while(!login_done)
-        thread_yield();
-    vga_clear_screen();
-    serial_puts("[shell] starting\n");
+    tty_clear();
     puts_out("NOS shell ready\n");
     puts_out("type 'help' for commands\n");
     char line[80]; char *argv[4];
