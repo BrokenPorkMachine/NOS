@@ -64,18 +64,19 @@
    qemu-system-x86_64 -drive format=raw,file=disk.img \
      -bios /usr/share/OVMF/OVMF_CODE.fd \
      -netdev user,id=n0 -device e1000,netdev=n0 \
-    -device i8042 \
-     -serial stdio -display sdl
+     -device i8042 \
+     -serial stdio -display none -vnc :0
    ```
 
    The `-serial stdio` option attaches COM1 to your terminal so early boot
    logs appear even before the framebuffer is initialized. The
    `-device i8042` flag explicitly adds the legacy PS/2 controller so the login
-   server can receive keyboard scancodes. Keep a graphical window such as
-   `-display sdl` so the login prompt can receive keyboard input;
-   running with `-display none` will leave the prompt unresponsive. See
-   [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details.
-  Networking support is under active development. See
+   server can receive keyboard scancodes. `-vnc :0` exposes the display over
+  VNC (port 5900) when local keyboard input is unavailable. The login prompt
+  prints the guest IP (default `10.0.2.15` with user networking) so experimental
+  SSH or VNC servers can be reached over QEMU's user networking. See
+  [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details. Networking
+  support is under active development. See
   [docs/NETWORK_SERVERS.md](docs/NETWORK_SERVERS.md) for current status.
 
 ---

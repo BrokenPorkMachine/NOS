@@ -1,11 +1,12 @@
 # Planned Network Servers
 
-This document outlines the network services for NitrOS.  A small loopback
-network stack lives in `Net/` and allows local user-mode servers to exchange
-packets without real hardware.  Each service communicates over a dedicated
-logical port so they no longer interfere with one another.  The VNC, SSH, and
-FTP servers remain simple demonstrations until higher level protocols are
-implemented.
+This document outlines the network services for NitrOS.  A small network stack
+in `Net/` allows user-mode servers to exchange packets even without real
+hardware.  Each service communicates over a dedicated logical port so they no
+longer interfere with one another.  The stack tracks a basic IPv4 address and
+can now answer ARP requests, paving the way for real hardware networking. The
+VNC, SSH, and FTP servers remain simple demonstrations until higher level
+protocols are implemented.
 
 ## VNC Server
 

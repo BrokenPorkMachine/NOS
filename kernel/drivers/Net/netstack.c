@@ -18,6 +18,7 @@ static uint8_t netbuf[NET_PORTS][NETBUF_SIZE];
 static size_t head[NET_PORTS];
 static size_t tail[NET_PORTS];
 static uint8_t our_mac[6];
+static uint32_t ip_addr = 0x0A00020F; // default 10.0.2.15
 
 static uint16_t swap16(uint16_t x) { return (x >> 8) | (x << 8); }
 static uint32_t swap32(uint32_t x) { return ((uint32_t)swap16(x & 0xFFFF) << 16) | swap16(x >> 16); }
@@ -150,6 +151,14 @@ int net_receive(unsigned port, void *buf, size_t buflen) {
     return (int)avail;
 }
 
+uint32_t net_get_ip(void) {
+    return ip_addr;
+}
+
+void net_set_ip(uint32_t ip) {
+    ip_addr = ip;
+}
+
 // ---- Socket style API ---------------------------------------------------
 
 int net_socket_open(uint16_t port, net_socket_type_t type) {
@@ -237,8 +246,32 @@ static void handle_ipv6(const uint8_t *pkt, size_t len) {
 }
 
 static void handle_arp(const uint8_t *pkt, size_t len) {
-    (void)pkt; (void)len;
-    // ARP parsing hook; currently no operational logic.
+    if (len < sizeof(struct arp_hdr)) return;
+    const struct arp_hdr *a = (const struct arp_hdr *)pkt;
+    if (ntohs(a->oper) != 1) return; // only handle requests
+    if (ntohl(a->tpa) != ip_addr) return; // not for us
+
+    uint8_t frame[sizeof(struct eth_hdr) + sizeof(struct arp_hdr)];
+    struct eth_hdr *eth = (struct eth_hdr *)frame;
+    struct arp_hdr *r = (struct arp_hdr *)(frame + sizeof(struct eth_hdr));
+
+    for (int i = 0; i < 6; ++i) {
+        eth->dst[i] = a->sha[i];
+        eth->src[i] = our_mac[i];
+        r->tha[i] = a->sha[i];
+        r->sha[i] = our_mac[i];
+    }
+    eth->type = htons(0x0806);
+
+    r->htype = htons(1);
+    r->ptype = htons(0x0800);
+    r->hlen = 6;
+    r->plen = 4;
+    r->oper = htons(2); // reply
+    r->spa = htonl(ip_addr);
+    r->tpa = a->spa;
+
+    e1000_transmit(frame, sizeof(frame));
 }
 
 static void handle_frame(const uint8_t *frame, size_t len) {
