@@ -233,6 +233,9 @@ static thread_t *pick_next(int cpu) {
 }
 
 void schedule(void) {
+    uint64_t rflags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(rflags) :: "memory");
+
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
     if (prev->state == THREAD_RUNNING)
@@ -242,7 +245,7 @@ void schedule(void) {
     if (!next) {
         prev->state = THREAD_RUNNING;
         serial_puts("[sched] idle\n");
-        __asm__ volatile("sti; hlt");
+        __asm__ volatile("push %0; popfq; hlt" :: "r"(rflags) : "memory");
         return;
     }
 
@@ -255,6 +258,7 @@ void schedule(void) {
     utoa_dec(next->id, buf); serial_puts(buf);
     serial_puts("\n");
     context_switch(&prev->rsp, next->rsp);
+    ((uint64_t*)prev->rsp)[6] = rflags;
 }
 
 uint64_t schedule_from_isr(uint64_t *old_rsp) {
