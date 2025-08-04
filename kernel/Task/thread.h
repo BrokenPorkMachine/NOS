@@ -22,6 +22,9 @@ typedef struct thread {
 
 extern thread_t *current_cpu[MAX_CPUS];
 
+// Retrieve pointer to currently running thread on this CPU
+thread_t *thread_current(void);
+
 // Initialize threading system and create initial threads
 void threads_init(void);
 
