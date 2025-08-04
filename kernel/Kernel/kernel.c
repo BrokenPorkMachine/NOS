@@ -327,8 +327,11 @@ void kernel_main(bootinfo_t *bootinfo) {
     threads_init();
 
     log_line("[Stage 5] Scheduler start");
-    asm volatile("sti");      // enable interrupts before scheduling threads
-    schedule();               // start first thread now that IRQs are enabled
+    // Start the first thread with interrupts disabled to avoid a timer
+    // interrupt racing the initial call to schedule(). Each thread stack
+    // has IF set in its saved rflags, so once a thread is running timer
+    // interrupts will be enabled automatically.
+    schedule();
 
     for (;;) {
         schedule();
