@@ -16,6 +16,9 @@ static void trim_newline(char *s) {
 void vnc_server(ipc_queue_t *q, uint32_t self_id) {
     (void)q; (void)self_id;
     serial_puts("[vnc] VNC server starting\n");
+    // Allow the scheduler to run other threads before performing network
+    // setup, preventing potential boot-time hangs if these calls block.
+    thread_yield();
     int sock = net_socket_open(VNC_PORT, NET_SOCK_STREAM);
     const char hello[] = "NOS VNC ready\r\n";
     net_socket_send(sock, hello, strlen(hello));
