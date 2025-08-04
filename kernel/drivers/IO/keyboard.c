@@ -30,9 +30,27 @@ static const char keymap_shift[128] = {
 static void keyboard_isr(void);
 
 void keyboard_init(void) {
-    // Enable keyboard IRQ1 on PIC
+    // Enable the PS/2 keyboard interface and start scanning so keystrokes
+    // generate IRQ1 interrupts. Without this, the controller may leave the
+    // keyboard disabled and the login server will never receive input.
+
+    // Enable first PS/2 port (keyboard)
+    outb(0x64, 0xAE);
+    io_wait();
+
+    // Reset to defaults and enable scanning
+    outb(0x60, 0xF6); // set defaults
+    io_wait();
+    (void)inb(0x60); // ack
+
+    outb(0x60, 0xF4); // enable scanning
+    io_wait();
+    (void)inb(0x60); // ack
+
+    // Finally unmask keyboard IRQ1 on the PIC
     pic_set_mask(1, 1);
-    // Handler installed via IDT in idt_install()
+
+    // Handler is installed via idt_install()
 }
 
 int keyboard_read_scancode(void) {
@@ -75,7 +93,6 @@ void keyboard_isr(void) {
         keybuf[head] = sc;
         head = next;
     }
-    outb(0x20, 0x20); // EOI
 }
 
 // Expose handler symbol for assembly stub
