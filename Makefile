@@ -32,6 +32,7 @@ run: disk.img
 		-m 512M \
 		-netdev user,id=n0 \
 		-device e1000,netdev=n0 \
+		-device isa-keyboard \
 		-serial stdio -display sdl
 
 .PHONY: all libc kernel boot clean run

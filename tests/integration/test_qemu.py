@@ -11,6 +11,7 @@ def run_qemu():
             "-m", "512M",
             "-netdev", "user,id=n0",
             "-device", "e1000,netdev=n0",
+            "-device", "isa-keyboard",
             "-serial", "stdio",
             "-display", "none",
             "-no-reboot",
