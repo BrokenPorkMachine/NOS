@@ -85,6 +85,37 @@ struct tcp_hdr {
     uint16_t urgent;
 } __attribute__((packed));
 
+struct pseudo_hdr {
+    uint32_t src;
+    uint32_t dst;
+    uint8_t zero;
+    uint8_t proto;
+    uint16_t len;
+} __attribute__((packed));
+
+static uint32_t checksum_partial(uint32_t sum, const void *buf, size_t len) {
+    const uint8_t *data = (const uint8_t *)buf;
+    while (len > 1) {
+        sum += ((uint32_t)data[0] << 8) | data[1];
+        data += 2;
+        len -= 2;
+    }
+    if (len) {
+        sum += ((uint32_t)data[0] << 8);
+    }
+    return sum;
+}
+
+static uint16_t checksum_finish(uint32_t sum) {
+    while (sum >> 16)
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    return (uint16_t)~sum;
+}
+
+static uint16_t checksum(const void *buf, size_t len) {
+    return checksum_finish(checksum_partial(0, buf, len));
+}
+
 static size_t netbuf_avail(unsigned p) {
     size_t h = head[p];
     size_t t = tail[p];
@@ -316,7 +347,7 @@ int net_send_ipv4_udp(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port,
     ip->ttl = 64;
     ip->proto = 17;
     ip->checksum = 0;
-    ip->src = 0;
+    ip->src = htonl(ip_addr);
     ip->dst = htonl(dst_ip);
 
     struct udp_hdr *udp = (struct udp_hdr *)((uint8_t *)ip + sizeof(struct ipv4_hdr));
@@ -326,6 +357,15 @@ int net_send_ipv4_udp(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port,
     udp->checksum = 0;
 
     memcpy((uint8_t *)udp + sizeof(struct udp_hdr), data, len);
+
+    struct pseudo_hdr ph = { ip->src, ip->dst, 0, 17, udp->len };
+    uint32_t sum = 0;
+    sum = checksum_partial(sum, &ph, sizeof(ph));
+    sum = checksum_partial(sum, udp, sizeof(struct udp_hdr) + len);
+    udp->checksum = checksum_finish(sum);
+
+    ip->checksum = checksum(ip, sizeof(struct ipv4_hdr));
+
     size_t total = sizeof(struct eth_hdr) + sizeof(struct ipv4_hdr) +
                    sizeof(struct udp_hdr) + len;
     return e1000_transmit(frame, total);
@@ -350,7 +390,7 @@ int net_send_ipv4_tcp(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port,
     ip->ttl = 64;
     ip->proto = 6;
     ip->checksum = 0;
-    ip->src = 0;
+    ip->src = htonl(ip_addr);
     ip->dst = htonl(dst_ip);
 
     struct tcp_hdr *tcp = (struct tcp_hdr *)((uint8_t *)ip + sizeof(struct ipv4_hdr));
@@ -364,6 +404,16 @@ int net_send_ipv4_tcp(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port,
     tcp->urgent = 0;
 
     memcpy((uint8_t *)tcp + sizeof(struct tcp_hdr), data, len);
+
+    struct pseudo_hdr ph = { ip->src, ip->dst, 0, 6,
+                             htons(sizeof(struct tcp_hdr) + len) };
+    uint32_t sum = 0;
+    sum = checksum_partial(sum, &ph, sizeof(ph));
+    sum = checksum_partial(sum, tcp, sizeof(struct tcp_hdr) + len);
+    tcp->checksum = checksum_finish(sum);
+
+    ip->checksum = checksum(ip, sizeof(struct ipv4_hdr));
+
     size_t total = sizeof(struct eth_hdr) + sizeof(struct ipv4_hdr) +
                    sizeof(struct tcp_hdr) + len;
     return e1000_transmit(frame, total);

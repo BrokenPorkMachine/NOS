@@ -4,7 +4,7 @@ CFLAGS=-Wall -Wextra -std=gnu11 \
     -I../user/servers/nitrfs -I../user/servers/login -I../user/servers/ftp \
     -I../user/libc -I../kernel/drivers/IO -I../kernel/drivers/Audio \
     -I../kernel/drivers/Net
-UNIT_TESTS=test_ipc test_pmm test_syscall test_nitrfs test_login test_ftp test_login_keyboard
+UNIT_TESTS=test_ipc test_pmm test_syscall test_nitrfs test_login test_ftp test_login_keyboard test_net
 
 all: $(UNIT_TESTS)
 	for t in $(UNIT_TESTS); do ./$$t; done
@@ -29,6 +29,9 @@ test_login_keyboard: unit/test_login_keyboard.c ../user/servers/login/login.c \
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_ftp: unit/test_ftp.c ../user/servers/ftp/ftp.c ../kernel/IPC/ipc.c ../user/libc/libc.c
+	$(CC) $(CFLAGS) $^ -o $@
+
+test_net: unit/test_net.c ../kernel/drivers/Net/netstack.c ../user/libc/libc.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
