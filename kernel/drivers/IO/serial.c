@@ -14,6 +14,10 @@ void serial_init(void) {
     outb(COM1 + 4, 0x0B);    // IRQs enabled, RTS/DSR set
 }
 
+static int serial_received(void) {
+    return inb(COM1 + 5) & 0x01;
+}
+
 static int serial_empty(void) {
     return inb(COM1 + 5) & 0x20;
 }
@@ -45,4 +49,10 @@ void serial_puthex(uint32_t value) {
     while (*p == '0' && *(p + 1))
         p++;
     serial_puts(p);
+}
+
+int serial_read(void) {
+    if (!serial_received())
+        return -1;
+    return inb(COM1);
 }
