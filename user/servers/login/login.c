@@ -3,10 +3,14 @@
 #include "../../../kernel/Task/thread.h"
 #include "../../libc/libc.h"
 #include "../shell/shell.h"
+#include "../../../kernel/drivers/Net/netstack.h"
 #include <stddef.h>
 #include <string.h>
 
 volatile login_session_t current_session = {0};
+
+// Weak fallback so unit tests can link without the full netstack.
+__attribute__((weak)) uint32_t net_get_ip(void) { return 0x0A00020F; }
 
 extern ipc_queue_t fs_queue;
 extern ipc_queue_t pkg_queue;
@@ -77,11 +81,46 @@ static void read_line(char *buf, size_t len, int hide)
     buf[pos] = '\0';
 }
 
+static char *u8_to_str(unsigned v, char *buf)
+{
+    if (v >= 100) {
+        *buf++ = '0' + v / 100;
+        v %= 100;
+        *buf++ = '0' + v / 10;
+        v %= 10;
+        *buf++ = '0' + v;
+    } else if (v >= 10) {
+        *buf++ = '0' + v / 10;
+        v %= 10;
+        *buf++ = '0' + v;
+    } else {
+        *buf++ = '0' + v;
+    }
+    return buf;
+}
+
+static void ip_to_str(uint32_t ip, char *buf)
+{
+    for (int i = 3; i >= 0; --i) {
+        unsigned octet = (ip >> (i * 8)) & 0xFF;
+        buf = u8_to_str(octet, buf);
+        if (i)
+            *buf++ = '.';
+    }
+    *buf = '\0';
+}
+
 void login_server(ipc_queue_t *q, uint32_t self_id)
 {
     (void)q; (void)self_id;
     tty_clear();
     puts_out("[login] login server starting\n");
+    uint32_t ip = net_get_ip();
+    char ipbuf[16];
+    ip_to_str(ip, ipbuf);
+    puts_out("IP ");
+    puts_out(ipbuf);
+    puts_out(" (SSH/VNC)\n");
 
     char user[32];
     char pass[32];

@@ -30,6 +30,10 @@ int net_socket_recv(int sock, void *buf, size_t len);
 // Poll hardware NIC and dispatch incoming frames.
 void net_poll(void);
 
+// Configure or query the IPv4 address used by the stack.
+uint32_t net_get_ip(void);
+void net_set_ip(uint32_t ip);
+
 // Convenience helpers for transmitting IPv4 packets.
 int net_send_ipv4_udp(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port,
                       const void *data, size_t len);
