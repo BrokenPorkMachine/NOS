@@ -5,8 +5,8 @@
 #include "../arch/IDT/idt.h"
 #include "../drivers/IO/pic.h"
 #include "../drivers/IO/pit.h"
-#include "../drivers/IO/keyboard.h"
-#include "../drivers/IO/mouse.h"
+#include "../drivers/IO/ps2.h"
+#include "../drivers/IO/usb.h"
 #include "../drivers/IO/serial.h"
 #include "../drivers/IO/tty.h"
 #include "../drivers/Net/netstack.h"
@@ -312,12 +312,12 @@ void kernel_main(bootinfo_t *bootinfo) {
     log_line("  pit_init start");
     pit_init(100);
     log_line("  pit_init done");
-    log_line("  keyboard_init start");
-    keyboard_init();
-    log_good("[kbd] Keyboard initialized");
-    log_line("  mouse_init start");
-    mouse_init();
-    log_good("[mou] Mouse initialized");
+    log_line("  ps2_init start");
+    ps2_init();
+    log_good("[ps2] Keyboard and mouse initialized");
+    log_line("  usb_init start");
+    usb_init();
+    log_good("[usb] Controllers initialized");
 
     log_line("  tty_init start");
     tty_init();
@@ -339,6 +339,7 @@ void kernel_main(bootinfo_t *bootinfo) {
     schedule();
 
     for (;;) {
+        usb_poll();
         schedule();
     }
 }
