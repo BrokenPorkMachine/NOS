@@ -84,37 +84,49 @@ static void nic_setup_tx(void) {
 
 // Returns PCI bus/slot packed in int (bus<<8|slot), or -1 if not found
 int e1000_init(void) {
-    for (uint8_t bus = 0; bus < 8; ++bus) {
+    for (uint16_t bus = 0; bus < 256; ++bus) {
         for (uint8_t slot = 0; slot < 32; ++slot) {
-            uint32_t ven_dev = pci_config_read(bus, slot, 0, 0);
-            if (ven_dev == 0xFFFFFFFF)
-                continue;
-            uint16_t vendor = ven_dev & 0xFFFF;
+            for (uint8_t func = 0; func < 8; ++func) {
+                uint32_t ven_dev = pci_config_read((uint8_t)bus, slot, func, 0);
+                if (ven_dev == 0xFFFFFFFF)
+                    continue;
+                uint16_t vendor = ven_dev & 0xFFFF;
 
-            if (vendor == INTEL_VENDOR_ID) {
-                uint32_t classcode = pci_config_read(bus, slot, 0, 0x08);
-                uint8_t class = (classcode >> 24) & 0xFF;
-                uint8_t subclass = (classcode >> 16) & 0xFF;
+                if (vendor == INTEL_VENDOR_ID) {
+                    uint32_t classcode = pci_config_read((uint8_t)bus, slot, func, 0x08);
+                    uint8_t class = (classcode >> 24) & 0xFF;
+                    uint8_t subclass = (classcode >> 16) & 0xFF;
 
-                if (class == E1000_CLASS && subclass == E1000_SUBCLASS) {
-                    serial_puts("[net] Intel e1000 NIC detected\n");
+                    if (class == E1000_CLASS && subclass == E1000_SUBCLASS) {
+                        serial_puts("[net] Intel e1000 NIC detected\n");
 
-                    uint32_t bar0 = pci_config_read(bus, slot, 0, 0x10);
-                    bar0 &= ~0xF; // mask flags
-                    regs = (volatile uint32_t *)(uintptr_t)bar0;
+                        uint32_t bar0 = pci_config_read((uint8_t)bus, slot, func, 0x10);
+                        bar0 &= ~0xF; // mask flags
+                        regs = (volatile uint32_t *)(uintptr_t)bar0;
 
-                    char buf[32];
-                    buf[0] = '['; buf[1] = 'b'; buf[2] = 'u'; buf[3] = 's';
-                    buf[4] = ':'; buf[5] = ' '; buf[6] = '0' + bus; buf[7] = ','; buf[8] = ' ';
-                    buf[9] = 's'; buf[10] = 'l'; buf[11] = 'o'; buf[12] = 't';
-                    buf[13] = ':'; buf[14] = ' '; buf[15] = '0' + slot; buf[16] = ']'; buf[17] = '\0';
-                    serial_puts(buf);
-                    serial_puts("\n");
+                        const char *hex = "0123456789ABCDEF";
+                        char buf[32];
+                        buf[0] = '['; buf[1] = 'b'; buf[2] = 'u'; buf[3] = 's';
+                        buf[4] = ':'; buf[5] = ' ';
+                        buf[6] = hex[(bus >> 4) & 0xF];
+                        buf[7] = hex[bus & 0xF];
+                        buf[8] = ','; buf[9] = ' ';
+                        buf[10] = 's'; buf[11] = 'l'; buf[12] = 'o'; buf[13] = 't';
+                        buf[14] = ':'; buf[15] = ' ';
+                        buf[16] = hex[(slot >> 4) & 0xF];
+                        buf[17] = hex[slot & 0xF];
+                        buf[18] = ','; buf[19] = ' ';
+                        buf[20] = 'f'; buf[21] = 'n'; buf[22] = ':'; buf[23] = ' ';
+                        buf[24] = hex[func & 0xF];
+                        buf[25] = ']'; buf[26] = '\0';
+                        serial_puts(buf);
+                        serial_puts("\n");
 
-                    nic_setup_rx();
-                    nic_setup_tx();
+                        nic_setup_rx();
+                        nic_setup_tx();
 
-                    return (bus << 8) | slot;
+                        return ((bus & 0xFF) << 16) | (slot << 8) | func;
+                    }
                 }
             }
         }

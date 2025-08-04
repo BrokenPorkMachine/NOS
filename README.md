@@ -62,7 +62,9 @@
 
    ```sh
    qemu-system-x86_64 -drive format=raw,file=disk.img \
-     -bios /usr/share/OVMF/OVMF_CODE.fd -serial stdio
+     -bios /usr/share/OVMF/OVMF_CODE.fd \
+     -netdev user,id=n0 -device e1000,netdev=n0 \
+     -serial stdio
    ```
 
    The `-serial stdio` option attaches COM1 to your terminal so early boot

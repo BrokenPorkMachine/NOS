@@ -30,6 +30,8 @@ run: disk.img
 		-bios OVMF.fd \
 		-drive file=disk.img,format=raw \
 		-m 512M \
+		-netdev user,id=n0 \
+		-device e1000,netdev=n0 \
 		-serial stdio -display sdl
 
 .PHONY: all libc kernel boot clean run
