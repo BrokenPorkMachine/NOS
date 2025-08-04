@@ -1,6 +1,5 @@
 #include "../include/efi.h"
 #include "../include/bootinfo.h"
-#include "kernel_loader.h"
 
 static bootinfo_t *g_info = NULL;
 static void (*g_entry)(bootinfo_t *) = NULL;

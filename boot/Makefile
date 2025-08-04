@@ -14,8 +14,8 @@ LDFLAGS=/entry:efi_main \
         /filealign:32 \
         /out:NitrOBoot.efi
 
-SRC=src/NitrOBoot.c
-OBJ=src/NitrOBoot.obj
+SRC := $(wildcard src/*.c)
+OBJ := $(SRC:.c=.obj)
 
 all: NitrOBoot.efi
 
