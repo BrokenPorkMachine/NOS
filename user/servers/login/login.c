@@ -75,7 +75,15 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
     (void)q; (void)self_id;
     tty_clear();
     puts_out("[login] login server starting\n");
-    /* Removed extra yield to avoid stalling before the prompt */
+    /*
+     * Yield once after initialization so that pending hardware
+     * interrupts—particularly keyboard input—are serviced before
+     * we begin waiting for user characters.  Without this initial
+     * yield the login thread can monopolize the CPU during startup,
+     * preventing the keyboard IRQ handler from running and making
+     * the prompt appear unresponsive.
+     */
+    thread_yield();
     char user[32];
     char pass[32];
     for(;;) {
