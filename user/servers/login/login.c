@@ -4,6 +4,7 @@
 #include "../../libc/libc.h"
 #include "../shell/shell.h"
 #include <stddef.h>
+#include <string.h>
 
 volatile login_session_t current_session = {0};
 
@@ -21,7 +22,7 @@ static const credential_t cred_store[] = {
     {"admin", "admin", 0},
     {"guest", "guest", 1},
 };
-static const size_t cred_count = sizeof(cred_store)/sizeof(cred_store[0]);
+static const size_t cred_count = sizeof(cred_store) / sizeof(cred_store[0]);
 
 static int authenticate(const char *user, const char *pass, const credential_t **out)
 {
@@ -42,6 +43,7 @@ static void puts_out(const char *s)
 static char getchar_block(void)
 {
     int ch;
+    /* Loop until tty_getchar() returns a valid character */
     while ((ch = tty_getchar()) < 0) {
         thread_yield();
     }
@@ -50,25 +52,29 @@ static char getchar_block(void)
 
 static void read_line(char *buf, size_t len, int hide)
 {
-    size_t pos=0;
-    for(;;) {
+    size_t pos = 0;
+    for (;;) {
         char c = getchar_block();
-        if(c=='\n' || c=='\r') { puts_out("\n"); break; }
-        if((c=='\b' || c==127) && pos>0) {
-            puts_out("\b \b");
-            pos--; continue;
+        if (c == '\n' || c == '\r') {
+            puts_out("\n");
+            break;
         }
-        if(pos+1 < len && c) {
+        if ((c == '\b' || c == 127) && pos > 0) {
+            puts_out("\b \b");
+            --pos;
+            continue;
+        }
+        if (pos + 1 < len) {
             buf[pos++] = c;
-            if(hide) {
+            if (hide) {
                 puts_out("*");
             } else {
-                char str[2]={c,0};
+                char str[2] = { c, 0 };
                 puts_out(str);
             }
         }
     }
-    buf[pos]=0;
+    buf[pos] = '\0';
 }
 
 void login_server(ipc_queue_t *q, uint32_t self_id)
@@ -76,18 +82,24 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
     (void)q; (void)self_id;
     tty_clear();
     puts_out("[login] login server starting\n");
+
     char user[32];
     char pass[32];
-    for(;;) {
+
+    for (;;) {
         const credential_t *cred = NULL;
+
         puts_out("Username: ");
         read_line(user, sizeof(user), 0);
+
         puts_out("Password: ");
         read_line(pass, sizeof(pass), 1);
-        if(authenticate(user, pass, &cred) == 0) {
+
+        if (authenticate(user, pass, &cred) == 0) {
             puts_out("Login successful\n");
             current_session.uid = cred->uid;
-            strncpy((char*)current_session.username, cred->user, sizeof(current_session.username)-1);
+            strncpy(current_session.username, cred->user, sizeof(current_session.username) - 1);
+            current_session.username[sizeof(current_session.username) - 1] = '\0';
             current_session.session_id++;
             current_session.active = 1;
             break;
@@ -95,6 +107,7 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
             puts_out("Login failed\n");
         }
     }
+
     puts_out("[login] starting shell\n");
     shell_main(&fs_queue, &pkg_queue, &upd_queue, self_id);
 }
