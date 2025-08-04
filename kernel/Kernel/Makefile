@@ -58,7 +58,7 @@ OBJS = \
     ../arch/ACPI/acpi.o \
     ../drivers/IO/video.o \
     ../drivers/Audio/audio.o \
-    ../../libc.o
+    ../../user/libc/libc.o
 
 all: kernel.bin
 
@@ -89,4 +89,4 @@ kernel.bin: $(OBJS) kernel.ld
 clean:
 	rm -f *.o kernel.bin \
 ../arch/IDT/*.o ../drivers/IO/*.o ../drivers/Net/*.o ../VM/*.o \
-../Task/*.o ../arch/GDT/*.o ../../user/servers/*/*.o ../IPC/*.o ../arch/CPU/*.o ../../libc.o
+../Task/*.o ../arch/GDT/*.o ../../user/servers/*/*.o ../IPC/*.o ../arch/CPU/*.o ../../user/libc/libc.o
