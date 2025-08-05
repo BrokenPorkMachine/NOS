@@ -1,5 +1,6 @@
 #include "login.h"
 #include "../../../kernel/drivers/IO/tty.h"
+#include "../../../kernel/drivers/IO/serial.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../libc/libc.h"
 #include "../shell/shell.h"
@@ -41,14 +42,19 @@ static int authenticate(const char *user, const char *pass, const credential_t *
 
 static void puts_out(const char *s)
 {
-    tty_write(s);
+    /*
+     * Use the serial port directly so the login server can run in
+     * environments without a graphical console. tty_write() also emits to
+     * the framebuffer which is unnecessary when running headless.
+     */
+    serial_puts(s);
 }
 
 static char getchar_block(void)
 {
     int ch;
-    /* Loop until tty_getchar() returns a valid character */
-    while ((ch = tty_getchar()) < 0) {
+    /* Poll the serial port until input is available. */
+    while ((ch = serial_read()) < 0) {
         thread_yield();
     }
     return (char)ch;
