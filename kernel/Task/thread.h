@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <assert.h>
 
 #define MAX_CPUS 32
 
