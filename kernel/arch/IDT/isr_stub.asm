@@ -1,160 +1,190 @@
+; Mark all external handlers
+extern isr_timer_handler
+extern schedule_from_isr
+extern isr_syscall_handler
+extern isr_default_handler
+extern isr_keyboard_handler
+extern isr_mouse_handler
+extern isr_page_fault_handler
+extern isr_ipi_handler
+
+section .text
+
+; -------------------------------
 global isr_timer_stub
 isr_timer_stub:
     cli
-    ; Save general purpose registers
+    ; --- Save all GP registers
     push rax
-    push rbx
     push rcx
     push rdx
+    push rbx
+    push rbp
     push rsi
     push rdi
     push r8
     push r9
     push r10
     push r11
-    push rbp
     push r12
     push r13
     push r14
     push r15
-    extern isr_timer_handler
+
+    ; --- Maintain stack alignment: 15 pushes + iret frame (pushed by CPU) = 16
+    ; --- Call handler (handler must preserve registers if it uses them)
     call isr_timer_handler
-    mov rdi, rsp            ; pass pointer to saved context
-    extern schedule_from_isr
+
+    mov rdi, rsp             ; Pass pointer to saved context
     call schedule_from_isr
-    mov rsp, rax            ; switch to next thread stack
-    ; Send End of Interrupt to PIC
+    mov rsp, rax             ; Switch to new thread stack
+
+    ; --- EOI to master PIC
     mov al, 0x20
     out 0x20, al
-    ; Restore registers and return to the selected thread
+
+    ; --- Restore all GP registers
     pop r15
     pop r14
     pop r13
     pop r12
-    pop rbp
     pop r11
     pop r10
     pop r9
     pop r8
     pop rdi
     pop rsi
+    pop rbp
+    pop rbx
     pop rdx
     pop rcx
-    pop rbx
     pop rax
+
     iretq
 
-
+; -------------------------------
 global isr_syscall_stub
 isr_syscall_stub:
-    cli
+    ; Note: you usually DO NOT cli in syscall handlers (leave interrupts enabled!)
     push rax
-    push rbx
     push rcx
     push rdx
+    push rbx
+    push rbp
     push rsi
     push rdi
     push r8
     push r9
     push r10
     push r11
-    push rbp
-    mov rbp, rsp
-    extern isr_syscall_handler
+
+    mov rbp, rsp   ; Save stack pointer for possible switching/context
+
     call isr_syscall_handler
-    mov rsp, rbp
-    pop rbp
+
+    mov rsp, rbp   ; Restore original stack pointer
+
     pop r11
     pop r10
     pop r9
     pop r8
     pop rdi
     pop rsi
+    pop rbp
+    pop rbx
     pop rdx
     pop rcx
-    pop rbx
-    add rsp, 8 ; discard saved rax
-    sti
+    pop rax
+
     iretq
 
+; -------------------------------
 global isr_default_stub
 isr_default_stub:
     push rbp
     mov rbp, rsp
     cli
     mov rdi, rsp
-    extern isr_default_handler
     call isr_default_handler
     leave
     iretq
 
+; -------------------------------
 global isr_keyboard_stub
 isr_keyboard_stub:
     cli
     push rax
-    push rbx
     push rcx
     push rdx
+    push rbx
+    push rbp
     push rsi
     push rdi
     push r8
     push r9
     push r10
     push r11
-    push rbp
-    extern isr_keyboard_handler
+
     call isr_keyboard_handler
+
     mov al, 0x20
     out 0x20, al
-    pop rbp
+
     pop r11
     pop r10
     pop r9
     pop r8
     pop rdi
     pop rsi
+    pop rbp
+    pop rbx
     pop rdx
     pop rcx
-    pop rbx
     pop rax
+
     iretq
 
+; -------------------------------
 global isr_mouse_stub
 isr_mouse_stub:
+    cli
     push rbp
     mov rbp, rsp
-    cli
-    extern isr_mouse_handler
+
     call isr_mouse_handler
+
     mov al, 0x20
-    out 0xA0, al       ; send EOI to slave PIC
-    out 0x20, al       ; send EOI to master PIC
+    out 0xA0, al   ; EOI to slave
+    out 0x20, al   ; EOI to master
+
     leave
     iretq
 
+; -------------------------------
 global isr_page_fault_stub
 isr_page_fault_stub:
     cli
     push rax
     mov rax, cr2
-    push rax            ; fault address
-    mov rdi, [rsp+16]   ; error code
-    mov rsi, [rsp]      ; address
-    extern isr_page_fault_handler
+    push rax                 ; Save fault address
+    mov rdi, [rsp+16]        ; Error code (CPU pushes error code before RIP)
+    mov rsi, [rsp]           ; Fault address
     call isr_page_fault_handler
-    add rsp, 8          ; pop address
+    add rsp, 8               ; Remove fault address
     pop rax
     iretq
 
+; -------------------------------
 global isr_ipi_stub
 isr_ipi_stub:
+    cli
     push rbp
     mov rbp, rsp
-    cli
-    extern isr_ipi_handler
+
     call isr_ipi_handler
+
     leave
     iretq
 
-; Indicate that this object file does not require an executable stack
+; -------------------------------
 section .note.GNU-stack noalloc nobits align=1
