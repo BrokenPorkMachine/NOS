@@ -9,8 +9,8 @@ struct isr_context {
     // Interrupt number and error code (always present for uniformity)
     uint64_t int_no;
     uint64_t error_code;
+    // CR2: present for page faults (pushed by stub before CPU state)
+    uint64_t cr2;
     // Automatically-pushed by CPU on interrupt/exception
     uint64_t rip, cs, rflags, rsp, ss;
-    // CR2: present for page faults (must be set in stub)
-    uint64_t cr2;
 };
