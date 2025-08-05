@@ -1,6 +1,5 @@
 #include "login.h"
 #include "../../../kernel/drivers/IO/tty.h"
-#include "../../../kernel/drivers/IO/serial.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../libc/libc.h"
 #include "../shell/shell.h"
@@ -43,18 +42,17 @@ static int authenticate(const char *user, const char *pass, const credential_t *
 static void puts_out(const char *s)
 {
     /*
-     * Use the serial port directly so the login server can run in
-     * environments without a graphical console. tty_write() also emits to
-     * the framebuffer which is unnecessary when running headless.
+     * Use the TTY driver so output reaches both the serial console and the
+     * framebuffer, making the login prompt visible on local displays.
      */
-    serial_puts(s);
+    tty_write(s);
 }
 
 static char getchar_block(void)
 {
     int ch;
-    /* Poll the serial port until input is available. */
-    while ((ch = serial_read()) < 0) {
+    /* Poll the TTY until input is available from keyboard or serial. */
+    while ((ch = tty_getchar()) < 0) {
         thread_yield();
     }
     return (char)ch;
