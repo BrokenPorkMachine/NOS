@@ -13,11 +13,16 @@ int main(void) {
     bi.mmap_entries = 1;
     pmm_init(&bi);
     assert(pmm_total_frames() >= 516);
+    assert(pmm_free_frames() == 4);
     void *p1 = alloc_page();
+    assert(pmm_free_frames() == 3);
     void *p2 = alloc_page();
+    assert(pmm_free_frames() == 2);
     assert(p1 && p2 && p1 != p2);
     free_page(p1);
+    assert(pmm_free_frames() == 3);
     void *p3 = alloc_page();
+    assert(pmm_free_frames() == 2);
     assert(p3 == p1);
     return 0;
 }

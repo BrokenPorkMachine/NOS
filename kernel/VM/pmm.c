@@ -12,6 +12,7 @@
 static uint8_t *bitmap = NULL;
 static uint64_t total_frames = 0;
 static uint64_t next_free = 0; // next frame index to start searching from
+static uint64_t free_frames = 0; // number of free (unallocated) frames
 
 static inline uint64_t bit_byte(uint64_t bit) { return bit >> 3; }
 static inline uint8_t bit_mask(uint64_t bit) { return (uint8_t)(1u << (bit & 7)); }
@@ -47,6 +48,7 @@ void pmm_init(const bootinfo_t *bootinfo) {
         return;
     memset(bitmap, 0xFF, bitmap_bytes);
 
+    free_frames = 0;
     for (uint32_t i = 0; i < bootinfo->mmap_entries; ++i) {
         if (bootinfo->mmap[i].type != 7)
             continue;
@@ -60,20 +62,25 @@ void pmm_init(const bootinfo_t *bootinfo) {
         uint64_t e = end / PAGE_SIZE;
         for (uint64_t f = s; f < e; ++f)
             bit_clear(f);
+        free_frames += (e - s);
     }
-    for (uint64_t f = 0; f < total_frames && f < 512; ++f)
+    for (uint64_t f = 0; f < total_frames && f < 512; ++f) {
+        if (!bit_test(f))
+            free_frames--;
         bit_set(f);
+    }
     next_free = (total_frames > 512) ? 512 : total_frames;
 }
 
 void *alloc_page(void) {
-    if (!bitmap)
+    if (!bitmap || free_frames == 0)
         return NULL;
     for (uint64_t off = 0; off < total_frames; ++off) {
         uint64_t f = (next_free + off) % total_frames;
         if (!bit_test(f)) {
             bit_set(f);
             next_free = (f + 1) % total_frames;
+            free_frames--;
             return (void *)(f * PAGE_SIZE);
         }
     }
@@ -84,11 +91,18 @@ void free_page(void *page) {
     if (!page || !bitmap)
         return;
     uint64_t frame = (uint64_t)page / PAGE_SIZE;
-    bit_clear(frame);
-    if (frame < next_free)
-        next_free = frame;
+    if (bit_test(frame)) {
+        bit_clear(frame);
+        free_frames++;
+        if (frame < next_free)
+            next_free = frame;
+    }
 }
 
 uint64_t pmm_total_frames(void) {
     return total_frames;
+}
+
+uint64_t pmm_free_frames(void) {
+    return free_frames;
 }

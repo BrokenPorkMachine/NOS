@@ -10,6 +10,7 @@ void pmm_init(const bootinfo_t *bootinfo);
 void *alloc_page(void);
 void free_page(void *page);
 uint64_t pmm_total_frames(void);
+uint64_t pmm_free_frames(void);
 
 #ifdef __cplusplus
 }
