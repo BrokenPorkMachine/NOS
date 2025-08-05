@@ -1,5 +1,4 @@
 #include "init.h"
-#include "../../../kernel/drivers/IO/serial.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../../kernel/IPC/ipc.h"
 #include "../../libc/libc.h"
@@ -26,8 +25,6 @@ static void update_thread(void) { update_server(&upd_queue, &pkg_queue, thread_s
 // Initial userspace task spawner. Creates core servers and remote access tasks.
 void init_main(ipc_queue_t *q, uint32_t self_id) {
     (void)q; (void)self_id;
-    serial_puts("[init] init server started\n");
-
     thread_t *t;
 
     // Core system servers
