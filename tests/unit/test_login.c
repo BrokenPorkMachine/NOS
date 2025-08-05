@@ -11,8 +11,8 @@ static int first_poll = 1;
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
 
-/* Minimal stubs for the serial driver used by the login server */
-int serial_read(void) {
+/* Stubs for the TTY driver used by the login server */
+int tty_getchar(void) {
     if (first_poll) {
         first_poll = 0;
         return -1; /* simulate initial lack of input */
@@ -21,9 +21,7 @@ int serial_read(void) {
     return (unsigned char)input[pos++];
 }
 
-void serial_puts(const char *s) { (void)s; }
-
-/* login_server clears the TTY even when using serial for I/O */
+void tty_write(const char *s) { (void)s; }
 void tty_clear(void) { }
 static int yield_count = 0;
 void thread_yield(void) { yield_count++; }
