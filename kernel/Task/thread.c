@@ -14,6 +14,15 @@
 
 // --- Thread and scheduler state ---
 
+void __assert_fail(const char *expr, const char *file, unsigned int line, const char *func) {
+    extern void serial_puts(const char *);
+    serial_puts("\n*** KERNEL ASSERTION FAILED ***\n");
+    serial_puts("expr: "); serial_puts(expr); serial_puts("\n");
+    serial_puts("file: "); serial_puts(file); serial_puts("\n");
+    // (Optional: print line number and func, but not needed)
+    for (;;) __asm__ volatile ("hlt");
+}
+
 thread_t *current_cpu[MAX_CPUS] = {0};
 static thread_t *tail_cpu[MAX_CPUS] = {0};
 static int next_id = 1;
