@@ -58,5 +58,5 @@ void context_switch(uint64_t *old_rsp, uint64_t new_rsp);
 void enter_user_mode(uint64_t entry, uint64_t user_stack) __attribute__((noreturn));
 
 // Create a new kernel thread with entrypoint and priority (0=lowest, 255=highest)
-thread_t *thread_create_with_priority(void (*func)(void), int priority);
+thread_t *thread_create_with_priority(void (*func)(void), uint8_t priority);
 
