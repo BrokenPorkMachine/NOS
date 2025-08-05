@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "../arch/CPU/smp.h"
 
+#define STACK_SIZE 8192
+
 // Zombie list to track exited threads
 static thread_t *zombie_list = NULL;
 
