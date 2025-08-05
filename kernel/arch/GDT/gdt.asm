@@ -3,20 +3,22 @@
 ; Flushes new GDT and reloads segment registers
 ; rdi - pointer to gdt_ptr structure
 
+%include "../arch/GDT/segments.inc"
+
 global gdt_flush
 
 section .text
 
 gdt_flush:
     lgdt [rdi]
-    mov ax, 0x10       ; kernel data segment selector
+    mov ax, GDT_SEL_KERNEL_DATA
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
     mov ss, ax
     ; far jump to reload CS
-    push 0x08
+    push GDT_SEL_KERNEL_CODE
     lea rax, [rel .flush]
     push rax
     retfq

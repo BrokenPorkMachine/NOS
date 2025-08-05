@@ -10,7 +10,7 @@
 
 * Custom UEFI bootloader (no GRUB, no 3rd-party loaders)
 * True x86\_64 long mode kernel
-* Clean kernel/user separation (ring 0/3)
+* Four-ring GDT layout (rings 0–3; user/kernel split)
 * Full paging and memory protection (NX, SMEP, SMAP)
 * Modular, timer-driven preemptive multitasking
 * Interrupt handling (IDT, PIT, PIC)
