@@ -10,7 +10,11 @@
 #define GDT_SEL_USER_CODE   0x38
 #define GDT_SEL_USER_DATA   0x40
 
-/* User-mode selectors with Ring 3 privilege level set */
-#define GDT_SEL_USER_CODE_R3 (GDT_SEL_USER_CODE | 3)
-#define GDT_SEL_USER_DATA_R3 (GDT_SEL_USER_DATA | 3)
+/* Convenience selectors with explicit privilege levels */
+#define GDT_SEL_RING1_CODE_R1 (GDT_SEL_RING1_CODE | 1)
+#define GDT_SEL_RING1_DATA_R1 (GDT_SEL_RING1_DATA | 1)
+#define GDT_SEL_RING2_CODE_R2 (GDT_SEL_RING2_CODE | 2)
+#define GDT_SEL_RING2_DATA_R2 (GDT_SEL_RING2_DATA | 2)
+#define GDT_SEL_USER_CODE_R3  (GDT_SEL_USER_CODE | 3)
+#define GDT_SEL_USER_DATA_R3  (GDT_SEL_USER_DATA | 3)
 
