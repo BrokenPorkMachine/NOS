@@ -230,16 +230,15 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
         prev->state = THREAD_READY;
 
     thread_t *next = pick_next(cpu);
-    if (!next || !next->started) {
-        // pick_next advances current_cpu even if we do not switch
-        // threads. Restore the pointer so the scheduler state remains
-        // consistent with the actually running thread.
+    if (!next) {
+        /* No ready threads, continue running the current one */
         current_cpu[cpu] = prev;
         prev->state = THREAD_RUNNING;
         return (uint64_t)old_rsp;
     }
 
     next->state = THREAD_RUNNING;
+    next->started = 1;
     char buf[32];
     serial_puts("[sched] preempt ");
     utoa_dec(prev->id, buf); serial_puts(buf);
