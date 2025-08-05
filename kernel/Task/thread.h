@@ -61,3 +61,4 @@ void enter_user_mode(uint64_t entry, uint64_t user_stack) __attribute__((noretur
 // Create a new kernel thread with entrypoint and priority (0=lowest, 255=highest)
 thread_t *thread_create_with_priority(void (*func)(void), uint8_t priority);
 
+void __assert_fail(const char *expr, const char *file, unsigned int line, const char *func);
