@@ -5,11 +5,8 @@ global context_switch
 
 section .text
 context_switch:
-    ; Save current flags and disable interrupts to ensure an atomic switch
-    pushfq
-    cli
-
-    ; Save callee-saved registers as per System V AMD64 ABI
+    pushfq          ; Save flags
+    cli             ; Disable interrupts (if kernel context switch)
     push rbp
     push rbx
     push r12
@@ -17,24 +14,18 @@ context_switch:
     push r14
     push r15
 
-    ; Store current stack pointer to *old_rsp
-    mov [rdi], rsp
+    mov [rdi], rsp  ; Save current stack pointer
 
-    ; Switch to the new stack
-    mov rsp, rsi
+    mov rsp, rsi    ; Switch to new stack
 
-    ; Restore callee-saved registers (from new context's stack)
     pop r15
     pop r14
     pop r13
     pop r12
     pop rbx
     pop rbp
-
-    ; Restore saved flags
-    popfq
+    popfq           ; Restore flags (including IF)
 
     ret
 
-; Indicate that this object file does not require an executable stack
 section .note.GNU-stack noalloc nobits align=1
