@@ -2,15 +2,23 @@
 #include "keyboard.h"
 #include "pic.h"
 #include <stddef.h>
+#include <stdint.h>
+#include "../../../kernel/interrupt/context.h"
 
+// ========================
+// Config and Static State
+// ========================
 #define KEYBUF_SIZE 32
 static uint8_t keybuf[KEYBUF_SIZE];
 static volatile int head = 0, tail = 0;
 static int shift_state = 0;
 static int caps_lock = 0;
 
+// ========================
+// Key Maps (Set 1)
+// ========================
 static const char keymap[128] = {
-    [1] = 27,
+    [1] = 27, // ESC
     [2]='1',[3]='2',[4]='3',[5]='4',[6]='5',[7]='6',[8]='7',[9]='8',[10]='9',[11]='0',
     [12]='-',[13]='=',[14]='\b',[15]='\t',[16]='q',[17]='w',[18]='e',[19]='r',
     [20]='t',[21]='y',[22]='u',[23]='i',[24]='o',[25]='p',[26]='[',[27]=']',
@@ -28,86 +36,10 @@ static const char keymap_shift[128] = {
     [57]=' '
 };
 
-static void keyboard_isr(void);
-
-void keyboard_init(void) {
-    // Enable the PS/2 keyboard interface and start scanning so keystrokes
-    // generate IRQ1 interrupts. Without this, the controller may leave the
-    // keyboard disabled and the login server will never receive input.
-
-    // Enable first PS/2 port (keyboard)
-    outb(0x64, 0xAE);
-    io_wait();
-
-    // Reset to defaults
-    outb(0x60, 0xF6); // set defaults
-    io_wait();
-    (void)inb(0x60); // ack
-
-    // Ensure we use scancode set 1 so the keymap matches the hardware
-    outb(0x60, 0xF0); // select scancode set command
-    io_wait();
-    (void)inb(0x60); // ack
-    outb(0x60, 0x01); // use set 1
-    io_wait();
-    (void)inb(0x60); // ack
-
-    // Enable scanning
-    outb(0x60, 0xF4); // enable scanning
-    io_wait();
-    (void)inb(0x60); // ack
-
-    // Finally unmask keyboard IRQ1 on the PIC
-    pic_set_mask(1, 1);
-
-    // Handler is installed via idt_install()
-}
-
-int keyboard_read_scancode(void) {
-    if (tail == head) return -1;
-    uint8_t sc = keybuf[tail];
-    tail = (tail + 1) % KEYBUF_SIZE;
-    return sc;
-}
-
-static char scancode_ascii(uint8_t sc) {
-    char ch;
-    if (shift_state)
-        ch = (sc < 128) ? keymap_shift[sc] : 0;
-    else
-        ch = (sc < 128) ? keymap[sc] : 0;
-    if (!ch)
-        return 0;
-    if (caps_lock && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')))
-        ch ^= 0x20; // flip case when caps lock is active
-    return ch;
-}
-
-int keyboard_getchar(void) {
-    int sc = keyboard_read_scancode();
-    if (sc < 0)
-        return -1;
-    if (sc == 0x2A || sc == 0x36) {
-        shift_state = 1;
-        return -1;
-    }
-    if (sc == 0xAA || sc == 0xB6) {
-        shift_state = 0;
-        return -1;
-    }
-    if (sc == 0x3A) { // Caps Lock
-        caps_lock ^= 1;
-        return -1;
-    }
-    if (sc & 0x80)
-        return -1; // ignore releases
-    char ch = scancode_ascii(sc);
-    if (!ch)
-        return -1;
-    return (unsigned char)ch;
-}
-
-void keyboard_isr(void) {
+// ========================
+// Keyboard Internal ISR
+// ========================
+static void keyboard_isr(void) {
     uint8_t sc = inb(0x60);
     int next = (head + 1) % KEYBUF_SIZE;
     if (next != tail) {
@@ -116,8 +48,86 @@ void keyboard_isr(void) {
     }
 }
 
-// Expose handler symbol for assembly stub
-void isr_keyboard_handler(void);
-void isr_keyboard_handler(void) {
+// ========================
+// Keyboard Initialization
+// ========================
+void keyboard_init(void) {
+    // Enable the PS/2 keyboard interface (controller port 1)
+    outb(0x64, 0xAE); io_wait();
+
+    // Reset keyboard to defaults
+    outb(0x60, 0xF6); io_wait(); (void)inb(0x60);
+
+    // Set scan code set 1
+    outb(0x60, 0xF0); io_wait(); (void)inb(0x60);
+    outb(0x60, 0x01); io_wait(); (void)inb(0x60);
+
+    // Enable scanning
+    outb(0x60, 0xF4); io_wait(); (void)inb(0x60);
+
+    // Unmask keyboard IRQ1 on the PIC (mask=0 means enabled)
+    pic_set_mask(1, 0);
+
+    // The actual ISR is installed via the IDT by kernel/IDT code
+}
+
+// ========================
+// Scancode Buffer Handling
+// ========================
+int keyboard_read_scancode(void) {
+    if (tail == head) return -1;
+    uint8_t sc = keybuf[tail];
+    tail = (tail + 1) % KEYBUF_SIZE;
+    return sc;
+}
+
+// ========================
+// ASCII Conversion Helpers
+// ========================
+static char scancode_ascii(uint8_t sc) {
+    char ch = 0;
+    if (shift_state)
+        ch = (sc < 128) ? keymap_shift[sc] : 0;
+    else
+        ch = (sc < 128) ? keymap[sc] : 0;
+    if (!ch)
+        return 0;
+    // Only flip case for alpha, not symbols
+    if (caps_lock && ch >= 'a' && ch <= 'z')
+        ch = ch - 'a' + 'A';
+    else if (caps_lock && ch >= 'A' && ch <= 'Z')
+        ch = ch - 'A' + 'a';
+    return ch;
+}
+
+// ========================
+// Public: getchar-like API
+// ========================
+int keyboard_getchar(void) {
+    int sc = keyboard_read_scancode();
+    if (sc < 0)
+        return -1;
+
+    // Handle Shift
+    if (sc == 0x2A || sc == 0x36) { shift_state = 1; return -1; }
+    if (sc == 0xAA || sc == 0xB6) { shift_state = 0; return -1; }
+
+    // Handle Caps Lock toggle
+    if (sc == 0x3A) { caps_lock ^= 1; return -1; }
+
+    // Ignore key releases
+    if (sc & 0x80) return -1;
+
+    char ch = scancode_ascii(sc);
+    if (!ch)
+        return -1;
+    return (unsigned char)ch;
+}
+
+// ========================
+// ISR Handler for Kernel Integration
+// ========================
+void isr_keyboard_handler(struct isr_context *ctx) {
+    (void)ctx; // Not used, but keeps signature uniform with kernel ISRs
     keyboard_isr();
 }
