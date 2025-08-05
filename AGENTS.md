@@ -16,6 +16,7 @@ This file is intended as a high-level guide and technical reference for all cont
 | -------------------- | --------- | ----------- | ------------------------------------------ |
 | Bootloader           | Ring 0    | UEFI app    | Loads kernel, passes boot info, exits      |
 | Mach Microkernel     | Ring 0    | Kernel      | Scheduling, memory, IPC, trap/syscall, IRQ |
+| Mid-privilege Layer  | Rings 1&2 | Reserved    | Placeholder for future supervised drivers   |
 | User Task/Thread     | Ring 3    | User proc   | Runs app/server code, uses syscalls, IPC   |
 | NitrFS Server       | Ring 3    | User server | Secure in-memory filesystem              |
 | Device Driver Server | Ring 3    | User server | Handles hardware via IPC (keyboard, disk)  |
@@ -109,6 +110,14 @@ This file is intended as a high-level guide and technical reference for all cont
 
 ---
 
+## **6. Rings 1 & 2 (Reserved)**
+
+* **Type:** Mid-level privilege (Rings 1 and 2)
+* **Status:** Currently unused
+* **Potential Roles:** Experimental device drivers or supervised services that require more access than Ring 3 but less than the kernel. GDT entries are provisioned for future research.
+
+---
+
 ## **Agent Interaction Diagram (Textual)**
 
 ```
@@ -151,6 +160,7 @@ This file is intended as a high-level guide and technical reference for all cont
 * **IPC Subsystem:** Messaging/port framework binding the whole OS
 * **Servers:** (FS, device, network, display, audio, etc) implemented as user agents
 * **NitrFS:** Initial secure in-memory filesystem server
+* **Rings 1 & 2:** Unused privilege levels reserved for supervised drivers
 
 ---
 
