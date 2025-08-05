@@ -63,3 +63,5 @@ isr_timer_stub:
     out 0x20, al
 
     iretq
+
+section .note.GNU-stack noalloc nobits align=1
