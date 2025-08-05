@@ -341,6 +341,11 @@ void kernel_main(bootinfo_t *bootinfo) {
     // interrupts will be enabled automatically.
     schedule();
 
+    // Now that the boot thread has safely switched to the first server
+    // thread, enable the PIT timer IRQ so that preemption can occur
+    // without corrupting the boot stack.
+    pic_set_mask(0, 1);
+
     for (;;) {
         usb_poll();
         schedule();
