@@ -52,11 +52,98 @@ void serial_puthex(uint32_t value) {
     serial_puts(p);
 }
 
+static void serial_print_uint(uint64_t value, int base, int width, int pad_zero) {
+    char buf[32];
+    int i = 0;
+    const char *digits = "0123456789abcdef";
+
+    if (value == 0) {
+        buf[i++] = '0';
+    } else {
+        while (value > 0) {
+            buf[i++] = digits[value % base];
+            value /= base;
+        }
+    }
+
+    while (i < width)
+        buf[i++] = pad_zero ? '0' : ' ';
+
+    for (int j = i - 1; j >= 0; --j)
+        serial_write(buf[j]);
+}
+
 void serial_printf(const char *fmt, ...) {
-    (void)fmt;
     va_list ap;
     va_start(ap, fmt);
-    serial_puts(fmt);
+
+    for (const char *p = fmt; *p; ++p) {
+        if (*p != '%') {
+            if (*p == '\n')
+                serial_write('\r');
+            serial_write(*p);
+            continue;
+        }
+
+        int pad_zero = 0;
+        int width = 0;
+
+        ++p;
+        if (*p == '0') {
+            pad_zero = 1;
+            ++p;
+        }
+        while (*p >= '0' && *p <= '9') {
+            width = width * 10 + (*p - '0');
+            ++p;
+        }
+
+        int long_flag = 0;
+        if (*p == 'l') {
+            long_flag = 1;
+            ++p;
+        }
+
+        switch (*p) {
+        case 'x': {
+            uint64_t v = long_flag ? va_arg(ap, uint64_t) : va_arg(ap, unsigned int);
+            serial_print_uint(v, 16, width, pad_zero);
+            break;
+        }
+        case 'u': {
+            uint64_t v = long_flag ? va_arg(ap, uint64_t) : va_arg(ap, unsigned int);
+            serial_print_uint(v, 10, width, pad_zero);
+            break;
+        }
+        case 'd': {
+            int64_t v = long_flag ? va_arg(ap, int64_t) : va_arg(ap, int);
+            if (v < 0) {
+                serial_write('-');
+                v = -v;
+            }
+            serial_print_uint((uint64_t)v, 10, width, pad_zero);
+            break;
+        }
+        case 'c': {
+            char c = (char)va_arg(ap, int);
+            serial_write(c);
+            break;
+        }
+        case 's': {
+            const char *s = va_arg(ap, const char *);
+            serial_puts(s);
+            break;
+        }
+        case '%':
+            serial_write('%');
+            break;
+        default:
+            serial_write('%');
+            serial_write(*p);
+            break;
+        }
+    }
+
     va_end(ap);
 }
 
