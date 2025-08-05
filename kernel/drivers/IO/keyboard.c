@@ -7,6 +7,7 @@
 static uint8_t keybuf[KEYBUF_SIZE];
 static volatile int head = 0, tail = 0;
 static int shift_state = 0;
+static int caps_lock = 0;
 
 static const char keymap[128] = {
     [1] = 27,
@@ -70,9 +71,16 @@ int keyboard_read_scancode(void) {
 }
 
 static char scancode_ascii(uint8_t sc) {
+    char ch;
     if (shift_state)
-        return (sc < 128) ? keymap_shift[sc] : 0;
-    return (sc < 128) ? keymap[sc] : 0;
+        ch = (sc < 128) ? keymap_shift[sc] : 0;
+    else
+        ch = (sc < 128) ? keymap[sc] : 0;
+    if (!ch)
+        return 0;
+    if (caps_lock && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')))
+        ch ^= 0x20; // flip case when caps lock is active
+    return ch;
 }
 
 int keyboard_getchar(void) {
@@ -85,6 +93,10 @@ int keyboard_getchar(void) {
     }
     if (sc == 0xAA || sc == 0xB6) {
         shift_state = 0;
+        return -1;
+    }
+    if (sc == 0x3A) { // Caps Lock
+        caps_lock ^= 1;
         return -1;
     }
     if (sc & 0x80)
