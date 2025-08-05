@@ -10,7 +10,7 @@ OBJS = \
     kernel_entry.o \
     kernel.o \
     ../arch/IDT/idt.o \
-    ../arch/IDT/interrupt.o \
+    ../arch/IDT/isr.o \
     ../arch/IDT/isr_stub.o \
     ../drivers/IO/pic.o \
     ../drivers/IO/pit.o \
