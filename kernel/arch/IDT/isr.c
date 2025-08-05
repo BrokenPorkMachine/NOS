@@ -40,22 +40,6 @@ void isr_timer_handler(struct isr_context *ctx) {
     (void)ctx;
 }
 
-void isr_syscall_handler(struct isr_context *ctx) {
-    serial_printf("[syscall] Vector: %lu\n", ctx->int_no);
-    // ... syscall logic here ...
-    (void)ctx;
-}
-
-void isr_keyboard_handler(struct isr_context *ctx) {
-    serial_printf("[kbd] Keyboard interrupt received.\n");
-    (void)ctx;
-}
-
-void isr_mouse_handler(struct isr_context *ctx) {
-    serial_printf("[mouse] Mouse interrupt received.\n");
-    (void)ctx;
-}
-
 void isr_page_fault_handler(struct isr_context *ctx) {
     serial_printf("[FAULT] Page fault at 0x%lx, error=0x%lx\n", ctx->cr2, ctx->error_code);
     handle_page_fault(ctx->error_code, ctx->cr2);

@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "io.h"
 #include "serial.h"
+#include <stdarg.h>
 
 #define COM1 0x3F8
 
@@ -49,6 +50,14 @@ void serial_puthex(uint32_t value) {
     while (*p == '0' && *(p + 1))
         p++;
     serial_puts(p);
+}
+
+void serial_printf(const char *fmt, ...) {
+    (void)fmt;
+    va_list ap;
+    va_start(ap, fmt);
+    serial_puts(fmt);
+    va_end(ap);
 }
 
 int serial_read(void) {
