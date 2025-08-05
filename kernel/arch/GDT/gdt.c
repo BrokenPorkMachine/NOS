@@ -1,15 +1,6 @@
 #include <stdint.h>
 #include "gdt.h"
 
-struct gdt_entry {
-    uint16_t limit_low;
-    uint16_t base_low;
-    uint8_t  base_middle;
-    uint8_t  access;
-    uint8_t  granularity;
-    uint8_t  base_high;
-} __attribute__((packed));
-
 struct gdt_ptr {
     uint16_t limit;
     uint64_t base;
@@ -50,4 +41,10 @@ void gdt_install(void) {
     gdt_set_gate(GDT_SEL_USER_DATA >> 3,   0, 0xFFFFF, 0x92 | 0x60, 0xA0);
 
     gdt_flush((uint64_t)&gp);
+}
+
+void gdt_get_entry(int n, struct gdt_entry *out) {
+    if (n >= 0 && n < GDT_ENTRY_COUNT && out) {
+        *out = gdt[n];
+    }
 }
