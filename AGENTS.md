@@ -16,10 +16,9 @@ This file is intended as a high-level guide and technical reference for all cont
 | -------------------- | --------- | ----------- | ------------------------------------------ |
 | Bootloader           | Ring 0    | UEFI app    | Loads kernel, passes boot info, exits      |
 | Mach Microkernel     | Ring 0    | Kernel      | Scheduling, memory, IPC, trap/syscall, IRQ |
-| Mid-privilege Layer  | Rings 1&2 | Reserved    | Placeholder for future supervised drivers   |
+| Device Driver Server | Rings 1&2 | Driver svc  | Handles hardware via supervised IPC       |
 | User Task/Thread     | Ring 3    | User proc   | Runs app/server code, uses syscalls, IPC   |
 | NitrFS Server       | Ring 3    | User server | Secure in-memory filesystem              |
-| Device Driver Server | Ring 3    | User server | Handles hardware via IPC (keyboard, disk)  |
 | Audio Server        | Ring 3    | User server | Provides PCM playback via kernel audio driver |
 | Window Server        | Ring 3    | User server | (Planned) Manages GUI, display, input      |
 | IPC Subsystem        | Kernel    | Logic/Abstr | Manages message passing, port rights       |
@@ -64,19 +63,32 @@ This file is intended as a high-level guide and technical reference for all cont
 
 ---
 
-## **3. User Tasks & Threads (User Agents)**
+## **3. Driver Tasks (Mid-privilege Agents)**
+
+* **Type:** Driver processes (Rings 1 & 2)
+* **Responsibilities:**
+
+  * Perform hardware access with more privilege than user tasks
+  * Expose low-level services (e.g., keyboard, disk, network) via IPC
+* **Interactions:**
+
+  * Invoke supervised kernel interfaces for sensitive operations
+  * Respond to user task requests over IPC
+
+---
+
+## **4. User Tasks & Threads (User Agents)**
 
 * **Type:** User mode processes (Ring 3, unprivileged)
 * **Responsibilities:**
 
   * Execute user application or server code
   * Use system calls and IPC to interact with kernel and other agents
-  * Serve as Mach “servers”: file system, device drivers, networking, GUI, etc.
+  * Serve as Mach “servers”: file system, networking, GUI, etc.
 * **Examples:**
 
   * **NitrFS server:** Secure in-memory filesystem via IPC
-* **Shell server:** Command interpreter using IPC with built-in file commands (`cd`, `ls`, `dir`, `mkdir`, `mv`)
-  * **Device driver server:** Handles input/output to actual hardware, passes events/data to other agents
+  * **Shell server:** Command interpreter using IPC with built-in file commands (`cd`, `ls`, `dir`, `mkdir`, `mv`)
   * **Demo tasks:** Print to VGA, test syscalls, simple multi-threaded demos
 * **Interactions:**
 
@@ -86,7 +98,7 @@ This file is intended as a high-level guide and technical reference for all cont
 
 ---
 
-## **4. IPC Subsystem (Mach Ports/Messages)**
+## **5. IPC Subsystem (Mach Ports/Messages)**
 
 * **Type:** Logical subsystem (kernel and user)
 * **Responsibilities:**
@@ -101,20 +113,12 @@ This file is intended as a high-level guide and technical reference for all cont
 
 ---
 
-## **5. Planned/Future System Agents**
+## **6. Planned/Future System Agents**
 
 * **Network Stack/Server:** User-space TCP/IP, NIC drivers, socket/port IPC
 * **Window/Display Server:** Handles graphics output, user input, windowing
 * **Login/Session Agent:** Provides login prompt and manages authentication
 * **Supervisor/Update Agent:** System update, patching, and recovery
-
----
-
-## **6. Rings 1 & 2 (Reserved)**
-
-* **Type:** Mid-level privilege (Rings 1 and 2)
-* **Status:** Currently unused
-* **Potential Roles:** Experimental device drivers or supervised services that require more access than Ring 3 but less than the kernel. GDT entries are provisioned for future research.
 
 ---
 
@@ -156,11 +160,11 @@ This file is intended as a high-level guide and technical reference for all cont
 
 * **Bootloader:** Loads kernel, never returns
 * **Kernel:** Scheduler, MMU, IPC, security, system calls, device IRQs
-* **User Tasks:** All application logic, servers, drivers, networking, GUI
+* **User Tasks:** Application logic, networking, GUI components
 * **IPC Subsystem:** Messaging/port framework binding the whole OS
-* **Servers:** (FS, device, network, display, audio, etc) implemented as user agents
+* **Servers:** (FS, network, display, audio, etc) implemented as user agents
 * **NitrFS:** Initial secure in-memory filesystem server
-* **Rings 1 & 2:** Unused privilege levels reserved for supervised drivers
+* **Rings 1 & 2:** Mid-privilege layer for supervised device drivers
 
 ---
 

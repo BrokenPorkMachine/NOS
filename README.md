@@ -19,7 +19,7 @@
 * Mach-style IPC message passing (prototype queue implementation)
 * NitrFS secure in-memory filesystem server with optional block storage
 * Simple secure heap allocator for user-space memory
-* All device drivers, filesystems, and networking to run as user-mode agents
+* Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode servers
 * Minimal network stack with loopback support, IPv4 addressing and ARP replies
 * Credential-driven login server that prints the current IP before launching the shell
 * Stub VNC, SSH(SCP), and FTP servers that ride on the loopback stack and store files in NitrFS (no real networking yet)
@@ -96,7 +96,7 @@ kernel/              # Kernel core and subsystems
     CPU/
     GDT/
     IDT/
-  drivers/           # Hardware drivers
+  drivers/           # Ring 1/2 hardware drivers
     IO/
     Net/
 user/
