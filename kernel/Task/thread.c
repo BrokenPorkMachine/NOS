@@ -225,7 +225,23 @@ void schedule(void) {
 uint64_t schedule_from_isr(uint64_t *old_rsp) {
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
-    prev->rsp = (uint64_t)old_rsp;
+    /*
+     * When an interrupt preempts a running thread the stub pushes a much
+     * larger register frame onto that thread's stack than the one used by
+     * context_switch().  If we saved the raw stack pointer here the next
+     * context_switch() would misinterpret the layout and restore garbage
+     * registers, crashing the system.  To keep the saved stack compatible
+     * with context_switch() we reshape the frame to match the expected
+     * [r15,r14,r13,r12,rbx,rbp,rflags,rip] layout before recording it.
+     */
+    uint64_t *frame = old_rsp;
+    uint64_t rbp = frame[4];      // preserve rbp before overwriting
+    frame[4] = frame[13];         // rbx position
+    frame[5] = rbp;               // rbp position
+    frame[6] = frame[17];         // rflags
+    frame[7] = frame[15];         // rip
+
+    prev->rsp = (uint64_t)frame;
     if (prev->state == THREAD_RUNNING)
         prev->state = THREAD_READY;
 
