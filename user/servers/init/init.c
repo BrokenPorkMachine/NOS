@@ -9,6 +9,7 @@
 #include "../ftp/ftp.h"
 #include "../pkg/server.h"
 #include "../update/server.h"
+#include "../../../kernel/drivers/IO/serial.h"
 
 extern ipc_queue_t fs_queue;
 extern ipc_queue_t pkg_queue;
@@ -29,35 +30,63 @@ void init_main(ipc_queue_t *q, uint32_t self_id) {
 
     // Core system servers
     t = thread_create(nitrfs_thread);
-    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    if (t) {
+        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    } else {
+        serial_puts("[init] failed to create nitrfs thread\n");
+    }
     thread_yield();
 
     t = thread_create(pkg_thread);
-    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    if (t) {
+        ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    } else {
+        serial_puts("[init] failed to create pkg thread\n");
+    }
     thread_yield();
 
     t = thread_create(update_thread);
-    ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    if (t) {
+        ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+        ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    } else {
+        serial_puts("[init] failed to create update thread\n");
+    }
     thread_yield();
 
     t = thread_create(ftp_thread);
-    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    if (t) {
+        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    } else {
+        serial_puts("[init] failed to create ftp thread\n");
+    }
     thread_yield();
 
     // Login and remote access servers
     t = thread_create(login_thread);
-    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    if (t) {
+        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+        ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+        ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    } else {
+        serial_puts("[init] failed to create login thread\n");
+    }
     thread_yield();
 
     t = thread_create(vnc_thread);
-    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    if (t) {
+        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    } else {
+        serial_puts("[init] failed to create vnc thread\n");
+    }
     thread_yield();
 
     t = thread_create(ssh_thread);
-    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    if (t) {
+        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    } else {
+        serial_puts("[init] failed to create ssh thread\n");
+    }
     thread_yield();
 
     for (;;) {
