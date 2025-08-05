@@ -25,6 +25,9 @@ extern thread_t *current_cpu[MAX_CPUS];
 // Retrieve pointer to currently running thread on this CPU
 thread_t *thread_current(void);
 
+// Retrieve ID of currently running thread
+uint32_t thread_self(void);
+
 // Initialize threading system and create initial threads
 void threads_init(void);
 

@@ -15,15 +15,13 @@ extern ipc_queue_t fs_queue;
 extern ipc_queue_t pkg_queue;
 extern ipc_queue_t upd_queue;
 
-static uint32_t self_id(void) { return thread_current()->id; }
-
-static void login_thread(void)  { login_server(NULL, self_id()); }
-static void vnc_thread(void)    { vnc_server(NULL, self_id()); }
-static void ssh_thread(void)    { ssh_server(NULL, self_id()); }
-static void nitrfs_thread(void) { nitrfs_server(&fs_queue, self_id()); }
-static void ftp_thread(void)    { ftp_server(&fs_queue, self_id()); }
-static void pkg_thread(void)    { pkg_server(&pkg_queue, self_id()); }
-static void update_thread(void) { update_server(&upd_queue, &pkg_queue, self_id()); }
+static void login_thread(void)  { login_server(NULL, thread_self()); }
+static void vnc_thread(void)    { vnc_server(NULL, thread_self()); }
+static void ssh_thread(void)    { ssh_server(NULL, thread_self()); }
+static void nitrfs_thread(void) { nitrfs_server(&fs_queue, thread_self()); }
+static void ftp_thread(void)    { ftp_server(&fs_queue, thread_self()); }
+static void pkg_thread(void)    { pkg_server(&pkg_queue, thread_self()); }
+static void update_thread(void) { update_server(&upd_queue, &pkg_queue, thread_self()); }
 
 // Initial userspace task spawner. Creates core servers and remote access tasks.
 void init_main(ipc_queue_t *q, uint32_t self_id) {
@@ -62,3 +60,4 @@ void init_main(ipc_queue_t *q, uint32_t self_id) {
         thread_yield();
     }
 }
+

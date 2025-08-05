@@ -12,8 +12,7 @@ __attribute__((weak)) thread_t *current_cpu[MAX_CPUS];
 __attribute__((weak)) uint32_t smp_cpu_index(void) { return 0; }
 __attribute__((weak)) int ipc_send(ipc_queue_t *q, uint32_t s, ipc_message_t *m) { (void)q; (void)s; (void)m; return -1; }
 __attribute__((weak)) int ipc_receive(ipc_queue_t *q, uint32_t r, ipc_message_t *m) { (void)q; (void)r; (void)m; return -1; }
-
-static inline uint32_t self_id(void) {
+__attribute__((weak)) uint32_t thread_self(void) {
     thread_t *t = current_cpu[smp_cpu_index()];
     return t ? (uint32_t)t->id : 0;
 }
@@ -279,8 +278,8 @@ char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
 static int fs_find_handle(const char *name) {
     ipc_message_t msg = {0}, reply = {0};
     msg.type = NITRFS_MSG_LIST;
-    ipc_send(&fs_queue, self_id(), &msg);
-    ipc_receive(&fs_queue, self_id(), &reply);
+    ipc_send(&fs_queue, thread_self(), &msg);
+    ipc_receive(&fs_queue, thread_self(), &reply);
     for (int i = 0; i < (int)reply.arg1; i++) {
         char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
         if (strncmp(n, name, NITRFS_NAME_LEN) == 0)
@@ -302,8 +301,8 @@ FILE *fopen(const char *path, const char *mode) {
         memcpy(msg.data, path, len);
         msg.data[len] = '\0';
         msg.len = len;
-        ipc_send(&fs_queue, self_id(), &msg);
-        ipc_receive(&fs_queue, self_id(), &reply);
+        ipc_send(&fs_queue, thread_self(), &msg);
+        ipc_receive(&fs_queue, thread_self(), &reply);
         handle = reply.arg1;
     }
     if (handle < 0)
@@ -325,8 +324,8 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     msg.arg1 = stream->handle;
     msg.arg2 = stream->pos;
     msg.len  = len;
-    ipc_send(&fs_queue, self_id(), &msg);
-    ipc_receive(&fs_queue, self_id(), &reply);
+    ipc_send(&fs_queue, thread_self(), &msg);
+    ipc_receive(&fs_queue, thread_self(), &reply);
     if (reply.arg1 != 0)
         return 0;
     memcpy(ptr, reply.data, reply.len);
@@ -344,8 +343,8 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
     msg.arg2 = stream->pos;
     memcpy(msg.data, ptr, len);
     msg.len = len;
-    ipc_send(&fs_queue, self_id(), &msg);
-    ipc_receive(&fs_queue, self_id(), &reply);
+    ipc_send(&fs_queue, thread_self(), &msg);
+    ipc_receive(&fs_queue, thread_self(), &reply);
     if (reply.arg1 != 0)
         return 0;
     stream->pos += len;
@@ -372,8 +371,8 @@ int rename(const char *old, const char *new) {
     memcpy(msg.data, new, len);
     msg.data[len] = '\0';
     msg.len = len;
-    ipc_send(&fs_queue, self_id(), &msg);
-    ipc_receive(&fs_queue, self_id(), &reply);
+    ipc_send(&fs_queue, thread_self(), &msg);
+    ipc_receive(&fs_queue, thread_self(), &reply);
     return (int)reply.arg1;
 }
 
