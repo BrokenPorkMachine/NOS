@@ -13,14 +13,17 @@ static uint8_t *bitmap = NULL;
 static uint64_t total_frames = 0;
 static uint64_t next_free = 0; // next frame index to start searching from
 
+static inline uint64_t bit_byte(uint64_t bit) { return bit >> 3; }
+static inline uint8_t bit_mask(uint64_t bit) { return (uint8_t)(1u << (bit & 7)); }
+
 static inline void bit_set(uint64_t bit) {
-    bitmap[bit / 8] |= (1 << (bit % 8));
+    bitmap[bit_byte(bit)] |= bit_mask(bit);
 }
 static inline void bit_clear(uint64_t bit) {
-    bitmap[bit / 8] &= ~(1 << (bit % 8));
+    bitmap[bit_byte(bit)] &= (uint8_t)~bit_mask(bit);
 }
 static inline int bit_test(uint64_t bit) {
-    return bitmap[bit / 8] & (1 << (bit % 8));
+    return (bitmap[bit_byte(bit)] & bit_mask(bit)) != 0;
 }
 
 void pmm_init(const bootinfo_t *bootinfo) {
