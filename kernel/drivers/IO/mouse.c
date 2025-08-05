@@ -54,7 +54,6 @@ void mouse_isr(void) {
         }
         packet_index = 0;
     }
-    outb(0x20, 0x20); // EOI
 }
 
 void isr_mouse_handler(void);

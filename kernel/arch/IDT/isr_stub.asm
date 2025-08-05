@@ -108,7 +108,8 @@ isr_mouse_stub:
     extern isr_mouse_handler
     call isr_mouse_handler
     mov al, 0x20
-    out 0x20, al
+    out 0xA0, al       ; send EOI to slave PIC
+    out 0x20, al       ; send EOI to master PIC
     leave
     iretq
 
