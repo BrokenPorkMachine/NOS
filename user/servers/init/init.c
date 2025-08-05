@@ -33,28 +33,35 @@ void init_main(ipc_queue_t *q, uint32_t self_id) {
     // Core system servers
     t = thread_create(nitrfs_thread);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    thread_yield();
 
     t = thread_create(pkg_thread);
     ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    thread_yield();
 
     t = thread_create(update_thread);
     ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    thread_yield();
 
     t = thread_create(ftp_thread);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    thread_yield();
 
     // Login and remote access servers
     t = thread_create(login_thread);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    thread_yield();
 
     t = thread_create(vnc_thread);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    thread_yield();
 
     t = thread_create(ssh_thread);
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    thread_yield();
 
     for (;;) {
         thread_yield();
