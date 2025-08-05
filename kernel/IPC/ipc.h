@@ -33,8 +33,8 @@ typedef struct {
  */
 typedef struct {
     ipc_message_t msgs[IPC_QUEUE_SIZE];
-    size_t head;          // Points to oldest element
-    size_t tail;          // Points to next write slot
+    size_t head;          // Points to next write slot
+    size_t tail;          // Points to oldest element
     uint32_t caps[IPC_MAX_TASKS]; // Capability bits per task ID
 } ipc_queue_t;
 

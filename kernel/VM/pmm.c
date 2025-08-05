@@ -11,6 +11,7 @@
 
 static uint8_t *bitmap = NULL;
 static uint64_t total_frames = 0;
+static uint64_t next_free = 0; // next frame index to start searching from
 
 static inline void bit_set(uint64_t bit) {
     bitmap[bit / 8] |= (1 << (bit % 8));
@@ -57,16 +58,19 @@ void pmm_init(const bootinfo_t *bootinfo) {
         for (uint64_t f = s; f < e; ++f)
             bit_clear(f);
     }
-    for (uint64_t f = 0; f < 512; ++f)
+    for (uint64_t f = 0; f < total_frames && f < 512; ++f)
         bit_set(f);
+    next_free = (total_frames > 512) ? 512 : total_frames;
 }
 
 void *alloc_page(void) {
     if (!bitmap)
         return NULL;
-    for (uint64_t f = 0; f < total_frames; ++f) {
+    for (uint64_t off = 0; off < total_frames; ++off) {
+        uint64_t f = (next_free + off) % total_frames;
         if (!bit_test(f)) {
             bit_set(f);
+            next_free = (f + 1) % total_frames;
             return (void *)(f * PAGE_SIZE);
         }
     }
@@ -78,6 +82,8 @@ void free_page(void *page) {
         return;
     uint64_t frame = (uint64_t)page / PAGE_SIZE;
     bit_clear(frame);
+    if (frame < next_free)
+        next_free = frame;
 }
 
 uint64_t pmm_total_frames(void) {
