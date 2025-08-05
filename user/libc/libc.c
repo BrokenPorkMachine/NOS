@@ -65,6 +65,12 @@ void *memmove(void *dest, const void *src, size_t n) {
             s += sizeof(uint64_t);
             n -= sizeof(uint64_t);
         }
+        while (n >= sizeof(uint32_t)) {
+            *(uint32_t *)d = *(const uint32_t *)s;
+            d += sizeof(uint32_t);
+            s += sizeof(uint32_t);
+            n -= sizeof(uint32_t);
+        }
         while (n--)
             *d++ = *s++;
     } else if (d > s) {
@@ -75,6 +81,12 @@ void *memmove(void *dest, const void *src, size_t n) {
             s -= sizeof(uint64_t);
             *(uint64_t *)d = *(const uint64_t *)s;
             n -= sizeof(uint64_t);
+        }
+        while (n >= sizeof(uint32_t)) {
+            d -= sizeof(uint32_t);
+            s -= sizeof(uint32_t);
+            *(uint32_t *)d = *(const uint32_t *)s;
+            n -= sizeof(uint32_t);
         }
         while (n--) {
             d--;
