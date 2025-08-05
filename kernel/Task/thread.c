@@ -70,6 +70,7 @@ uint32_t thread_self(void) {
 }
 
 static void thread_init_func(void) {
+    serial_puts("[init] init server started\n");
     init_main(&fs_queue, thread_current()->id);
 }
 
