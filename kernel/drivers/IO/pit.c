@@ -14,5 +14,8 @@ void pit_init(uint32_t hz) {
     outb(PIT_CH0, divisor & 0xFF); // Low byte
     io_wait();
     outb(PIT_CH0, (divisor >> 8) & 0xFF); // High byte
-    pic_set_mask(0, 1); // enable IRQ0
+    // Do not enable the timer IRQ here. The scheduler will unmask it
+    // only after the first thread has been launched to avoid a race
+    // where a timer interrupt fires before the boot thread's stack is
+    // ready for preemption.
 }
