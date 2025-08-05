@@ -229,7 +229,18 @@ void schedule(void) {
     serial_puts(" -> ");
     utoa_dec(next->id, buf); serial_puts(buf);
     serial_puts("\n");
+
+    /*
+     * pick_next() updates current_cpu[cpu] to point at the thread that will
+     * run next. After context_switch() returns we are back on the previous
+     * thread, so restore current_cpu to match the thread actually executing.
+     * Without this correction a preempted thread may resume with
+     * current_cpu still referencing the task that replaced it, confusing
+     * subsequent scheduler decisions.
+     */
+    current_cpu[cpu] = next;
     context_switch(&prev->rsp, next->rsp);
+    current_cpu[cpu] = prev;
     ((uint64_t*)prev->rsp)[6] = rflags;
 }
 
@@ -272,6 +283,9 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
     serial_puts(" -> ");
     utoa_dec(next->id, buf); serial_puts(buf);
     serial_puts("\n");
+
+    /* pick_next() already advanced current_cpu[cpu] to the next thread. */
+    current_cpu[cpu] = next;
     return next->rsp;
 }
 
