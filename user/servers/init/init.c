@@ -15,6 +15,7 @@ extern ipc_queue_t fs_queue;
 extern ipc_queue_t pkg_queue;
 extern ipc_queue_t upd_queue;
 
+// --- Service thread wrappers ---
 static void login_thread(void)  { login_server(NULL, thread_self()); }
 static void vnc_thread(void)    { vnc_server(NULL, thread_self()); }
 static void ssh_thread(void)    { ssh_server(NULL, thread_self()); }
@@ -23,74 +24,89 @@ static void ftp_thread(void)    { ftp_server(&fs_queue, thread_self()); }
 static void pkg_thread(void)    { pkg_server(&pkg_queue, thread_self()); }
 static void update_thread(void) { update_server(&upd_queue, &pkg_queue, thread_self()); }
 
-// Initial userspace task spawner. Creates core servers and remote access tasks.
+// Core userspace service/task spawner
 void init_main(ipc_queue_t *q, uint32_t self_id) {
     (void)q; (void)self_id;
     thread_t *t;
 
-    // Core system servers
+    // --- Spawn order and dependencies ---
+    // nitrfs → provides fs_queue for ftp, login, vnc, ssh
+    // pkg    → provides pkg_queue for login, update
+    // update → provides upd_queue for login
+    // ftp, login, vnc, ssh use fs_queue for storage
+
+    // --- Nitrfs server ---
     t = thread_create(nitrfs_thread);
-    if (t) {
-        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    } else {
-        serial_puts("[init] failed to create nitrfs thread\n");
+    if (!t) {
+        serial_puts("[init] FATAL: failed to create nitrfs thread\n");
+        goto fail;
     }
+    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     thread_yield();
 
+    // --- Pkg server ---
     t = thread_create(pkg_thread);
-    if (t) {
-        ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    } else {
-        serial_puts("[init] failed to create pkg thread\n");
+    if (!t) {
+        serial_puts("[init] FATAL: failed to create pkg thread\n");
+        goto fail;
     }
+    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     thread_yield();
 
+    // --- Update server ---
     t = thread_create(update_thread);
-    if (t) {
-        ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-        ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    } else {
-        serial_puts("[init] failed to create update thread\n");
+    if (!t) {
+        serial_puts("[init] FATAL: failed to create update thread\n");
+        goto fail;
     }
+    ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     thread_yield();
 
+    // --- FTP server ---
     t = thread_create(ftp_thread);
-    if (t) {
-        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    } else {
+    if (!t) {
         serial_puts("[init] failed to create ftp thread\n");
+    } else {
+        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     }
     thread_yield();
 
-    // Login and remote access servers
+    // --- Login server ---
     t = thread_create(login_thread);
-    if (t) {
+    if (!t) {
+        serial_puts("[init] failed to create login thread\n");
+    } else {
         ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
         ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
         ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    } else {
-        serial_puts("[init] failed to create login thread\n");
     }
     thread_yield();
 
+    // --- VNC server ---
     t = thread_create(vnc_thread);
-    if (t) {
-        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    } else {
+    if (!t) {
         serial_puts("[init] failed to create vnc thread\n");
-    }
-    thread_yield();
-
-    t = thread_create(ssh_thread);
-    if (t) {
-        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     } else {
-        serial_puts("[init] failed to create ssh thread\n");
+        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     }
     thread_yield();
 
-    for (;;) {
-        thread_yield();
+    // --- SSH server ---
+    t = thread_create(ssh_thread);
+    if (!t) {
+        serial_puts("[init] failed to create ssh thread\n");
+    } else {
+        ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     }
-}
+    thread_yield();
 
+    serial_puts("[init] all system services launched\n");
+
+    // --- Init task goes idle ---
+    for (;;) thread_yield();
+
+fail:
+    serial_puts("[init] Halting system. Critical service failed to start.\n");
+    for (;;) __asm__ volatile ("hlt");
+}
