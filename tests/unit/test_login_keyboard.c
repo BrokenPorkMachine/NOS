@@ -13,10 +13,19 @@ static int first_poll = 1;
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
 
-/* Stubs for serial I/O */
+/* Stubs for serial I/O used by the login server */
 void serial_write(char c) { (void)c; }
-int serial_read(void) { return -1; }
+int serial_read(void) {
+    if (first_poll) {
+        first_poll = 0;
+        return -1; /* simulate initial lack of input */
+    }
+    if (pos >= strlen(input)) return -1;
+    return (unsigned char)input[pos++];
+}
 void serial_puts(const char *s) { (void)s; }
+
+int keyboard_getchar(void) { return -1; }
 
 /* Minimal framebuffer info so tty uses video path without touching VGA memory */
 static bootinfo_framebuffer_t fb = {
@@ -32,15 +41,6 @@ static bootinfo_framebuffer_t fb = {
 const bootinfo_framebuffer_t *video_get_info(void) { return &fb; }
 void video_draw_pixel(int x, int y, uint32_t color) { (void)x; (void)y; (void)color; }
 void video_clear(uint32_t color) { (void)color; }
-
-int keyboard_getchar(void) {
-    if (first_poll) {
-        first_poll = 0;
-        return -1; /* simulate initial lack of input */
-    }
-    if (pos >= strlen(input)) return -1;
-    return (unsigned char)input[pos++];
-}
 
 static int yield_count = 0;
 void thread_yield(void) { yield_count++; }
