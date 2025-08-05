@@ -72,6 +72,17 @@ uint32_t thread_self(void) {
 static void thread_init_func(void) {
     serial_puts("[init] init server started\n");
     init_main(&fs_queue, thread_current()->id);
+    /*
+     * init_main never returns, but the optimizer may tail-call it and
+     * skip pushing a return address.  This leaves the stack misaligned
+     * for subsequent function calls and can trigger general protection
+     * faults when SSE instructions require 16-byte alignment.  Include
+     * a reachable loop after the call to ensure a normal call sequence
+     * is generated and the stack remains correctly aligned.
+     */
+    for (;;) {
+        thread_yield();
+    }
 }
 
 // --- THREAD CREATION ---
@@ -238,8 +249,8 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
     uint64_t rbp = frame[4];      // preserve rbp before overwriting
     frame[4] = frame[13];         // rbx position
     frame[5] = rbp;               // rbp position
-    frame[6] = frame[17];         // rflags
-    frame[7] = frame[15];         // rip
+    frame[6] = frame[15];         // rflags
+    frame[7] = frame[17];         // rip
 
     prev->rsp = (uint64_t)frame;
     if (prev->state == THREAD_RUNNING)
