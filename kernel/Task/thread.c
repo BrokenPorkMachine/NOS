@@ -65,9 +65,13 @@ static void __attribute__((naked)) thread_entry(void) {
 thread_t *thread_current(void) { return current_cpu[smp_cpu_index()]; }
 
 // Return ID of current thread
-uint32_t thread_self(void) { return thread_current()->id; }
+uint32_t thread_self(void) {
+    return thread_current()->id;
+}
 
-static void thread_init_func(void) { init_main(); }
+static void thread_init_func(void) {
+    init_main(&fs_queue, thread_current()->id);
+}
 
 // --- THREAD CREATION ---
 

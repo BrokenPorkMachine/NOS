@@ -24,7 +24,8 @@ static void pkg_thread(void)    { pkg_server(&pkg_queue, thread_self()); }
 static void update_thread(void) { update_server(&upd_queue, &pkg_queue, thread_self()); }
 
 // Initial userspace task spawner. Creates core servers and remote access tasks.
-void init_main(void) {
+void init_main(ipc_queue_t *q, uint32_t self_id) {
+    (void)q; (void)self_id;
     serial_puts("[init] init server started\n");
 
     thread_t *t;
@@ -59,3 +60,4 @@ void init_main(void) {
         thread_yield();
     }
 }
+
