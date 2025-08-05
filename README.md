@@ -194,7 +194,7 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 
 * [x] User/kernel context switching (improved register save/restore)
 * [x] System call interface with dispatcher and validation
-* [ ] Interactive user task/server framework (done)
+* [x] Interactive user task/server framework
 * [x] Basic IPC primitives (prototype)
 * [x] NitrFS filesystem server (block storage capable)
 * [ ] Window server and networking agents
