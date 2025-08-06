@@ -1,0 +1,9 @@
+{
+  "name": "example",
+  "version": "1.0",
+  "abi": "N2-1.0",
+  "type": "shared-lib",
+  "exports": ["example_init"],
+  "dependencies": [],
+  "signature": "TODO"
+}
