@@ -204,6 +204,16 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 
 ---
 
+## Documentation
+
+Further details on the agent-based platform are available in:
+
+* [docs/NOSM.md](docs/NOSM.md) – NOSM module format and lifecycle
+* [docs/NOSFS.md](docs/NOSFS.md) – transactional filesystem agent
+* [docs/api.md](docs/api.md) – N2 kernel API surface
+
+---
+
 ## Contributing
 
 PRs, issues, and kernel/module proposals are welcome! This OS is a developer playground for microkernel, secure-by-default, and modular OS research. Please see `AGENTS.md` and code comments before contributing subsystems or new agents.
