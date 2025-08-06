@@ -3,7 +3,6 @@
 #include "../../libc/libc.h"
 #include "server.h"
 
-// Optional: status codes for replies (e.g. for error reporting in the shell)
 enum {
     NITRFS_OK = 0,
     NITRFS_ERR = -1
@@ -16,17 +15,14 @@ void nitrfs_server(ipc_queue_t *q, uint32_t self_id) {
     int handle, ret;
 
     while (1) {
-        // Block for a message and yield if none pending
         if (ipc_receive_blocking(q, self_id, &msg) != 0)
             continue;
         if (msg.len > IPC_MSG_DATA_MAX)
-            continue; // Ignore bogus message
+            continue;
 
-        // Clear reply
         memset(&reply, 0, sizeof(reply));
         reply.type = msg.type;
 
-        // Health check ping handler
         if (msg.type == IPC_HEALTH_PING) {
             reply.type = IPC_HEALTH_PONG;
             ipc_send(q, self_id, &reply);
@@ -36,17 +32,17 @@ void nitrfs_server(ipc_queue_t *q, uint32_t self_id) {
         switch (msg.type) {
         case NITRFS_MSG_CREATE:
             ret = nitrfs_create(&fs, (const char*)msg.data, msg.arg1, msg.arg2);
-            reply.arg1 = ret; // Handle or error
+            reply.arg1 = ret;
             break;
         case NITRFS_MSG_WRITE:
             handle = msg.arg1;
             ret = nitrfs_write(&fs, handle, msg.arg2, msg.data, msg.len);
-            reply.arg1 = ret; // 0 = ok
+            reply.arg1 = ret;
             break;
         case NITRFS_MSG_READ:
             handle = msg.arg1;
             ret = nitrfs_read(&fs, handle, msg.arg2, reply.data, msg.len);
-            reply.arg1 = ret; // 0 = ok
+            reply.arg1 = ret;
             reply.len  = (ret == 0) ? msg.len : 0;
             break;
         case NITRFS_MSG_DELETE:
@@ -78,7 +74,6 @@ void nitrfs_server(ipc_queue_t *q, uint32_t self_id) {
             break;
         default:
             reply.arg1 = NITRFS_ERR;
-            // Optionally: Fill reply.data with "unknown op" etc.
             break;
         }
         ipc_send(q, self_id, &reply);
