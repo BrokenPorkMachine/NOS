@@ -1,6 +1,7 @@
 CROSS_COMPILE ?= /opt/cross/bin/x86_64-elf-
 CC      = $(CROSS_COMPILE)gcc
 CFLAGS  = -ffreestanding -O2 -Wall -Wextra -nostdlib -mno-red-zone
+
 OBJS    = nsh.o ../../../kernel/IPC/ipc.o ../../libc/libc.o ../nosfs/nosfs.o ../nosfs/nosfs_server.o
 
 all: nsh.bin
