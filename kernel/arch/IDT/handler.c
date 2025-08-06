@@ -14,7 +14,7 @@ void isr_default_handler(struct isr_context *ctx) {
 
     // Print all general purpose registers
     serial_printf("RAX=%016lx RBX=%016lx RCX=%016lx RDX=%016lx\n", ctx->rax, ctx->rbx, ctx->rcx, ctx->rdx);
-    serial_printf("RSI=%016lx RDI=%016lx RBP=%016lx RSP=%016lx\n", ctx->rsi, ctx->rdi, ctx->rbp, (uint64_t)ctx);
+    serial_printf("RSI=%016lx RDI=%016lx RBP=%016lx RSP=%016lx\n", ctx->rsi, ctx->rdi, ctx->rbp, ctx->rsp);
     serial_printf("R8 =%016lx R9 =%016lx R10=%016lx R11=%016lx\n", ctx->r8, ctx->r9, ctx->r10, ctx->r11);
     serial_printf("R12=%016lx R13=%016lx R14=%016lx R15=%016lx\n", ctx->r12, ctx->r13, ctx->r14, ctx->r15);
 
@@ -25,7 +25,7 @@ void isr_default_handler(struct isr_context *ctx) {
     serial_printf("Error Code: 0x%016lx\n", ctx->error_code);
 
     // Optionally: Print a mini stack trace (just show top 4 qwords of stack)
-    uint64_t *sp = (uint64_t *)(ctx->user_rsp ? ctx->user_rsp : (uint64_t)ctx + sizeof(*ctx));
+    uint64_t *sp = (uint64_t *)(ctx->rsp);
     serial_printf("Stack (top 4): ");
     for (int i = 0; i < 4; ++i) {
         serial_printf("%016lx ", sp[i]);
