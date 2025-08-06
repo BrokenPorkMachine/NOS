@@ -5,6 +5,8 @@
 #include "../../kernel/IPC/ipc.h"
 #include "../servers/nitrfs/server.h"
 #include "../servers/nitrfs/nitrfs.h"
+#include <pthread.h>
+#include <time.h>
 
 // Weak fallbacks so unit tests can link without full kernel.
 __attribute__((weak)) ipc_queue_t fs_queue;
@@ -270,6 +272,12 @@ void free(void *ptr) {
         cur = cur->next;
     }
 }
+
+void *__memset_chk(void *dest, int c, size_t n, size_t destlen) {
+    if (n > destlen)
+        n = destlen;
+    return memset(dest, c, n);
+}
 void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen) {
     if (n > destlen)
         n = destlen;
@@ -446,3 +454,53 @@ int exec(const char *path) {
 void *sbrk(long inc) {
     return (void *)syscall3(SYS_SBRK, inc, 0, 0);
 }
+
+// --- Minimal pthread stubs ---
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
+    (void)mutex;
+    (void)attr;
+    return 0;
+}
+
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
+    (void)mutex;
+    return 0;
+}
+
+int pthread_mutex_unlock(pthread_mutex_t *mutex) {
+    (void)mutex;
+    return 0;
+}
+
+int pthread_mutex_destroy(pthread_mutex_t *mutex) {
+    (void)mutex;
+    return 0;
+}
+
+// --- Time stub ---
+time_t time(time_t *t) {
+    static time_t current = 0;
+    if (t)
+        *t = current;
+    return current++;
+}
+
+// --- realloc implementation ---
+void *realloc(void *ptr, size_t size) {
+    if (!ptr)
+        return malloc(size);
+    if (size == 0) {
+        free(ptr);
+        return NULL;
+    }
+
+    block_header_t *block = (block_header_t *)((uint8_t *)ptr - sizeof(block_header_t));
+    size_t copy_size = block->size < size ? block->size : size;
+    void *new_ptr = malloc(size);
+    if (!new_ptr)
+        return NULL;
+    memcpy(new_ptr, ptr, copy_size);
+    free(ptr);
+    return new_ptr;
+}
+
