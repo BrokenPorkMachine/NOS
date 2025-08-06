@@ -19,7 +19,7 @@ disk.img: boot kernel
 	mkfs.vfat -F 32 disk.img
 	mmd -i disk.img ::/EFI
 	mmd -i disk.img ::/EFI/BOOT
-	mcopy -i disk.img boot/NitrOBoot.efi ::/EFI/BOOT/BOOTX64.EFI
+        mcopy -i disk.img boot/O2.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img kernel.bin ::/
 
 clean:

@@ -12,14 +12,14 @@ LDFLAGS=/entry:efi_main \
         /nodefaultlib \
        /base:0 \
         /filealign:32 \
-        /out:NitrOBoot.efi
+        /out:O2.efi
 
 SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.obj)
 
-all: NitrOBoot.efi
+all: O2.efi
 
-NitrOBoot.efi: $(OBJ)
+O2.efi: $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJ)
 
 %.obj: %.c
