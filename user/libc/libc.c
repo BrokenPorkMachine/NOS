@@ -4,6 +4,8 @@
 #include <time.h>
 
 #ifdef KERNEL_BUILD
+#define USE_KERNEL_MUTEX
+
 // --- Kernel-mode pthread_mutex_t implementation ---
 extern uint32_t thread_self(void);
 
@@ -38,6 +40,8 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
     (void)mutex;
     return 0;
 }
+#endif
+
 #endif // KERNEL_BUILD
 
 // ================== STRING AND MEMORY ===================
