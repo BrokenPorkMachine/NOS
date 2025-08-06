@@ -1,12 +1,21 @@
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
+
 #define REGX_MAX_ENTRIES 256
 
-size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max);
+/* Registry entry types */
+#define REGX_TYPE_ANY        0
+#define REGX_TYPE_DEVICE     1
+#define REGX_TYPE_DRIVER     2
+#define REGX_TYPE_AGENT      3
+#define REGX_TYPE_SERVICE    4
+#define REGX_TYPE_BUS        5
+#define REGX_TYPE_FILESYSTEM 6
 
 typedef struct {
     char name[32];
-    int  type;                // 1=device, 2=driver, 3=agent, 4=service, 5=bus
+    int  type;                /* one of REGX_TYPE_* */
     char version[16];
     char abi[16];
     char capabilities[64];
@@ -14,12 +23,17 @@ typedef struct {
 
 typedef struct regx_entry {
     uint64_t id;
-    uint64_t parent_id;      // 0=root
+    uint64_t parent_id;      /* 0=root */
     regx_manifest_t manifest;
 } regx_entry_t;
 
 typedef struct {
-    int type;                // 0=any
-    uint64_t parent_id;      // 0=any
-    char name_prefix[16];    // ""=any
+    int type;                /* REGX_TYPE_ANY to match any */
+    uint64_t parent_id;      /* 0=any */
+    char name_prefix[16];    /* ""=any */
 } regx_selector_t;
+
+uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id);
+int      regx_unregister(uint64_t id);
+const regx_entry_t *regx_query(uint64_t id);
+size_t   regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max);
