@@ -16,7 +16,7 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) 
     return 0;
 }
 int pthread_mutex_lock(pthread_mutex_t *mutex) {
-    uint32_t self = thread_self ? thread_self() : 1;
+    uint32_t self = thread_self();
     if (mutex->owner == self) {
         mutex->count++;
         return 0;
@@ -27,7 +27,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     return 0;
 }
 int pthread_mutex_unlock(pthread_mutex_t *mutex) {
-    if (mutex->owner != (thread_self ? thread_self() : 1))
+    if (mutex->owner != thread_self())
         return -1;
     if (--mutex->count == 0) {
         mutex->owner = (uint32_t)-1;
