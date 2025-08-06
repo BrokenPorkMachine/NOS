@@ -42,17 +42,25 @@ static int flag_index(uint64_t virt) {
 void cow_mark(uint64_t virt) {
     int idx = flag_index(virt);
     if (idx < 0) return;
+
+    uint64_t phys = paging_virt_to_phys(virt);
+    if (!phys) return;
+
     cow_flags[idx] = 1;
     paging_unmap(virt);
-    paging_map(virt, paging_virt_to_phys(virt), PAGE_PRESENT | PAGE_USER);
+    paging_map(virt, phys, PAGE_PRESENT | PAGE_USER);
 }
 
 void cow_unmark(uint64_t virt) {
     int idx = flag_index(virt);
     if (idx < 0) return;
+
+    uint64_t phys = paging_virt_to_phys(virt);
+    if (!phys) return;
+
     cow_flags[idx] = 0;
     paging_unmap(virt);
-    paging_map(virt, paging_virt_to_phys(virt), PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    paging_map(virt, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
 }
 
 int cow_is_marked(uint64_t virt) {
