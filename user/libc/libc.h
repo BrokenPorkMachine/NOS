@@ -3,7 +3,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include <time.h>
+/* Only declare if not found (use #ifdef or #ifndef) */
+#ifndef HAVE_CLOCK_GETTIME
+int clock_gettime(int clk_id, struct timespec *tp);
+#endif
 
 // ========== MUTEX SUPPORT ==========
 typedef struct {
@@ -82,7 +89,7 @@ char  *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen);
 // ===================
 // TIME
 // ===================
-int      clock_gettime(int clk_id, struct timespec *tp);
+//int      clock_gettime(int clk_id, struct timespec *tp);
 time_t   time(time_t *t);
 
 #endif // LIBC_H
