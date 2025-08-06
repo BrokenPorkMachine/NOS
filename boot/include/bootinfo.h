@@ -11,6 +11,13 @@ typedef struct {
 } bootinfo_framebuffer_t;
 
 typedef struct {
+    uint64_t addr;
+    uint64_t len;
+    uint32_t type;
+    uint32_t reserved;
+} bootinfo_memory_t;
+
+typedef struct {
     uint32_t magic;
     uint32_t size;
     const char *bootloader_name;
@@ -41,7 +48,7 @@ typedef struct {
     } ioapics[8];
     uint32_t ioapic_count;
 
-    void *mmap;
+    bootinfo_memory_t *mmap;
     uint64_t mmap_entries, mmap_desc_size;
     uint32_t mmap_desc_ver;
 

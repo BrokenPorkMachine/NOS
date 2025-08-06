@@ -1,6 +1,6 @@
 // agent_loader.c
 #include "agent_loader.h"
-#include "nosm.h"
+#include <nosm.h>
 #include "macho2.h"
 
 // Returns 0 on success, -1 on error
