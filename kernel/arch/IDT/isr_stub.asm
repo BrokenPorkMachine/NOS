@@ -2,6 +2,7 @@ global isr_timer_stub
 global isr_keyboard_stub
 global isr_mouse_stub
 global isr_page_fault_stub
+global isr_gpf_stub
 global isr_syscall_stub
 global isr_ipi_stub
 global isr_stub_table
@@ -11,6 +12,7 @@ extern isr_timer_handler
 extern isr_keyboard_handler
 extern isr_mouse_handler
 extern isr_page_fault_handler
+extern isr_gpf_handler
 extern isr_syscall_handler
 extern isr_ipi_handler
 
@@ -102,13 +104,72 @@ isr_stub_%1:
 
 %assign i 0
 %rep 256
-%if i = 8 || i = 10 || i = 11 || i = 12 || i = 13 || i = 17
+%if i = 8 || i = 10 || i = 11 || i = 12 || i = 17
     ISR_ERROR i
-%elif i != 32 && i != 33 && i != 44 && i != 14 && i != 0x80 && i != 0xF0
+%elif i != 32 && i != 33 && i != 44 && i != 13 && i != 14 && i != 0x80 && i != 0xF0
     ISR_DEFAULT i
 %endif
 %assign i i+1
 %endrep
+
+isr_gpf_stub:
+    cli
+    push r15
+    push r14
+    push r13
+    push r12
+    push r11
+    push r10
+    push r9
+    push r8
+    push rdi
+    push rsi
+    push rbp
+    push rbx
+    push rdx
+    push rcx
+    push rax
+
+    mov rax, [rsp + 120]
+    mov rbx, [rsp + 128]
+    mov [rsp + 120], rbx
+    mov rbx, [rsp + 136]
+    mov [rsp + 128], rbx
+    mov rbx, [rsp + 144]
+    mov [rsp + 136], rbx
+    mov rbx, [rsp + 152]
+    mov [rsp + 144], rbx
+    mov rbx, [rsp + 160]
+    mov [rsp + 152], rbx
+
+    mov rcx, 13
+    push rcx
+    push rax
+    xor rax, rax
+    push rax
+
+    mov rdi, rsp
+    call isr_gpf_handler
+
+    add rsp, 24
+
+    pop rax
+    pop rcx
+    pop rdx
+    pop rbx
+    pop rbp
+    pop rsi
+    pop rdi
+    pop r8
+    pop r9
+    pop r10
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
+
+    iretq
 
 isr_timer_stub:
     cli
@@ -434,6 +495,8 @@ isr_stub_table:
     dq isr_keyboard_stub
 %elif i = 44
     dq isr_mouse_stub
+%elif i = 13
+    dq isr_gpf_stub
 %elif i = 14
     dq isr_page_fault_stub
 %elif i = 0x80
