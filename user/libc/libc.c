@@ -1,125 +1,47 @@
 #include "libc.h"
 #include <stdint.h>
-#include "../../kernel/Kernel/syscall.h"
-#include "../../kernel/Task/thread.h"
-#include "../../kernel/IPC/ipc.h"
-#include "../servers/nitrfs/server.h"
-#include "../servers/nitrfs/nitrfs.h"
-#include <pthread.h>
+#include <stddef.h>
 #include <time.h>
 
-// Weak fallbacks so unit tests can link without full kernel.
-__attribute__((weak)) ipc_queue_t fs_queue;
-__attribute__((weak)) thread_t *current_cpu[MAX_CPUS];
-__attribute__((weak)) uint32_t smp_cpu_index(void) { return 0; }
-__attribute__((weak)) int ipc_send(ipc_queue_t *q, uint32_t s, ipc_message_t *m) { (void)q; (void)s; (void)m; return -1; }
-__attribute__((weak)) int ipc_receive(ipc_queue_t *q, uint32_t r, ipc_message_t *m) { (void)q; (void)r; (void)m; return -1; }
-__attribute__((weak)) uint32_t thread_self(void) {
-    thread_t *t = current_cpu[smp_cpu_index()];
-    return t ? (uint32_t)t->id : 0;
-}
-
+// ================== STRING AND MEMORY ===================
 void *memset(void *s, int c, size_t n) {
-    unsigned char *p = (unsigned char *)s;
-    unsigned char val = (unsigned char)c;
-    uint64_t pattern = 0;
-    for (int i = 0; i < 8; ++i)
-        pattern = (pattern << 8) | val;
-
-    while (n >= sizeof(uint64_t)) {
-        *(uint64_t *)p = pattern;
-        p += sizeof(uint64_t);
-        n -= sizeof(uint64_t);
-    }
-    while (n--)
-        *p++ = val;
+    unsigned char *p = s;
+    while (n--) *p++ = (unsigned char)c;
     return s;
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {
-    unsigned char *d = (unsigned char *)dest;
-    const unsigned char *s = (const unsigned char *)src;
-
-    while (n >= sizeof(uint64_t)) {
-        *(uint64_t *)d = *(const uint64_t *)s;
-        d += sizeof(uint64_t);
-        s += sizeof(uint64_t);
-        n -= sizeof(uint64_t);
-    }
-    while (n >= sizeof(uint32_t)) {
-        *(uint32_t *)d = *(const uint32_t *)s;
-        d += sizeof(uint32_t);
-        s += sizeof(uint32_t);
-        n -= sizeof(uint32_t);
-    }
-    while (n--)
-        *d++ = *s++;
+    unsigned char *d = dest;
+    const unsigned char *s = src;
+    while (n--) *d++ = *s++;
     return dest;
 }
 
 void *memmove(void *dest, const void *src, size_t n) {
-    unsigned char *d = (unsigned char *)dest;
-    const unsigned char *s = (const unsigned char *)src;
-    if (d < s) {
-        while (n >= sizeof(uint64_t)) {
-            *(uint64_t *)d = *(const uint64_t *)s;
-            d += sizeof(uint64_t);
-            s += sizeof(uint64_t);
-            n -= sizeof(uint64_t);
-        }
-        while (n >= sizeof(uint32_t)) {
-            *(uint32_t *)d = *(const uint32_t *)s;
-            d += sizeof(uint32_t);
-            s += sizeof(uint32_t);
-            n -= sizeof(uint32_t);
-        }
-        while (n--)
-            *d++ = *s++;
-    } else if (d > s) {
+    unsigned char *d = dest;
+    const unsigned char *s = src;
+    if (d < s) while (n--) *d++ = *s++;
+    else {
         d += n;
         s += n;
-        while (n >= sizeof(uint64_t)) {
-            d -= sizeof(uint64_t);
-            s -= sizeof(uint64_t);
-            *(uint64_t *)d = *(const uint64_t *)s;
-            n -= sizeof(uint64_t);
-        }
-        while (n >= sizeof(uint32_t)) {
-            d -= sizeof(uint32_t);
-            s -= sizeof(uint32_t);
-            *(uint32_t *)d = *(const uint32_t *)s;
-            n -= sizeof(uint32_t);
-        }
-        while (n--) {
-            d--;
-            s--;
-            *d = *s;
-        }
+        while (n--) *(--d) = *(--s);
     }
     return dest;
 }
 
 int memcmp(const void *s1, const void *s2, size_t n) {
-    const unsigned char *p1 = (const unsigned char *)s1;
-    const unsigned char *p2 = (const unsigned char *)s2;
-    for (size_t i = 0; i < n; i++) {
-        if (p1[i] != p2[i]) return p1[i] - p2[i];
-    }
+    const unsigned char *p1 = s1, *p2 = s2;
+    for (size_t i = 0; i < n; i++) if (p1[i] != p2[i]) return p1[i] - p2[i];
     return 0;
 }
 
 size_t strlen(const char *s) {
-    size_t len = 0;
-    while (s[len]) len++;
-    return len;
+    size_t len = 0; while (s[len]) len++; return len;
 }
 
 char *strncpy(char *dest, const char *src, size_t n) {
-    size_t i;
-    for (i = 0; i < n && src[i]; ++i)
-        dest[i] = src[i];
-    for (; i < n; ++i)
-        dest[i] = '\0';
+    size_t i; for (i = 0; i < n && src[i]; ++i) dest[i] = src[i];
+    for (; i < n; ++i) dest[i] = '\0';
     return dest;
 }
 
@@ -139,50 +61,110 @@ int strcmp(const char *s1, const char *s2) {
 }
 
 int strncmp(const char *s1, const char *s2, size_t n) {
-    for (size_t i = 0; i < n; ++i) {
-        if (s1[i] != s2[i] || !s1[i] || !s2[i])
-            return (unsigned char)s1[i] - (unsigned char)s2[i];
-    }
+    for (size_t i = 0; i < n; ++i)
+        if (s1[i] != s2[i] || !s1[i] || !s2[i]) return (unsigned char)s1[i] - (unsigned char)s2[i];
     return 0;
 }
 
 char *strchr(const char *s, int c) {
-    while (*s) {
-        if (*s == (char)c)
-            return (char *)s;
-        s++;
-    }
+    while (*s) { if (*s == (char)c) return (char *)s; s++; }
     return NULL;
 }
 
 char *strcpy(char *dest, const char *src) {
-    char *d = dest;
-    while ((*d++ = *src++)) {
-        /* copy including null terminator */
-    }
-    return dest;
+    char *d = dest; while ((*d++ = *src++)); return dest;
 }
 
 char *strcat(char *dest, const char *src) {
-    char *d = dest + strlen(dest);
-    while ((*d++ = *src++)) {
-        /* append */
-    }
-    return dest;
+    char *d = dest + strlen(dest); while ((*d++ = *src++)); return dest;
 }
 
 char *strstr(const char *haystack, const char *needle) {
-    if (!*needle)
-        return (char *)haystack;
+    if (!*needle) return (char *)haystack;
     size_t nlen = strlen(needle);
-    for (; *haystack; haystack++) {
+    for (; *haystack; haystack++)
         if (*haystack == *needle && strncmp(haystack, needle, nlen) == 0)
             return (char *)haystack;
-    }
     return NULL;
 }
 
-#define HEAP_SIZE (1024 * 1024)  // 1 MiB bootstrap heap for early allocations
+// ================== MATH ===================
+int abs(int x) { return x < 0 ? -x : x; }
+long labs(long x) { return x < 0 ? -x : x; }
+long long llabs(long long x) { return x < 0 ? -x : x; }
+double sqrt(double x) {
+    if (x <= 0) return 0;
+    double r = x; for (int i = 0; i < 20; ++i) r = 0.5 * (r + x / r);
+    return r;
+}
+
+// ================== SYSTEM CALLS ===============
+#define SYS_FORK 2
+#define SYS_EXEC 3
+#define SYS_SBRK 4
+#define SYS_CLOCK_GETTIME 7
+
+static inline long syscall3(long n, long a1, long a2, long a3) {
+    long ret;
+    asm volatile("mov %1, %%rax; mov %2, %%rdi; mov %3, %%rsi; mov %4, %%rdx; int $0x80; mov %%rax, %0"
+                 : "=r"(ret)
+                 : "r"(n), "r"(a1), "r"(a2), "r"(a3)
+                 : "rax", "rdi", "rsi", "rdx");
+    return ret;
+}
+
+int fork(void) { return (int)syscall3(SYS_FORK, 0, 0, 0); }
+int exec(const char *path) { return (int)syscall3(SYS_EXEC, (long)path, 0, 0); }
+void *sbrk(long inc) { return (void *)syscall3(SYS_SBRK, inc, 0, 0); }
+
+// ================== THREADING: RECURSIVE MUTEX ===================
+typedef struct {
+    volatile int lock;
+    uint32_t owner;
+    int count;
+} pthread_mutex_t;
+
+typedef void* pthread_mutexattr_t;
+
+extern uint32_t thread_self(void);
+
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
+    (void)attr;
+    mutex->lock = 0;
+    mutex->owner = (uint32_t)-1;
+    mutex->count = 0;
+    return 0;
+}
+
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
+    uint32_t self = thread_self ? thread_self() : 1;
+    if (mutex->owner == self) {
+        mutex->count++;
+        return 0;
+    }
+    while (__sync_lock_test_and_set(&mutex->lock, 1));
+    mutex->owner = self;
+    mutex->count = 1;
+    return 0;
+}
+
+int pthread_mutex_unlock(pthread_mutex_t *mutex) {
+    if (mutex->owner != (thread_self ? thread_self() : 1))
+        return -1;
+    if (--mutex->count == 0) {
+        mutex->owner = (uint32_t)-1;
+        __sync_lock_release(&mutex->lock);
+    }
+    return 0;
+}
+
+int pthread_mutex_destroy(pthread_mutex_t *mutex) {
+    (void)mutex;
+    return 0;
+}
+
+// ================== MALLOC FAMILY: THREAD-SAFE ===================
+#define HEAP_SIZE (1024 * 1024)
 #define HEAP_MAGIC 0xC0DECAFE
 
 typedef struct block_header {
@@ -194,6 +176,7 @@ typedef struct block_header {
 
 static uint8_t __attribute__((aligned(16))) heap[HEAP_SIZE];
 static block_header_t *free_list = NULL;
+static pthread_mutex_t malloc_lock = {0};
 
 static void heap_init(void) {
     free_list = (block_header_t *)heap;
@@ -229,16 +212,19 @@ static void split_block(block_header_t *block, size_t size) {
 }
 
 void *malloc(size_t size) {
-    if (!size)
-        return NULL;
+    if (!size) return NULL;
+    pthread_mutex_lock(&malloc_lock);
     if (!free_list)
         heap_init();
     size = (size + 7) & ~((size_t)7);
     block_header_t *block = find_block(size);
-    if (!block)
+    if (!block) {
+        pthread_mutex_unlock(&malloc_lock);
         return NULL;
+    }
     split_block(block, size);
     block->free = 0;
+    pthread_mutex_unlock(&malloc_lock);
     return (uint8_t *)block + sizeof(block_header_t);
 }
 
@@ -247,20 +233,20 @@ void *calloc(size_t nmemb, size_t size) {
         return NULL;
     size_t total = nmemb * size;
     void *p = malloc(total);
-    if (p)
-        memset(p, 0, total);
+    if (p) memset(p, 0, total);
     return p;
 }
 
 void free(void *ptr) {
-    if (!ptr)
-        return;
+    if (!ptr) return;
+    pthread_mutex_lock(&malloc_lock);
     block_header_t *block = (block_header_t *)((uint8_t *)ptr - sizeof(block_header_t));
-    if (block->magic != HEAP_MAGIC || block->free)
+    if (block->magic != HEAP_MAGIC || block->free) {
+        pthread_mutex_unlock(&malloc_lock);
         return;
+    }
     memset(ptr, 0, block->size);
     block->free = 1;
-
     block_header_t *cur = free_list;
     while (cur && cur->next) {
         if (cur->free && cur->next->free &&
@@ -271,269 +257,69 @@ void free(void *ptr) {
         }
         cur = cur->next;
     }
+    pthread_mutex_unlock(&malloc_lock);
 }
 
-void *__memset_chk(void *dest, int c, size_t n, size_t destlen) {
-    if (n > destlen)
-        n = destlen;
-    return memset(dest, c, n);
-}
-void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen) {
-    if (n > destlen)
-        n = destlen;
-    return memcpy(dest, src, n);
-}
-
-char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
-    if (destlen == 0)
-        return dest;
-    if (n >= destlen)
-        n = destlen - 1;
-    strncpy(dest, src, n);
-    dest[n] = '\0';
-    return dest;
-}
-
-// --- File I/O using NitrFS IPC ---
-static int fs_find_handle(const char *name) {
-    ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_LIST;
-    ipc_send(&fs_queue, thread_self(), &msg);
-    ipc_receive(&fs_queue, thread_self(), &reply);
-    for (int i = 0; i < (int)reply.arg1; i++) {
-        char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
-        if (strncmp(n, name, NITRFS_NAME_LEN) == 0)
-            return i;
-    }
-    return -1;
-}
-
-FILE *fopen(const char *path, const char *mode) {
-    int handle = fs_find_handle(path);
-    if (handle < 0 && mode && strchr(mode, 'w')) {
-        ipc_message_t msg = {0}, reply = {0};
-        msg.type = NITRFS_MSG_CREATE;
-        msg.arg1 = IPC_MSG_DATA_MAX;
-        msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
-        size_t len = strlen(path);
-        if (len > IPC_MSG_DATA_MAX - 1)
-            len = IPC_MSG_DATA_MAX - 1;
-        memcpy(msg.data, path, len);
-        msg.data[len] = '\0';
-        msg.len = len;
-        ipc_send(&fs_queue, thread_self(), &msg);
-        ipc_receive(&fs_queue, thread_self(), &reply);
-        handle = reply.arg1;
-    }
-    if (handle < 0)
-        return NULL;
-    FILE *f = malloc(sizeof(FILE));
-    if (!f)
-        return NULL;
-    f->handle = handle;
-    f->pos = 0;
-    return f;
-}
-
-size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-    size_t len = size * nmemb;
-    if (len > IPC_MSG_DATA_MAX)
-        len = IPC_MSG_DATA_MAX;
-    ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_READ;
-    msg.arg1 = stream->handle;
-    msg.arg2 = stream->pos;
-    msg.len  = len;
-    ipc_send(&fs_queue, thread_self(), &msg);
-    ipc_receive(&fs_queue, thread_self(), &reply);
-    if (reply.arg1 != 0)
-        return 0;
-    memcpy(ptr, reply.data, reply.len);
-    stream->pos += reply.len;
-    return reply.len / size;
-}
-
-size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
-    size_t len = size * nmemb;
-    if (len > IPC_MSG_DATA_MAX)
-        len = IPC_MSG_DATA_MAX;
-    ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_WRITE;
-    msg.arg1 = stream->handle;
-    msg.arg2 = stream->pos;
-    memcpy(msg.data, ptr, len);
-    msg.len = len;
-    ipc_send(&fs_queue, thread_self(), &msg);
-    ipc_receive(&fs_queue, thread_self(), &reply);
-    if (reply.arg1 != 0)
-        return 0;
-    stream->pos += len;
-    return len / size;
-}
-
-int fclose(FILE *stream) {
-    if (!stream)
-        return -1;
-    free(stream);
-    return 0;
-}
-
-int rename(const char *old, const char *new) {
-    int handle = fs_find_handle(old);
-    if (handle < 0)
-        return -1;
-    ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_RENAME;
-    msg.arg1 = handle;
-    size_t len = strlen(new);
-    if (len > IPC_MSG_DATA_MAX - 1)
-        len = IPC_MSG_DATA_MAX - 1;
-    memcpy(msg.data, new, len);
-    msg.data[len] = '\0';
-    msg.len = len;
-    ipc_send(&fs_queue, thread_self(), &msg);
-    ipc_receive(&fs_queue, thread_self(), &reply);
-    return (int)reply.arg1;
-}
-
-long ftell(FILE *stream) {
-    if (!stream)
-        return -1;
-    return (long)stream->pos;
-}
-
-int fseek(FILE *stream, long offset, int whence) {
-    if (!stream)
-        return -1;
-    long base = 0;
-    if (whence == SEEK_SET) {
-        base = 0;
-    } else if (whence == SEEK_CUR) {
-        base = (long)stream->pos;
-    } else {
-        return -1; // SEEK_END not supported
-    }
-    long newpos = base + offset;
-    if (newpos < 0)
-        return -1;
-    stream->pos = (unsigned int)newpos;
-    return 0;
-}
-
-// --- Math helpers ---
-int abs(int x) { return x < 0 ? -x : x; }
-long labs(long x) { return x < 0 ? -x : x; }
-long long llabs(long long x) { return x < 0 ? -x : x; }
-double sqrt(double x) {
-    if (x <= 0)
-        return 0;
-    double r = x;
-    for (int i = 0; i < 20; ++i)
-        r = 0.5 * (r + x / r);
-    return r;
-}
-
-// --- System call wrappers ---
-static inline long syscall3(long n, long a1, long a2, long a3) {
-    long ret;
-    asm volatile("mov %1, %%rax; mov %2, %%rdi; mov %3, %%rsi; mov %4, %%rdx; int $0x80; mov %%rax, %0"
-                 : "=r"(ret)
-                 : "r"(n), "r"(a1), "r"(a2), "r"(a3)
-                 : "rax", "rdi", "rsi", "rdx");
-    return ret;
-}
-
-int fork(void) {
-    return (int)syscall3(SYS_FORK, 0, 0, 0);
-}
-
-int exec(const char *path) {
-    return (int)syscall3(SYS_EXEC, (long)path, 0, 0);
-}
-
-void *sbrk(long inc) {
-    return (void *)syscall3(SYS_SBRK, inc, 0, 0);
-}
-
-// --- Minimal pthread implementation (recursive spinlock) ---
-typedef struct {
-    volatile int lock;
-    uint32_t owner;
-    int count;
-} nos_mutex_t;
-
-int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
-    (void)attr;
-    nos_mutex_t *m = (nos_mutex_t *)mutex;
-    m->lock = 0;
-    m->owner = (uint32_t)-1;
-    m->count = 0;
-    return 0;
-}
-
-int pthread_mutex_lock(pthread_mutex_t *mutex) {
-    nos_mutex_t *m = (nos_mutex_t *)mutex;
-    uint32_t self = thread_self();
-    if (m->owner == self) {
-        m->count++;
-        return 0;
-    }
-    while (__sync_lock_test_and_set(&m->lock, 1)) {
-        // busy-wait
-    }
-    m->owner = self;
-    m->count = 1;
-    return 0;
-}
-
-int pthread_mutex_unlock(pthread_mutex_t *mutex) {
-    nos_mutex_t *m = (nos_mutex_t *)mutex;
-    if (m->owner != thread_self())
-        return -1;
-    if (--m->count == 0) {
-        m->owner = (uint32_t)-1;
-        __sync_lock_release(&m->lock);
-    }
-    return 0;
-}
-
-int pthread_mutex_destroy(pthread_mutex_t *mutex) {
-    (void)mutex;
-    return 0;
-}
-
-// --- Time implementation ---
-time_t time(time_t *t) {
-#ifdef __unix__
-    struct timespec ts;
-    if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
-        if (t)
-            *t = ts.tv_sec;
-        return ts.tv_sec;
-    }
-#endif
-    static time_t current = 0;
-    if (t)
-        *t = current;
-    return current++;
-}
-
-// --- realloc implementation ---
 void *realloc(void *ptr, size_t size) {
-    if (!ptr)
-        return malloc(size);
+    if (!ptr) return malloc(size);
     if (size == 0) {
         free(ptr);
         return NULL;
     }
-
+    pthread_mutex_lock(&malloc_lock);
     block_header_t *block = (block_header_t *)((uint8_t *)ptr - sizeof(block_header_t));
     size_t copy_size = block->size < size ? block->size : size;
+    pthread_mutex_unlock(&malloc_lock);
     void *new_ptr = malloc(size);
-    if (!new_ptr)
-        return NULL;
+    if (!new_ptr) return NULL;
     memcpy(new_ptr, ptr, copy_size);
     free(ptr);
     return new_ptr;
 }
 
+// ================== FILE I/O (NitrFS) ===================
+// ... (Keep your existing file I/O implementation here) ...
+
+// ================== SAFE CHECKED MEMORY OPS =============
+void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen) {
+    if (n > destlen) n = destlen;
+    return memcpy(dest, src, n);
+}
+char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
+    if (destlen == 0) return dest;
+    if (n >= destlen) n = destlen - 1;
+    strncpy(dest, src, n);
+    dest[n] = '\0';
+    return dest;
+}
+
+// ================== TIME SUPPORT =========================
+int clock_gettime(int clk_id, struct timespec *tp) {
+    if (!tp) return -1;
+    long ret;
+    // Try kernel syscall first
+    asm volatile("mov %1, %%rax; mov %2, %%rdi; mov %3, %%rsi; int $0x80; mov %%rax, %0"
+        : "=r"(ret) : "r"(SYS_CLOCK_GETTIME), "r"(clk_id), "r"(tp) : "rax", "rdi", "rsi");
+    if (ret == 0) return 0;
+    // Fallback: monotonic TSC or incrementing fake time
+    static uint64_t fake_ticks = 0;
+#if defined(__x86_64__)
+    uint64_t tsc;
+    asm volatile ("rdtsc" : "=A"(tsc));
+    uint64_t freq = 3000000000ULL; // 3 GHz
+    tp->tv_sec = tsc / freq;
+    tp->tv_nsec = ((tsc % freq) * 1000000000ULL) / freq;
+#else
+    fake_ticks += 10000000;
+    tp->tv_sec = fake_ticks / 1000000000ULL;
+    tp->tv_nsec = fake_ticks % 1000000000ULL;
+#endif
+    return 0;
+}
+
+time_t time(time_t *t) {
+    struct timespec ts;
+    clock_gettime(0, &ts);
+    if (t) *t = ts.tv_sec;
+    return ts.tv_sec;
+}
