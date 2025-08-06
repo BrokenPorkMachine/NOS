@@ -138,44 +138,6 @@ void *sbrk(long inc) { return (void *)syscall3(SYS_SBRK, inc, 0, 0); }
 
 extern uint32_t thread_self(void);
 
-#if !HAVE_PTHREAD
-int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
-    (void)attr;
-    mutex->lock = 0;
-    mutex->owner = (uint32_t)-1;
-    mutex->count = 0;
-    return 0;
-}
-
-int pthread_mutex_lock(pthread_mutex_t *mutex) {
-    uint32_t self = thread_self();
-    if (mutex->owner == self) {
-        mutex->count++;
-        return 0;
-    }
-    while (__sync_lock_test_and_set(&mutex->lock, 1))
-        __asm__ volatile("pause");
-    mutex->owner = self;
-    mutex->count = 1;
-    return 0;
-}
-
-int pthread_mutex_unlock(pthread_mutex_t *mutex) {
-    if (mutex->owner != thread_self())
-        return -1;
-    if (--mutex->count == 0) {
-        mutex->owner = (uint32_t)-1;
-        __sync_lock_release(&mutex->lock);
-    }
-    return 0;
-}
-
-int pthread_mutex_destroy(pthread_mutex_t *mutex) {
-    (void)mutex;
-    return 0;
-}
-#endif
-
 // ================== MALLOC FAMILY: THREAD-SAFE ===================
 #define HEAP_SIZE (1024 * 1024)
 #define HEAP_MAGIC 0xC0DECAFE
