@@ -24,6 +24,27 @@
 #include "../boot/include/bootinfo.h"
 #include "agent.h"
 #include "nosm.h"
+#include "drivers/IO/serial.h"
+#include "drivers/IO/video.h"
+#include "drivers/IO/tty.h"
+#include "drivers/IO/ps2.h"
+#include "drivers/IO/block.h"
+#include "drivers/IO/sata.h"
+#include "drivers/Net/netstack.h"
+
+static size_t strcspn_local(const char *s, const char *reject) {
+    size_t i = 0;
+    while (s[i]) {
+        const char *r = reject;
+        while (*r) {
+            if (s[i] == *r)
+                return i;
+            r++;
+        }
+        i++;
+    }
+    return i;
+}
 
 /* --- Syscall infrastructure -------------------------------------------- */
 typedef long (*syscall_fn_t)(long,long,long,long,long,long);
@@ -56,7 +77,7 @@ static void enforce_field(const n2_agent_t *agent, const char *field,
         return; /* field not present, default deny handled by caller */
     p += strlen(field);
     while (*p) {
-        size_t len = strcspn(p, ",");
+        size_t len = strcspn_local(p, ",");
         if (len == 0)
             break;
         if (len >= 32)
@@ -143,6 +164,15 @@ static void scheduler_loop(void) {
 void n2_main(bootinfo_t *bootinfo) {
     if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI)
         return; /* invalid boot environment */
+
+    serial_init();
+    const bootinfo_framebuffer_t *fb = (const bootinfo_framebuffer_t *)bootinfo->framebuffer;
+    video_init(fb);
+    tty_init();
+    ps2_init();
+    block_init();
+    sata_init();
+    net_init();
 
     n2_agent_registry_reset();
 
