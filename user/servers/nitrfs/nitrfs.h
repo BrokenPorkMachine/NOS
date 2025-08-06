@@ -5,21 +5,21 @@
 #include <stddef.h>
 #include <time.h>
 
-#if __has_include(<pthread.h>)
-#include <pthread.h>
-#else
+#ifdef KERNEL_BUILD
 typedef struct {
     volatile int lock;
     uint32_t owner;
     int count;
 } pthread_mutex_t;
 typedef void* pthread_mutexattr_t;
-
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
 int pthread_mutex_lock(pthread_mutex_t *mutex);
 int pthread_mutex_unlock(pthread_mutex_t *mutex);
 int pthread_mutex_destroy(pthread_mutex_t *mutex);
+#else
+#include <pthread.h>
 #endif
+
 
 #define NITRFS_MAX_FILES    16
 #define NITRFS_NAME_LEN     32
