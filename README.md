@@ -2,7 +2,7 @@
 
 ## Overview
 
-**NitrOS (NOS)** is evolving into a unified, secure platform where every layer is signed, versioned, and hot-swappable. The system is written from scratch for x86_64 and leans on a microkernel/hybrid design: the kernel enforces isolation while higher-level services and drivers run as sandboxed agents. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full blueprint of the new stack.
+**NitrOS (NOS)** is evolving into a unified, secure platform where every layer is signed, versioned, and hot-swappable. The system is written from scratch for x86\_64 and leans on a microkernel/hybrid design: the kernel enforces isolation while higher-level services and drivers run as sandboxed agents. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full blueprint of the new stack.
 
 ---
 
@@ -38,13 +38,15 @@
 
    * `x86_64-elf-gcc`, `nasm`, `clang`, `lld`, `qemu`, `make`, `mtools`, `dosfstools`
    * FAT image tools (`mkfs.vfat`, `mcopy`) for creating the boot disk
-  * Optionally set the `CROSS_COMPILE` environment variable if your
-    cross compiler prefix differs from the default `x86_64-linux-gnu-`.
-    For example:
 
-    ```sh
-    make CROSS_COMPILE=/opt/cross/bin/x86_64-elf-
-    ```
+* Optionally set the `CROSS_COMPILE` environment variable if your
+  cross compiler prefix differs from the default `x86_64-linux-gnu-`.
+  For example:
+
+  ```sh
+  make CROSS_COMPILE=/opt/cross/bin/x86_64-elf-
+  ```
+
 2. **Build the kernel:**
 
    ```sh
@@ -54,13 +56,14 @@
 
 * Create a FAT-formatted image and copy `BOOTX64.EFI` (O2 Boot Agent) and `kernel.bin`:
 
-   ```sh
-   mkfs.vfat -C disk.img 4096
-   mmd -i disk.img ::/EFI
-   mmd -i disk.img ::/EFI/BOOT
-   mcopy -i disk.img bootx64.efi ::/EFI/BOOT/BOOTX64.EFI
-   mcopy -i disk.img kernel.bin ::/EFI/BOOT/kernel.bin
-   ```
+  ```sh
+  mkfs.vfat -C disk.img 4096
+  mmd -i disk.img ::/EFI
+  mmd -i disk.img ::/EFI/BOOT
+  mcopy -i disk.img bootx64.efi ::/EFI/BOOT/BOOTX64.EFI
+  mcopy -i disk.img kernel.bin ::/EFI/BOOT/kernel.bin
+  ```
+
 4. **Run in QEMU:**
 
    ```sh
@@ -75,12 +78,12 @@
    logs appear even before the framebuffer is initialized. The
    `-device i8042` flag explicitly adds the legacy PS/2 controller so the login
    server can receive keyboard scancodes. `-vnc :0` exposes the display over
-  VNC (port 5900) when local keyboard input is unavailable. The login prompt
-  prints the guest IP (default `10.0.2.15` with user networking) so experimental
-  SSH or VNC servers can be reached over QEMU's user networking. See
-  [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details. Networking
-  support is under active development. See
-  [docs/NETWORK_SERVERS.md](docs/NETWORK_SERVERS.md) for current status.
+   VNC (port 5900) when local keyboard input is unavailable. The login prompt
+   prints the guest IP (default `10.0.2.15` with user networking) so experimental
+   SSH or VNC servers can be reached over QEMU's user networking. See
+   [docs/SERIAL\_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details. Networking
+   support is under active development. See
+   [docs/NETWORK\_SERVERS.md](docs/NETWORK_SERVERS.md) for current status.
 
 ---
 
@@ -147,8 +150,6 @@ Available commands include:
 * `create` – create a new empty file
 * `write` – write data to a file
 * `help` – show available commands
-
-
 
 ### File System Navigation
 
