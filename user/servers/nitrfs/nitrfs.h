@@ -6,7 +6,7 @@
 #include <time.h>
 
 // Cross-platform thread support: use real pthreads if available
-#if __has_include(<pthread.h>)
+#if __has_include(<pthread.h>)itr
 #include <pthread.h>
 #else
 typedef int pthread_mutex_t;
@@ -48,7 +48,11 @@ typedef struct {
     nitrfs_file_t files[NITRFS_MAX_FILES];
     size_t file_count;
     pthread_mutex_t mutex;
+    // Quota fields:
+    uint32_t max_files;
+    uint32_t max_bytes;
 } nitrfs_fs_t;
+
 
 // ====== Filesystem Lifecycle ======
 void   nitrfs_init(nitrfs_fs_t *fs);
