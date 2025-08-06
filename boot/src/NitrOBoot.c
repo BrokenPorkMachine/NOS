@@ -91,6 +91,7 @@ typedef struct {
 #define PT_LOAD 1
 
 // --- Standalone ELF64 loader: returns 0 on success, nonzero on error ---
+// --- Standalone ELF64 loader: returns 0 on success, nonzero on error ---
 static int load_elf64_kernel(
     struct EFI_FILE_PROTOCOL *KernelFile,
     struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut,
@@ -133,8 +134,18 @@ static int load_elf64_kernel(
         print_hex(ConOut, L"memsz: ", ph.p_memsz);
         EFI_PHYSICAL_ADDRESS dest = ph.p_paddr;
         UINTN npages = (ph.p_memsz + 4095) / 4096;
+
+        // Try to allocate at fixed address
         st = BS->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, npages, &dest);
-        if (st || dest != ph.p_paddr) { ConOut->OutputString(ConOut, L"Page alloc failed\r\n"); return 4; }
+        if (st || dest != ph.p_paddr) {
+            print_hex(ConOut, L"Page alloc failed at: ", ph.p_paddr);
+            // Optionally, try to allocate anywhere (remove this if kernel is NOT relocatable)
+            // st = BS->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, npages, &dest);
+            // if (st) {
+                ConOut->OutputString(ConOut, L"Cannot load kernel segment. Aborting.\r\n");
+                return 4;
+            // }
+        }
         KernelFile->SetPosition(KernelFile, ph.p_offset);
         sz = ph.p_filesz;
         st = KernelFile->Read(KernelFile, &sz, (void *)(UINTN)dest);
