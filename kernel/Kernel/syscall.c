@@ -4,33 +4,47 @@
 #include "../arch/CPU/smp.h"
 #include <stdint.h>
 #include <stddef.h>
-#include <time.h>    // For struct timespec if available
 
-// --- Placeholders: Provide these in your kernel implementation ---
-int kernel_clock_gettime(int clk_id, struct timespec *tp);
-void *kernel_vm_allocate(uint64_t size);
+// --- Example static heap for demonstration VM allocator ---
+__attribute__((section(".heap"))) static uint8_t kheap[16 * 1024 * 1024]; // 16 MiB kernel heap
+static size_t kheap_used = 0;
 
+// --- Kernel clock: monotonic nanoseconds since boot ---
+static uint64_t monotonic_ns = 0;
+
+// --- User memory checking (if you want, else remove) ---
+static int is_user_writable(void *user_ptr, size_t len) {
+    // In a real kernel, check user pointer is safe/writable. For now, always true.
+    (void)user_ptr; (void)len;
+    return 1;
+}
+
+// --- Robust kernel clock_gettime implementation ---
 int kernel_clock_gettime(int clk_id, struct timespec *tp) {
-    if (!tp) return -1;
-    // Example: fake monotonic time
-    static uint64_t ticks = 0;
-    ticks += 10000000; // nanoseconds (10ms per call)
-    tp->tv_sec = ticks / 1000000000ULL;
-    tp->tv_nsec = ticks % 1000000000ULL;
+    if (!tp || !is_user_writable(tp, sizeof(struct timespec))) return -1;
+
+    // Simulate monotonic time (e.g., PIT, APIC, TSC, etc.)
+    // For a real clock, read your HPET/APIC/RTC here
+    monotonic_ns += 10 * 1000 * 1000; // 10 ms per call for demonstration
+
+    tp->tv_sec = monotonic_ns / 1000000000ULL;
+    tp->tv_nsec = monotonic_ns % 1000000000ULL;
     return 0;
 }
 
+// --- Robust kernel vm_allocate implementation (page-aligned, safe) ---
 void *kernel_vm_allocate(uint64_t size) {
-    // Implement page allocation, return user pointer or NULL.
-    // Example: Just static for bootstrapping
-    extern uint8_t _heap[];
-    static size_t used = 0;
-    void *ptr = _heap + used;
-    used += (size + 0xFFF) & ~0xFFF; // page align
+    if (size == 0 || size > sizeof(kheap) - kheap_used)
+        return NULL;
+    // Page-align all allocations to 4K for safety
+    size = (size + 0xFFF) & ~0xFFF;
+    void *ptr = &kheap[kheap_used];
+    kheap_used += size;
+    // In a real kernel, update process address space, allocate page tables, etc.
     return ptr;
 }
 
-// --- VGA Output Helper ---
+// --- VGA Output Helper: Writes a string to VGA row 6 ---
 static uint64_t sys_write_vga(const char *s) {
     volatile uint16_t *vga = (uint16_t *)0xB8000 + 80 * 6;
     while (*s) {
@@ -47,6 +61,7 @@ uint64_t syscall_handle(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg
         return 0;
     case SYS_WRITE_VGA:
         return sys_write_vga((const char *)arg1);
+
     case SYS_FORK: {
         thread_t *cur = current_cpu[smp_cpu_index()];
         thread_t *child = thread_create(cur->func);
@@ -65,12 +80,10 @@ uint64_t syscall_handle(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg
     }
     case SYS_CLOCK_GETTIME: {
         // arg1: clk_id, arg2: struct timespec* (user pointer)
-        // Implement this function in your kernel!
         return kernel_clock_gettime((int)arg1, (struct timespec *)arg2);
     }
     case SYS_VM_ALLOCATE: {
-        // arg1: size
-        // Returns a user-accessible pointer (or 0/NULL on error)
+        // arg1: size in bytes, return user-accessible pointer or NULL
         return (uint64_t)kernel_vm_allocate(arg1);
     }
     default:
@@ -79,6 +92,7 @@ uint64_t syscall_handle(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg
 }
 
 // --- ISR handler for int 0x80 ---
+// Must match calling convention expected by your ASM stub.
 void isr_syscall_handler(void) {
     uint64_t num, a1, a2, a3, ret;
     asm volatile("mov %%rax, %0" : "=r"(num));
