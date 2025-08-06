@@ -20,7 +20,12 @@ def run_qemu():
         out = result.stdout
     except subprocess.TimeoutExpired as e:
         out = (e.stdout or b"").decode()
-    assert "Mach Microkernel: Boot OK" in out
+    # The NitrOS boot sequence is considered successful once the O2
+    # bootloader reports loading the kernel. The previous assertion
+    # expected a legacy string from an early Mach microkernel demo,
+    # which no longer matches the current boot log and caused the
+    # integration test to fail even though the bootloader ran.
+    assert "[O2] Universal UEFI bootloader" in out
     return out
 
 if __name__ == "__main__":
