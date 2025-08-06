@@ -3,6 +3,7 @@
 #include "serial.h"
 #include "video.h"
 #include "font8x8_basic.h"
+#include <stddef.h>
 
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
