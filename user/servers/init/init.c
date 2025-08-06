@@ -191,6 +191,14 @@ void init_main(ipc_queue_t *q, uint32_t self_id) {
 
     serial_puts("[init] all requested system services launched\n");
 
+    /*
+     * Lower our priority now that boot-time work is done so that equal-priority
+     * services (like the login server) are actually scheduled.  Otherwise this
+     * init thread's default high priority would keep pre-empting them and the
+     * user would never see the login prompt.
+     */
+    thread_current()->priority = MIN_PRIORITY;
+
     while (1) {
         thread_yield();
         health_check_and_respawn();
