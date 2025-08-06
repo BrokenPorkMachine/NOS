@@ -16,8 +16,72 @@ static void *memcpy(void *dst, const void *src, size_t n) {
 static void *memset(void *dst, int c, size_t n) {
     uint8_t *d = dst; while (n--) *d++ = (uint8_t)c; return dst;
 }
-static int memcmp(const void *a, const void *b, size_t n) {
-    const uint8_t *x=a, *y=b; while (n--) { if (*x!=*y) return *x-*y; x++; y++; } return 0;
+
+// Convert and print a null-terminated ASCII string using UEFI's text output.
+static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s) {
+    size_t len = 0;
+    while (s[len]) len++;
+
+    CHAR16 *ws;
+    if (EFI_ERROR(st->BootServices->AllocatePool(EfiLoaderData,
+            (len + 1) * sizeof(CHAR16), (void **)&ws))) {
+        return;
+    }
+    for (size_t i = 0; i <= len; ++i) {
+        ws[i] = (CHAR16)s[i];
+    }
+    st->ConOut->OutputString(st->ConOut, ws);
+    st->BootServices->FreePool(ws);
+}
+
+// Load an entire file into memory using UEFI file protocols.
+static EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root,
+                            const CHAR16 *path, void **buf, UINTN *size) {
+    EFI_FILE_PROTOCOL *file;
+    EFI_STATUS status = root->Open(root, &file, (CHAR16 *)path,
+                                   EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(status)) {
+        return status;
+    }
+
+    UINTN info_size = 0;
+    status = file->GetInfo(file, (EFI_GUID *)&gEfiFileInfoGuid,
+                           &info_size, NULL);
+    if (status != EFI_BUFFER_TOO_SMALL) {
+        file->Close(file);
+        return status;
+    }
+
+    EFI_FILE_INFO *info;
+    status = st->BootServices->AllocatePool(EfiLoaderData, info_size,
+                                            (void **)&info);
+    if (EFI_ERROR(status)) {
+        file->Close(file);
+        return status;
+    }
+    status = file->GetInfo(file, (EFI_GUID *)&gEfiFileInfoGuid,
+                           &info_size, info);
+    if (EFI_ERROR(status)) {
+        st->BootServices->FreePool(info);
+        file->Close(file);
+        return status;
+    }
+    *size = info->FileSize;
+    st->BootServices->FreePool(info);
+
+    status = st->BootServices->AllocatePool(EfiLoaderData, *size, buf);
+    if (EFI_ERROR(status)) {
+        file->Close(file);
+        return status;
+    }
+    UINTN read_size = *size;
+    status = file->Read(file, &read_size, *buf);
+    file->Close(file);
+    if (EFI_ERROR(status) || read_size != *size) {
+        st->BootServices->FreePool(*buf);
+        return status;
+    }
+    return EFI_SUCCESS;
 }
 
 // Minimal ELF64 types
@@ -55,14 +119,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // Secure Boot check
     UINT8 secure = 0; UINTN ssz = sizeof(secure);
-    bool secure_boot = false;
     EFI_STATUS status = SystemTable->RuntimeServices->GetVariable(
         L"SecureBoot", (EFI_GUID*)&gEfiGlobalVariableGuid, NULL, &ssz, &secure);
     if (EFI_ERROR(status) || secure == 0) {
         print_ascii(SystemTable, "[O2] Secure Boot disabled\r\n");
     } else {
         print_ascii(SystemTable, "[O2] Secure Boot enabled\r\n");
-        (void)secure_boot = true;
     }
 
     EFI_LOADED_IMAGE_PROTOCOL *loaded;
