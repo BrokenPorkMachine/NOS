@@ -16,8 +16,8 @@ void nitrfs_server(ipc_queue_t *q, uint32_t self_id) {
     int handle, ret;
 
     while (1) {
-        // Block for a message
-        if (ipc_receive(q, self_id, &msg) != 0)
+        // Block for a message and yield if none pending
+        if (ipc_receive_blocking(q, self_id, &msg) != 0)
             continue;
         if (msg.len > IPC_MSG_DATA_MAX)
             continue; // Ignore bogus message
