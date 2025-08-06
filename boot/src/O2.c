@@ -5,6 +5,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// Prototypes for utility functions defined later or elsewhere
+static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s);
+static EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root,
+                            const CHAR16 *path, void **buf, UINTN *size);
+
 static void *memcpy(void *dst, const void *src, size_t n) {
     uint8_t *d = dst; const uint8_t *s = src; while (n--) *d++ = *s++; return dst;
 }
