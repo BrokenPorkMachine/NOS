@@ -5,6 +5,17 @@
 
 #ifdef KERNEL_BUILD
 #define USE_KERNEL_MUTEX
+#endif
+
+#ifdef USE_KERNEL_MUTEX
+// ---- Your kernel-mode recursive spinlock mutex ----
+extern uint32_t thread_self(void);
+
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) { ... }
+int pthread_mutex_lock(pthread_mutex_t *mutex) { ... }
+int pthread_mutex_unlock(pthread_mutex_t *mutex) { ... }
+int pthread_mutex_destroy(pthread_mutex_t *mutex) { ... }
+#endif
 
 // --- Kernel-mode pthread_mutex_t implementation ---
 extern uint32_t thread_self(void);
@@ -42,7 +53,6 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
 }
 #endif
 
-#endif // KERNEL_BUILD
 
 // ================== STRING AND MEMORY ===================
 void *memset(void *s, int c, size_t n) {
