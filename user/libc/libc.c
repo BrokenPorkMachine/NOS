@@ -5,6 +5,8 @@
 
 // ---- Your kernel-mode recursive spinlock mutex ----
 extern uint32_t thread_self(void);
+// Provide a weak default implementation for unit tests
+__attribute__((weak)) uint32_t thread_self(void) { return 1; }
 
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
     (void)attr;
@@ -170,8 +172,6 @@ int exec(const char *path) { return (int)syscall3(SYS_EXEC, (long)path, 0, 0); }
 void *sbrk(long inc) { return (void *)syscall3(SYS_SBRK, inc, 0, 0); }
 
 // ================== THREADING: RECURSIVE MUTEX ===================
-
-extern uint32_t thread_self(void);
 
 // ================== MALLOC FAMILY: THREAD-SAFE ===================
 #define HEAP_SIZE (1024 * 1024)
