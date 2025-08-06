@@ -94,4 +94,11 @@ int    nitrfs_load_device(nitrfs_fs_t *fs, uint32_t start_lba);
 extern int block_read(uint32_t lba, uint8_t *buf, size_t count);
 extern int block_write(uint32_t lba, const uint8_t *buf, size_t count);
 
+// Schedule a flush of dirty files to disk/device in background.
+// Returns immediately; does not block for IO.
+void   nitrfs_flush_async(nitrfs_fs_t *fs);
+
+// Optionally, force a synchronous flush (blocking).
+void   nitrfs_flush_sync(nitrfs_fs_t *fs);
+åß
 #endif // NITRFS_H
