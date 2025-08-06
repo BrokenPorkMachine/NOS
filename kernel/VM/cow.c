@@ -1,13 +1,13 @@
 #include "cow.h"
 #include "../../user/libc/libc.h"
 
+// Static state for all frames in the system
 static uint16_t *refcounts = NULL;
 static uint8_t  *cow_flags = NULL;
 static uint64_t frames = 0;
 
-/**
- * Initialize COW/refcount subsystem.
- */
+// ----------- Core API -----------
+
 void cow_init(uint64_t total_frames) {
     frames = total_frames;
     refcounts = calloc(frames, sizeof(uint16_t));
@@ -43,6 +43,7 @@ uint16_t cow_refcount(uint64_t phys) {
     return 0;
 }
 
+// Get the frame index for a VA, or -1 if not mapped
 static int cow_flag_index(uint64_t virt) {
     uint64_t phys = paging_virt_to_phys(virt);
     if (!phys) return -1;
@@ -116,6 +117,6 @@ void handle_page_fault(uint64_t err, uint64_t addr) {
     }
 
     serial_puts("[cow] unhandled pfault: addr=0x");
-    // Add hex print here if you wish
+    // Optional: print the address as hex
     for(;;) __asm__("hlt");
 }
