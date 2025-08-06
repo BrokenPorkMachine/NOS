@@ -1,71 +1,69 @@
-#ifndef BOOTINFO_H
-#define BOOTINFO_H
-
+#pragma once
 #include <stdint.h>
-#define BOOTINFO_MAGIC_UEFI 0x4E49545255454649ULL // "NITRUEFI"
-#define BOOTINFO_MAX_MMAP 128
-#define BOOTINFO_MAX_SEGS 32
-#define BOOTINFO_MAX_MODULES 16
-#define KERNEL_FMT_ELF64 1
-#define KERNEL_FMT_MACHO64 2
+#define BOOTINFO_MAGIC_UEFI 0x4F324255
+#define FBINFO_MAGIC 0xF00DBA66
 
 typedef struct {
-    uint64_t addr, len;
-    uint32_t type;
-    uint32_t reserved;
-} bootinfo_memory_t;
+    uint32_t magic;
+    uint32_t size;
+    const char *bootloader_name;
 
-typedef struct {
-    uint64_t address;
-    uint32_t width;
-    uint32_t height;
-    uint32_t pitch;
-    uint32_t bpp;
-    uint32_t type;
-    uint32_t reserved;
-} bootinfo_framebuffer_t;
+    void *kernel_entry;
+    uint64_t kernel_load_base;
+    uint64_t kernel_load_size;
+    const char *cmdline;
 
-typedef struct {
-    uint32_t fmt; // 1=ELF64, 2=MachO
-    uint32_t nsegs;
-    struct {
-        uint64_t vaddr;
-        uint64_t paddr;
-        uint64_t fileoff;
-        uint64_t filesz;
-        uint64_t memsz;
-        uint32_t prot;
-        uint32_t flags;
-    } seg[BOOTINFO_MAX_SEGS];
-    uint64_t file_base;   // Pointer to kernel file mapping, for on-demand paging.
-    uint64_t file_size;
-} bootinfo_kernel_segments_t;
+    // ACPI info
+    uint64_t acpi_rsdp, acpi_xsdt, acpi_rsdt, acpi_dsdt;
 
-typedef struct {
-    uint64_t base;
-    uint64_t size;
-    char     name[64];
-    uint8_t  sha256[32];
-    uint64_t manifest_addr;
-    uint64_t manifest_size;
-} bootinfo_module_t;
-
-typedef struct {
-    uint64_t magic;
-    uint64_t size;
-    char*    bootloader_name;
-    char*    cmdline;
+    // CPU/LAPIC/IOAPIC info (MADT)
+    uint64_t lapic_addr;
     uint32_t cpu_count;
-    struct { uint32_t processor_id, apic_id, flags; } cpus[8];
-    bootinfo_memory_t *mmap;
-    uint32_t mmap_entries;
-    uint64_t acpi_rsdp;
-    void*    framebuffer;
-    void*    kernel_entry;
-    bootinfo_kernel_segments_t kernel_segs;
-    uint32_t module_count;
-    bootinfo_module_t modules[BOOTINFO_MAX_MODULES];
-    uint8_t  reserved[256];
-} bootinfo_t;
+    struct {
+        uint32_t apic_id;
+        uint32_t acpi_id;
+        uint8_t online;
+        uint8_t is_bsp;
+        uint8_t reserved[6];
+        // room for x2APIC, etc.
+    } cpus[256];
+    struct {
+        uint32_t ioapic_id;
+        uint32_t ioapic_addr;
+        uint32_t gsi_base;
+    } ioapics[8];
+    uint32_t ioapic_count;
 
-#endif
+    void *mmap;
+    uint64_t mmap_entries, mmap_desc_size;
+    uint32_t mmap_desc_ver;
+
+    // Framebuffer info
+    struct {
+        uint32_t magic;
+        void *base;
+        uint32_t width, height, pitch, bpp;
+    } fb;
+
+    // Modules
+    struct {
+        void *base;
+        uint64_t size;
+        const char *name;
+    } modules[16];
+    uint32_t module_count;
+
+    // Boot device
+    uint32_t boot_device_type, boot_partition;
+
+    // SMBIOS
+    uint64_t smbios_entry;
+
+    // RTC
+    uint16_t current_year, current_month, current_day;
+    uint16_t current_hour, current_minute, current_second;
+
+    void *uefi_system_table;
+
+    uint64_t reserved[32];
+} bootinfo_t;
