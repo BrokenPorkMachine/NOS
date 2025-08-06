@@ -1,11 +1,11 @@
 CC=gcc
 CFLAGS=-Wall -Wextra -std=gnu11 \
-    -I../kernel/IPC -I../kernel/Kernel -I../kernel/VM -I../boot/include \
+    -I../include -I../kernel/IPC -I../kernel/Kernel -I../kernel/VM -I../boot/include \
     -I../user/servers/nitrfs -I../user/servers/login -I../user/servers/ftp \
     -I../user/libc -I../kernel/drivers/IO -I../kernel/drivers/Audio \
     -I../kernel/drivers/Net -I../kernel/arch/GDT
 LIBC_SRC=../user/libc/libc.c thread_stub.c
-UNIT_TESTS=test_ipc test_pmm test_syscall test_login test_ftp test_login_keyboard test_net test_gdt test_module
+UNIT_TESTS=test_ipc test_pmm test_syscall test_login test_ftp test_login_keyboard test_net test_gdt test_module test_nosm
 
 all: $(UNIT_TESTS)
 	for t in $(UNIT_TESTS); do ./$$t; done
@@ -36,6 +36,9 @@ test_gdt: unit/test_gdt.c ../kernel/arch/GDT/gdt.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_module: unit/test_module.c ../kernel/Kernel/module.c ../kernel/Kernel/elf.c $(LIBC_SRC)
+	$(CC) $(CFLAGS) $^ -o $@
+
+test_nosm: unit/test_nosm.c ../kernel/nosm.c ../kernel/agent.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:

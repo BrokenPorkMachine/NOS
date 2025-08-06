@@ -1,4 +1,5 @@
 #include "nosm.h"
+#include "agent.h"
 #include <string.h>
 #include <stdint.h>
 
@@ -25,11 +26,14 @@ void *nosm_load(const void *image, size_t size)
 
     size_t needed = sizeof(nosm_header_t) +
                     (size_t)hdr->num_segments * sizeof(nosm_segment_t);
-    if (size < needed)
+    if (size < needed ||
+        hdr->manifest_offset + hdr->manifest_size > size)
         return NULL;
 
     const nosm_segment_t *segs =
         (const nosm_segment_t *)(data + sizeof(nosm_header_t));
+    const nosm_manifest_t *manifest =
+        (const nosm_manifest_t *)(data + hdr->manifest_offset);
 
     /* determine base address for entrypoint computation */
     uintptr_t base = UINTPTR_MAX;
@@ -40,15 +44,23 @@ void *nosm_load(const void *image, size_t size)
 
     for (uint16_t i = 0; i < hdr->num_segments; ++i) {
         const nosm_segment_t *s = &segs[i];
-        if ((size_t)s->offset + s->size > size)
+        if (s->offset + s->size > size)
             return NULL; /* segment goes past end of file */
         void *dest = (void *)(uintptr_t)s->vaddr;
         const void *src = data + s->offset;
-        memcpy(dest, src, s->size);
+        memcpy(dest, src, (size_t)s->size);
         /* TODO: apply memory permissions according to s->flags */
     }
 
     void (*entry)(void) = (void (*)(void))(base + hdr->entry);
+
+    n2_agent_t agent = {0};
+    memcpy(agent.name, manifest->name, sizeof(agent.name));
+    memcpy(agent.version, manifest->version, sizeof(agent.version));
+    agent.entry = entry;
+    agent.manifest = manifest;
+    n2_agent_register(&agent);
+
     entry();
     return (void *)entry;
 }

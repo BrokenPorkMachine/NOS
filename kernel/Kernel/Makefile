@@ -47,7 +47,9 @@ OBJS = \
     ../arch/ACPI/acpi.o \
     ../drivers/IO/video.o \
     ../drivers/Audio/audio.o \
-    ../../user/libc/libc.o
+    ../../user/libc/libc.o \
+    ../nosm.o \
+    ../agent.o
 
 all: kernel.bin
 
