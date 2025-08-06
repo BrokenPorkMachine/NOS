@@ -4,10 +4,14 @@
 #include "../../libc/libc.h"
 #include "../shell/shell.h"
 #include "../../../kernel/drivers/Net/netstack.h"
+#include "../../../kernel/IPC/ipc.h"
 #include <stddef.h>
 #include <string.h>
 
 volatile login_session_t current_session = {0};
+
+static ipc_queue_t *health_q = NULL;
+static uint32_t login_tid = 0;
 
 // Weak fallback so unit tests can link without the full netstack.
 __attribute__((weak)) uint32_t net_get_ip(void) { return 0x0A00020F; }
@@ -53,6 +57,14 @@ static char getchar_block(void)
     int ch;
     /* Poll the TTY until input is available from keyboard or serial. */
     while ((ch = tty_getchar()) < 0) {
+        // Respond to health pings while waiting
+        if (health_q) {
+            ipc_message_t hmsg, hrep = {0};
+            if (ipc_receive(health_q, login_tid, &hmsg) == 0 && hmsg.type == IPC_HEALTH_PING) {
+                hrep.type = IPC_HEALTH_PONG;
+                ipc_send(health_q, login_tid, &hrep);
+            }
+        }
         thread_yield();
     }
     return (char)ch;
@@ -116,7 +128,8 @@ static void ip_to_str(uint32_t ip, char *buf)
 
 void login_server(ipc_queue_t *q, uint32_t self_id)
 {
-    (void)q; (void)self_id;
+    health_q = q;
+    login_tid = self_id;
     tty_clear();
     puts_out("[login] login server starting\n");
     uint32_t ip = net_get_ip();

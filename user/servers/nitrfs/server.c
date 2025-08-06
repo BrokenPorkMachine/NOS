@@ -26,6 +26,13 @@ void nitrfs_server(ipc_queue_t *q, uint32_t self_id) {
         memset(&reply, 0, sizeof(reply));
         reply.type = msg.type;
 
+        // Health check ping handler
+        if (msg.type == IPC_HEALTH_PING) {
+            reply.type = IPC_HEALTH_PONG;
+            ipc_send(q, self_id, &reply);
+            continue;
+        }
+
         switch (msg.type) {
         case NITRFS_MSG_CREATE:
             ret = nitrfs_create(&fs, (const char*)msg.data, msg.arg1, msg.arg2);

@@ -4,6 +4,7 @@
 #include "../../../kernel/drivers/Net/netstack.h"
 #include "../nitrfs/server.h"
 #include "../nitrfs/nitrfs.h"
+#include "../../../kernel/IPC/ipc.h"
 #include <string.h>
 
 // Port used for FTP traffic on the loopback stack
@@ -39,6 +40,17 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
     thread_yield();
     char buf[128];
     for (;;) {
+        // Check for health ping
+        if (q) {
+            ipc_message_t hmsg, hrep = {0};
+            if (ipc_receive(q, self_id, &hmsg) == 0 && hmsg.type == IPC_HEALTH_PING) {
+                hrep.type = IPC_HEALTH_PONG;
+                ipc_send(q, self_id, &hrep);
+                thread_yield();
+                continue;
+            }
+        }
+
         int n = net_socket_recv(sock, buf, sizeof(buf) - 1);
         if (n > 0) {
             buf[n] = '\0';
