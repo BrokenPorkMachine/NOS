@@ -4,6 +4,13 @@
 #define FBINFO_MAGIC 0xF00DBA66
 
 typedef struct {
+    uint64_t address;
+    uint32_t width, height, pitch, bpp;
+    uint32_t type;
+    uint32_t reserved;
+} bootinfo_framebuffer_t;
+
+typedef struct {
     uint32_t magic;
     uint32_t size;
     const char *bootloader_name;
@@ -39,11 +46,7 @@ typedef struct {
     uint32_t mmap_desc_ver;
 
     // Framebuffer info
-    struct {
-        uint32_t magic;
-        void *base;
-        uint32_t width, height, pitch, bpp;
-    } fb;
+    bootinfo_framebuffer_t fb;
 
     // Modules
     struct {

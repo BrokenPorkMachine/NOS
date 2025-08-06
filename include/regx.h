@@ -2,6 +2,15 @@
 #include <stdint.h>
 #define REGX_MAX_ENTRIES 128
 
+// Registry entry type identifiers
+enum {
+    REGX_TYPE_DEVICE = 1,
+    REGX_TYPE_DRIVER,
+    REGX_TYPE_FILESYSTEM,
+    REGX_TYPE_AGENT,
+    REGX_TYPE_SERVICE,
+};
+
 typedef struct {
     char name[32];
     int  type;                // e.g. 1=device, 2=driver, 3=agent
