@@ -2,7 +2,10 @@
 #include "../IPC/ipc.h"
 #include "../../user/libc/libc.h"
 #include "../drivers/IO/serial.h"
+#include "../../user/agents/init/init.h"
+#include "../../src/agents/regx/regx.h"
 #include <stdint.h>
+#include <string.h>
 #include "../arch/CPU/smp.h"
 
 #ifndef STACK_SIZE
@@ -28,6 +31,8 @@ static thread_t main_thread;
 ipc_queue_t fs_queue;
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
+
+uint64_t init_regx_id = 0;
 
 // Utility: Convert unsigned int to decimal string (for logging)
 static void utoa_dec(uint32_t val, char *buf) {
@@ -347,9 +352,22 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
     return next->rsp;
 }
 
-// System thread startup: create and start init server
+// System thread startup: launch ring-2 init agent and register with RegX
 static void thread_init_func(void) {
-    serial_puts("[init] init server not included\n");
+    serial_puts("[init] starting init agent\n");
+
+    regx_entry_t e = {0};
+    e.parent_id = 0;
+    strncpy(e.manifest.name, "init", sizeof(e.manifest.name) - 1);
+    e.manifest.type = REGX_TYPE_SERVICE;
+    strncpy(e.manifest.version, "1.0", sizeof(e.manifest.version) - 1);
+    strncpy(e.manifest.abi, "n2", sizeof(e.manifest.abi) - 1);
+    strncpy(e.manifest.capabilities, "launcher", sizeof(e.manifest.capabilities) - 1);
+    e.state = REGX_STATE_ACTIVE;
+    init_regx_id = regx_register(&e);
+
+    init_main(&fs_queue, thread_self());
+    serial_puts("[init] init agent exited\n");
     for (;;) thread_yield(); // Should never return
 }
 

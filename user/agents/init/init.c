@@ -3,6 +3,8 @@
 #include "../../../kernel/IPC/ipc.h"
 #include "../../libc/libc.h"
 #include "../../../kernel/drivers/IO/serial.h"
+#include "../../../src/agents/regx/regx_ipc.h"
+#include <string.h>
 
 #include "../login/login.h"
 #include "../vnc/vnc.h"
@@ -12,7 +14,9 @@
 #include "../pkg/server.h"
 #include "../update/server.h"
 
+#ifdef __APPLE__
 __attribute__((section("__O2INFO,__manifest")))
+#endif
 const char mo2_manifest[] =
 "{\n"
 "  \"name\": \"init\",\n"
@@ -32,6 +36,7 @@ static int enable_ssh   = 1;
 extern ipc_queue_t fs_queue;
 extern ipc_queue_t pkg_queue;
 extern ipc_queue_t upd_queue;
+extern uint64_t init_regx_id;
 
 // --------- Service thread wrappers -----------
 static void login_thread(void)  { login_server(&fs_queue, thread_self()); }
@@ -79,6 +84,7 @@ static int ipc_ping(ipc_queue_t *q, uint32_t svc_tid) {
 // --------- Service Descriptor Struct ----------
 typedef struct {
     const char *name;
+    const char *caps;
     void (*entry)(void);
     ipc_queue_t **grant_queues;
     int num_grants;
@@ -89,13 +95,13 @@ typedef struct {
 
 // --------- Service Table ----------
 static service_desc_t services[] = {
-    { "nosfs", nosfs_thread, nosfs_grants,  1, 1, NULL,         10 },
-    { "pkg",    pkg_thread,    pkg_grants,     1, 1, NULL,         10 },
-    { "update", update_thread, update_grants,  2, 1, NULL,         10 },
-    { "ftp",    ftp_thread,    ftp_grants,     1, 0, &enable_ftp,   5 },
-    { "login",  login_thread,  login_grants,   3, 0, &enable_login, 5 },
-    { "vnc",    vnc_thread,    vnc_grants,     1, 0, &enable_vnc,   3 },
-    { "ssh",    ssh_thread,    ssh_grants,     1, 0, &enable_ssh,   5 },
+    { "nosfs", "filesystem", nosfs_thread,  nosfs_grants,  1, 1, NULL,         10 },
+    { "pkg",   "pkg",        pkg_thread,    pkg_grants,    1, 1, NULL,         10 },
+    { "update","update",     update_thread, update_grants, 2, 1, NULL,         10 },
+    { "ftp",   "ftp",        ftp_thread,    ftp_grants,    1, 0, &enable_ftp,   5 },
+    { "login", "auth",       login_thread,  login_grants,  3, 0, &enable_login, 5 },
+    { "vnc",   "vnc",        vnc_thread,    vnc_grants,    1, 0, &enable_vnc,   3 },
+    { "ssh",   "ssh",        ssh_thread,    ssh_grants,    1, 0, &enable_ssh,   5 },
 };
 #define NUM_SERVICES (sizeof(services)/sizeof(services[0]))
 
@@ -103,6 +109,7 @@ static service_desc_t services[] = {
 typedef struct {
     thread_t *t;
     int restarts;
+    uint64_t regx_id;
 } service_state_t;
 
 static service_state_t service_state[NUM_SERVICES];
@@ -138,6 +145,24 @@ static int spawn_service(size_t i) {
     for (int g = 0; g < svc->num_grants; ++g)
         ipc_grant(svc->grant_queues[g], t->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
+    if (service_state[i].regx_id) {
+        regx_entry_t delta = {0};
+        delta.parent_id = init_regx_id;
+        delta.state = REGX_STATE_ACTIVE;
+        regx_ipc_update(service_state[i].regx_id, &delta);
+    } else {
+        regx_entry_t entry = {0};
+        entry.parent_id = init_regx_id;
+        strncpy(entry.manifest.name, svc->name, sizeof(entry.manifest.name) - 1);
+        entry.manifest.type = REGX_TYPE_SERVICE;
+        strncpy(entry.manifest.version, "1.0", sizeof(entry.manifest.version) - 1);
+        strncpy(entry.manifest.abi, "n2", sizeof(entry.manifest.abi) - 1);
+        if (svc->caps)
+            strncpy(entry.manifest.capabilities, svc->caps, sizeof(entry.manifest.capabilities) - 1);
+        entry.state = REGX_STATE_ACTIVE;
+        service_state[i].regx_id = regx_ipc_register(&entry);
+    }
+
     serial_printf("[init] launched service '%s' (tid=%u, restarts=%d)\n",
                   svc->name, t->id, service_state[i].restarts);
     service_state[i].t = t;
@@ -164,6 +189,11 @@ static void health_check_and_respawn(void) {
         if (svc->is_core || (svc->enabled && *(svc->enabled))) {
             // If thread missing or dead, respawn (limit restarts)
             if (!ss->t || !thread_is_alive(ss->t)) {
+                if (ss->regx_id) {
+                    regx_entry_t d = {0};
+                    d.state = REGX_STATE_ERROR;
+                    regx_ipc_update(ss->regx_id, &d);
+                }
                 if (ss->restarts < svc->respawn_limit) {
                     serial_printf("[init] respawning service '%s' (restart #%d)\n", svc->name, ss->restarts+1);
                     ss->restarts++;
@@ -177,6 +207,11 @@ static void health_check_and_respawn(void) {
             // Health check with IPC ping
             if (!service_healthcheck(i)) {
                 serial_printf("[init] healthcheck: service '%s' is unhealthy, restarting...\n", svc->name);
+                if (ss->regx_id) {
+                    regx_entry_t d = {0};
+                    d.state = REGX_STATE_ERROR;
+                    regx_ipc_update(ss->regx_id, &d);
+                }
                 thread_kill(ss->t);
                 ss->t = NULL;
             }
