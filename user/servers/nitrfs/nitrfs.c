@@ -2,6 +2,51 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <unistd.h> // for usleep if needed
+
+int nitrfs_fsck(nitrfs_fs_t *fs) {
+    int errors = 0;
+    pthread_mutex_lock(&fs->mutex);
+    for (size_t i = 0; i < fs->file_count; ++i) {
+        nitrfs_file_t *f = &fs->files[i];
+        // Example: Check for dangling ACLs, size/capacity mismatch, or bad CRC
+        if (f->size > f->capacity) {
+            f->size = f->capacity;
+            errors++;
+        }
+        if (nitrfs_compute_crc(fs, i) != 0 || nitrfs_verify(fs, i) != 0) {
+            // Mark file as corrupted or repair
+            errors++;
+        }
+        // Add more checks as needed (timestamp overflow, name validity, etc.)
+    }
+    pthread_mutex_unlock(&fs->mutex);
+    return errors;
+}
+
+static void* nitrfs_flush_worker(void *arg) {
+    nitrfs_fs_t *fs = (nitrfs_fs_t*)arg;
+    pthread_mutex_lock(&fs->mutex);
+    // ... flush dirty buffers/journal to disk/device ...
+    // e.g., call nitrfs_save_device or custom block driver.
+    pthread_mutex_unlock(&fs->mutex);
+    return NULL;
+}
+
+void nitrfs_flush_async(nitrfs_fs_t *fs) {
+    pthread_t thread;
+    // Fire and forget; you may want to keep only one flush thread at a time.
+    pthread_create(&thread, NULL, nitrfs_flush_worker, fs);
+    pthread_detach(thread);
+}
+
+void nitrfs_flush_sync(nitrfs_fs_t *fs) {
+    pthread_mutex_lock(&fs->mutex);
+    // ... flush everything immediately ...
+    // e.g., nitrfs_save_device(fs, device_lba);
+    pthread_mutex_unlock(&fs->mutex);
+}
 
 // Minimal libc replacements so the kernel build does not depend on external
 // libraries.  These provide deterministic time and realloc implementations.
