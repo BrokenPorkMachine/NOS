@@ -5,6 +5,7 @@ global context_switch
 
 section .text
 context_switch:
+    push rax        ; Maintain 16-byte stack alignment
     pushfq          ; Save flags
     cli             ; Disable interrupts (if kernel context switch)
     push rbp
@@ -25,6 +26,7 @@ context_switch:
     pop rbx
     pop rbp
     popfq           ; Restore flags (including IF)
+    pop rax         ; Discard alignment placeholder
 
     ret
 

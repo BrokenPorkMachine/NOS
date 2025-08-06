@@ -95,16 +95,14 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
 
     uint64_t *sp = (uint64_t *)(t->stack + STACK_SIZE);
 
-    // Ensure 16‑byte alignment: after pushing 9 values (arg, RIP, RFLAGS, rbp, rbx, r12, r13, r14, r15)
+    // Ensure 16‑byte alignment: after pushing 10 values (arg, RIP, RAX, RFLAGS, rbp, rbx, r12, r13, r14, r15)
     if (((uintptr_t)sp & 0xF) != 0)
         --sp;
 
-    // Optional dummy push for alignment clarity
-    *--sp = 0;
-
-    // Layout: [arg][RIP][RFLAGS][rbp][rbx][r12][r13][r14][r15]
+    // Layout: [arg][RIP][RAX][RFLAGS][rbp][rbx][r12][r13][r14][r15]
     *--sp = (uint64_t)func;         // argument for thread_entry (popped into rdi)
     *--sp = (uint64_t)thread_entry; // RIP
+    *--sp = 0;                      // RAX placeholder (alignment)
     *--sp = 0x202;                  // RFLAGS (IF=1)
     *--sp = 0; // rbp
     *--sp = 0; // rbx
