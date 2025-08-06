@@ -345,9 +345,18 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // --- Build bootinfo ---
     bootinfo_t *bi;
-    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(bootinfo_t), (void**)&bi);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "bootinfo alloc fail\r\n"); return status; }
-    memset(bi, 0, sizeof(*bi));
+    EFI_PHYSICAL_ADDRESS bi_phys = 0;
+    UINTN bi_pages = (sizeof(bootinfo_t) + 0xFFF) / 0x1000;
+    status = SystemTable->BootServices->AllocatePages(EFI_ALLOCATE_ANY_PAGES,
+                                                      EfiLoaderData,
+                                                      bi_pages,
+                                                      &bi_phys);
+    if (EFI_ERROR(status)) {
+        print_ascii(SystemTable, "bootinfo alloc fail\r\n");
+        return status;
+    }
+    bi = (bootinfo_t *)(uintptr_t)bi_phys;
+    memset(bi, 0, bi_pages * 0x1000);
     bi->magic = BOOTINFO_MAGIC_UEFI;
     bi->size = sizeof(*bi);
     bi->bootloader_name = "O2 UEFI";
