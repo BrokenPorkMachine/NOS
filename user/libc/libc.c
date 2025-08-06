@@ -303,6 +303,7 @@ char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
 }
 
 // ================== TIME SUPPORT =========================
+/*
 int clock_gettime(int clk_id, struct timespec *tp) {
     if (!tp) return -1;
     long ret;
@@ -334,6 +335,6 @@ time_t time(time_t *t) {
     if (t) *t = ts.tv_sec;
     return ts.tv_sec;
 }
-
+*/
 // ================== FILE I/O (NOSFS) ===================
 // ... (Insert your FILE I/O implementation here) ...
