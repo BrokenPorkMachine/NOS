@@ -3,11 +3,6 @@
 #include <stddef.h>
 #include <time.h>
 
-#ifdef KERNEL_BUILD
-#define USE_KERNEL_MUTEX
-#endif
-
-#ifdef USE_KERNEL_MUTEX
 // ---- Your kernel-mode recursive spinlock mutex ----
 extern uint32_t thread_self(void);
 
@@ -42,7 +37,6 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
     (void)mutex;
     return 0;
 }
-#endif
 
 // ================== STRING AND MEMORY ===================
 void *memset(void *s, int c, size_t n) {
