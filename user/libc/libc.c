@@ -455,20 +455,45 @@ void *sbrk(long inc) {
     return (void *)syscall3(SYS_SBRK, inc, 0, 0);
 }
 
-// --- Minimal pthread stubs ---
+// --- Minimal pthread implementation (recursive spinlock) ---
+typedef struct {
+    volatile int lock;
+    uint32_t owner;
+    int count;
+} nos_mutex_t;
+
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
-    (void)mutex;
     (void)attr;
+    nos_mutex_t *m = (nos_mutex_t *)mutex;
+    m->lock = 0;
+    m->owner = (uint32_t)-1;
+    m->count = 0;
     return 0;
 }
 
 int pthread_mutex_lock(pthread_mutex_t *mutex) {
-    (void)mutex;
+    nos_mutex_t *m = (nos_mutex_t *)mutex;
+    uint32_t self = thread_self();
+    if (m->owner == self) {
+        m->count++;
+        return 0;
+    }
+    while (__sync_lock_test_and_set(&m->lock, 1)) {
+        // busy-wait
+    }
+    m->owner = self;
+    m->count = 1;
     return 0;
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex) {
-    (void)mutex;
+    nos_mutex_t *m = (nos_mutex_t *)mutex;
+    if (m->owner != thread_self())
+        return -1;
+    if (--m->count == 0) {
+        m->owner = (uint32_t)-1;
+        __sync_lock_release(&m->lock);
+    }
     return 0;
 }
 
@@ -477,8 +502,16 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
     return 0;
 }
 
-// --- Time stub ---
+// --- Time implementation ---
 time_t time(time_t *t) {
+#ifdef __unix__
+    struct timespec ts;
+    if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
+        if (t)
+            *t = ts.tv_sec;
+        return ts.tv_sec;
+    }
+#endif
     static time_t current = 0;
     if (t)
         *t = current;
