@@ -109,4 +109,7 @@ void   nitrfs_set_quota(nitrfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes)
 // Query the current usage
 void   nitrfs_get_usage(nitrfs_fs_t *fs, uint32_t *used_files, uint32_t *used_bytes);
 
+// Force write a journal checkpoint (e.g. after N file ops)
+void nitrfs_journal_checkpoint(nitrfs_fs_t *fs);
+
 #endif // NITRFS_H
