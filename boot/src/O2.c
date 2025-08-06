@@ -1,5 +1,6 @@
 #include "efi.h"
 #include "bootinfo.h"
+#include "../../include/nosm.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -289,6 +290,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         m->size = msz;
         to_ascii(info->FileName, m->name, sizeof(m->name));
         memcpy(m->sha256, hash, 32);
+        const nosm_header_t *nh = (const nosm_header_t *)mod;
+        if (nh->magic == NOSM_MAGIC &&
+            nh->manifest_offset + nh->manifest_size <= msz) {
+            m->manifest_addr = (uint64_t)(uintptr_t)((uint8_t*)mod + nh->manifest_offset);
+            m->manifest_size = nh->manifest_size;
+        }
         bi->module_count++;
         if (bi->module_count >= BOOTINFO_MAX_MODULES) break;
     }
