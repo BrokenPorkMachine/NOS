@@ -8,4 +8,5 @@ void isr_syscall_handler(struct isr_context *ctx);
 void isr_keyboard_handler(struct isr_context *ctx);
 void isr_mouse_handler(struct isr_context *ctx);
 void isr_page_fault_handler(struct isr_context *ctx);
+void isr_gpf_handler(struct isr_context *ctx);
 void isr_ipi_handler(struct isr_context *ctx);
