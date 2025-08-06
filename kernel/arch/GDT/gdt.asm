@@ -1,12 +1,10 @@
 ; GDT assembly routines
-
 ; Flushes new GDT and reloads segment registers
-; rdi - pointer to gdt_ptr structure
+; rdi = pointer to gdt_ptr structure
 
-%include "../arch/GDT/segments.inc"
+%include "segments.inc"            ; :contentReference[oaicite:14]{index=14}
 
 global gdt_flush
-
 section .text
 
 gdt_flush:
@@ -17,7 +15,7 @@ gdt_flush:
     mov fs, ax
     mov gs, ax
     mov ss, ax
-    ; far jump to reload CS
+    ; Far jump to reload CS
     push GDT_SEL_KERNEL_CODE
     lea rax, [rel .flush]
     push rax
@@ -25,5 +23,4 @@ gdt_flush:
 .flush:
     ret
 
-; Indicate that this object file does not require an executable stack
 section .note.GNU-stack noalloc nobits align=1
