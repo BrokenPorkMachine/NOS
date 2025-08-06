@@ -5,23 +5,24 @@
 
 // ================== STRING AND MEMORY ===================
 void *memset(void *s, int c, size_t n) {
-    unsigned char *p = s;
+    unsigned char *p = (unsigned char*)s;
     while (n--) *p++ = (unsigned char)c;
     return s;
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {
-    unsigned char *d = dest;
-    const unsigned char *s = src;
+    unsigned char *d = (unsigned char*)dest;
+    const unsigned char *s = (const unsigned char*)src;
     while (n--) *d++ = *s++;
     return dest;
 }
 
 void *memmove(void *dest, const void *src, size_t n) {
-    unsigned char *d = dest;
-    const unsigned char *s = src;
-    if (d < s) while (n--) *d++ = *s++;
-    else {
+    unsigned char *d = (unsigned char*)dest;
+    const unsigned char *s = (const unsigned char*)src;
+    if (d < s) {
+        while (n--) *d++ = *s++;
+    } else if (d > s) {
         d += n;
         s += n;
         while (n--) *(--d) = *(--s);
@@ -30,17 +31,23 @@ void *memmove(void *dest, const void *src, size_t n) {
 }
 
 int memcmp(const void *s1, const void *s2, size_t n) {
-    const unsigned char *p1 = s1, *p2 = s2;
-    for (size_t i = 0; i < n; i++) if (p1[i] != p2[i]) return p1[i] - p2[i];
+    const unsigned char *p1 = (const unsigned char*)s1;
+    const unsigned char *p2 = (const unsigned char*)s2;
+    for (size_t i = 0; i < n; i++) {
+        if (p1[i] != p2[i]) return p1[i] - p2[i];
+    }
     return 0;
 }
 
 size_t strlen(const char *s) {
-    size_t len = 0; while (s[len]) len++; return len;
+    size_t len = 0;
+    while (s[len]) len++;
+    return len;
 }
 
 char *strncpy(char *dest, const char *src, size_t n) {
-    size_t i; for (i = 0; i < n && src[i]; ++i) dest[i] = src[i];
+    size_t i;
+    for (i = 0; i < n && src[i]; ++i) dest[i] = src[i];
     for (; i < n; ++i) dest[i] = '\0';
     return dest;
 }
@@ -62,21 +69,30 @@ int strcmp(const char *s1, const char *s2) {
 
 int strncmp(const char *s1, const char *s2, size_t n) {
     for (size_t i = 0; i < n; ++i)
-        if (s1[i] != s2[i] || !s1[i] || !s2[i]) return (unsigned char)s1[i] - (unsigned char)s2[i];
+        if (s1[i] != s2[i] || !s1[i] || !s2[i])
+            return (unsigned char)s1[i] - (unsigned char)s2[i];
     return 0;
 }
 
 char *strchr(const char *s, int c) {
-    while (*s) { if (*s == (char)c) return (char *)s; s++; }
+    while (*s) {
+        if (*s == (char)c)
+            return (char *)s;
+        s++;
+    }
     return NULL;
 }
 
 char *strcpy(char *dest, const char *src) {
-    char *d = dest; while ((*d++ = *src++)); return dest;
+    char *d = dest;
+    while ((*d++ = *src++));
+    return dest;
 }
 
 char *strcat(char *dest, const char *src) {
-    char *d = dest + strlen(dest); while ((*d++ = *src++)); return dest;
+    char *d = dest + strlen(dest);
+    while ((*d++ = *src++));
+    return dest;
 }
 
 char *strstr(const char *haystack, const char *needle) {
@@ -94,7 +110,8 @@ long labs(long x) { return x < 0 ? -x : x; }
 long long llabs(long long x) { return x < 0 ? -x : x; }
 double sqrt(double x) {
     if (x <= 0) return 0;
-    double r = x; for (int i = 0; i < 20; ++i) r = 0.5 * (r + x / r);
+    double r = x;
+    for (int i = 0; i < 20; ++i) r = 0.5 * (r + x / r);
     return r;
 }
 
@@ -142,7 +159,8 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
         mutex->count++;
         return 0;
     }
-    while (__sync_lock_test_and_set(&mutex->lock, 1));
+    while (__sync_lock_test_and_set(&mutex->lock, 1))
+        __asm__ volatile("pause");
     mutex->owner = self;
     mutex->count = 1;
     return 0;
@@ -247,10 +265,11 @@ void free(void *ptr) {
     }
     memset(ptr, 0, block->size);
     block->free = 1;
+    // Merge adjacent free blocks
     block_header_t *cur = free_list;
     while (cur && cur->next) {
         if (cur->free && cur->next->free &&
-            (uint8_t *)cur + sizeof(block_header_t) + cur->size == (uint8_t *)cur->next) {
+            ((uint8_t *)cur + sizeof(block_header_t) + cur->size == (uint8_t *)cur->next)) {
             cur->size += sizeof(block_header_t) + cur->next->size;
             cur->next = cur->next->next;
             continue;
@@ -268,7 +287,7 @@ void *realloc(void *ptr, size_t size) {
     }
     pthread_mutex_lock(&malloc_lock);
     block_header_t *block = (block_header_t *)((uint8_t *)ptr - sizeof(block_header_t));
-    size_t copy_size = block->size < size ? block->size : size;
+    size_t copy_size = (block->size < size) ? block->size : size;
     pthread_mutex_unlock(&malloc_lock);
     void *new_ptr = malloc(size);
     if (!new_ptr) return NULL;
@@ -277,14 +296,12 @@ void *realloc(void *ptr, size_t size) {
     return new_ptr;
 }
 
-// ================== FILE I/O (NitrFS) ===================
-// ... (Keep your existing file I/O implementation here) ...
-
 // ================== SAFE CHECKED MEMORY OPS =============
 void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen) {
     if (n > destlen) n = destlen;
     return memcpy(dest, src, n);
 }
+
 char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
     if (destlen == 0) return dest;
     if (n >= destlen) n = destlen - 1;
@@ -304,9 +321,10 @@ int clock_gettime(int clk_id, struct timespec *tp) {
     // Fallback: monotonic TSC or incrementing fake time
     static uint64_t fake_ticks = 0;
 #if defined(__x86_64__)
-    uint64_t tsc;
-    asm volatile ("rdtsc" : "=A"(tsc));
-    uint64_t freq = 3000000000ULL; // 3 GHz
+    uint64_t tsc_lo, tsc_hi;
+    __asm__ volatile ("rdtsc" : "=a"(tsc_lo), "=d"(tsc_hi));
+    uint64_t tsc = ((uint64_t)tsc_hi << 32) | tsc_lo;
+    uint64_t freq = 3000000000ULL; // Default to 3 GHz
     tp->tv_sec = tsc / freq;
     tp->tv_nsec = ((tsc % freq) * 1000000000ULL) / freq;
 #else
@@ -323,3 +341,6 @@ time_t time(time_t *t) {
     if (t) *t = ts.tv_sec;
     return ts.tv_sec;
 }
+
+// ================== FILE I/O (NitrFS) ===================
+// ... (Insert your FILE I/O implementation here) ...
