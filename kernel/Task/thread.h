@@ -47,6 +47,12 @@ void thread_block(thread_t *t);
 // exceeds the current thread’s, it may pre‑empt.
 void thread_unblock(thread_t *t);
 
+// Return nonzero if the thread has not exited
+int thread_is_alive(thread_t *t);
+
+// Terminate a thread and reclaim its resources
+void thread_kill(thread_t *t);
+
 // Yield CPU to next ready thread (cooperative scheduling)
 void thread_yield(void);
 
