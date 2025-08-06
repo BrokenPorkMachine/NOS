@@ -14,6 +14,31 @@ typedef struct {
     uint32_t max_bytes;
 } nitrfs_fs_t;
 
+void nitrfs_set_quota(nitrfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes) {
+    pthread_mutex_lock(&fs->mutex);
+    fs->max_files = max_files;
+    fs->max_bytes = max_bytes;
+    pthread_mutex_unlock(&fs->mutex);
+}
+
+void nitrfs_get_usage(nitrfs_fs_t *fs, uint32_t *used_files, uint32_t *used_bytes) {
+    pthread_mutex_lock(&fs->mutex);
+    uint32_t files = 0, bytes = 0;
+    for (size_t i = 0; i < fs->file_count; ++i) {
+        files++;
+        bytes += fs->files[i].size;
+    }
+    if (used_files) *used_files = files;
+    if (used_bytes) *used_bytes = bytes;
+    pthread_mutex_unlock(&fs->mutex);
+}
+
+// In nitrfs_create and nitrfs_resize, enforce quota:
+if (fs->max_files && fs->file_count >= fs->max_files)
+    return NITRFS_ERR; // quota exceeded
+if (fs->max_bytes && (total_bytes + new_file_size) > fs->max_bytes)
+    return NITRFS_ERR;
+
 int nitrfs_fsck(nitrfs_fs_t *fs) {
     int errors = 0;
     pthread_mutex_lock(&fs->mutex);
