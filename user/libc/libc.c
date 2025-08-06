@@ -309,7 +309,9 @@ int clock_gettime(int clk_id, struct timespec *tp) {
     long ret;
     // Try kernel syscall first
     asm volatile("mov %1, %%rax; mov %2, %%rdi; mov %3, %%rsi; int $0x80; mov %%rax, %0"
-        : "=r"(ret) : "r"(SYS_CLOCK_GETTIME), "r"(clk_id), "r"(tp) : "rax", "rdi", "rsi");
+    : "=r"(ret)
+    : "r"((long)SYS_CLOCK_GETTIME), "r"((long)clk_id), "r"((long)(uintptr_t)tp)
+    : "rax", "rdi", "rsi");
     if (ret == 0) return 0;
     // Fallback: monotonic TSC or incrementing fake time
     static uint64_t fake_ticks = 0;
