@@ -168,6 +168,42 @@ void thread_unblock(thread_t *t) {
         schedule();
 }
 
+// Check whether a thread has not yet exited
+int thread_is_alive(thread_t *t) {
+    return t && t->state != THREAD_EXITED;
+}
+
+// Terminate a thread and remove it from the run queue
+void thread_kill(thread_t *t) {
+    if (!t) return;
+
+    char buf[20];
+    serial_puts("[thread] kill id=");
+    utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
+
+    t->state = THREAD_EXITED;
+
+    int cpu = smp_cpu_index();
+    thread_t *cur = current_cpu[cpu];
+
+    if (t == cur) {
+        schedule();
+        return;
+    }
+
+    thread_t *prev = cur;
+    while (prev->next != t && prev->next != cur)
+        prev = prev->next;
+
+    if (prev->next == t) {
+        prev->next = t->next;
+        if (tail_cpu[cpu] == t)
+            tail_cpu[cpu] = prev;
+    }
+
+    add_to_zombie_list(t);
+}
+
 // Cooperatively yield CPU to another ready thread
 void thread_yield(void) {
     char buf[20];
