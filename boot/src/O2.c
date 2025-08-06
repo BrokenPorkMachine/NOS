@@ -1,83 +1,368 @@
-#pragma once
+#include "efi.h"
+#include "bootinfo.h"
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
-#define BOOTINFO_MAGIC_UEFI 0x4F324255
-#define FBINFO_MAGIC 0xF00DBA66
+#define KERNEL_NAME L"\\kernel.bin"
+#define MODULE_PREFIX L"module"
+#define MODULE_SUFFIX L".bin"
 
+#define MAX_MODULES 16
+#define MAX_CPUS    256
+
+#define FBINFO_MAGIC 0xF00DBA66
+#define BOOTINFO_MAGIC_UEFI 0x4F324255
+
+static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s);
+static EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root,
+                            const CHAR16 *path, void **buf, UINTN *size);
+
+static void *memcpy(void *dst, const void *src, size_t n) {
+    uint8_t *d = dst; const uint8_t *s = src; while (n--) *d++ = *s++; return dst;
+}
+static void *memset(void *dst, int c, size_t n) {
+    uint8_t *d = dst; while (n--) *d++ = (uint8_t)c; return dst;
+}
+static int memcmp(const void *a, const void *b, size_t n) {
+    const uint8_t *x=a, *y=b; while (n--) { if (*x!=*y) return *x-*y; x++; y++; } return 0;
+}
+static size_t strlen(const char *s) { size_t i=0; while(s[i]) ++i; return i; }
+static void strcpy(char *dst, const char *src) { while((*dst++ = *src++)); }
+
+// --- Print UINT64 as hex ---
+static void print_hex(EFI_SYSTEM_TABLE *st, uint64_t val) {
+    char buf[19] = "0x0000000000000000";
+    for (int i = 0; i < 16; ++i)
+        buf[17 - i] = "0123456789ABCDEF"[(val >> (i * 4)) & 0xF];
+    print_ascii(st, buf);
+}
+
+// --- Print simple decimal (for debug) ---
+static void print_dec(EFI_SYSTEM_TABLE *st, uint64_t v) {
+    char buf[22], *p = buf+21; *p = 0;
+    if (!v) *--p = '0';
+    while (v) { *--p = '0'+(v%10); v/=10; }
+    print_ascii(st, p);
+}
+
+// --- Print function for UEFI ---
+static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s) {
+    CHAR16 buf[256];
+    size_t i = 0;
+    while (i < 255 && s[i]) { buf[i] = (CHAR16)s[i]; i++; }
+    buf[i] = 0;
+    st->ConOut->OutputString(st->ConOut, buf);
+}
+
+// --- Load file from FS ---
+static EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root,
+                            const CHAR16 *path, void **buf, UINTN *size) {
+    EFI_STATUS status;
+    EFI_FILE_PROTOCOL *file;
+    status = root->Open(root, &file, (CHAR16 *)path, 0x00000001, 0);
+    if (EFI_ERROR(status)) return status;
+    UINTN info_size = 0;
+    status = file->GetInfo(file, (EFI_GUID *)&gEfiFileInfoGuid, &info_size, NULL);
+    if (status != EFI_BUFFER_TOO_SMALL) { file->Close(file); return status; }
+    EFI_FILE_INFO *info;
+    status = st->BootServices->AllocatePool(EfiLoaderData, info_size, (void **)&info);
+    if (EFI_ERROR(status)) { file->Close(file); return status; }
+    status = file->GetInfo(file, (EFI_GUID *)&gEfiFileInfoGuid, &info_size, info);
+    if (EFI_ERROR(status)) { st->BootServices->FreePool(info); file->Close(file); return status; }
+    *size = info->FileSize;
+    st->BootServices->FreePool(info);
+    status = st->BootServices->AllocatePool(EfiLoaderData, *size, buf);
+    if (EFI_ERROR(status)) { file->Close(file); return status; }
+    UINTN to_read = *size;
+    status = file->Read(file, &to_read, *buf);
+    file->Close(file);
+    return status;
+}
+
+// --- Kernel type detection and loader omitted for brevity: USE THE VERSIONS FROM EARLIER (copy from previous code block above) ---
+// --- Assume you have kernel_type_t, detect_kernel_type, load_elf, load_macho, load_flat as in the previous responses ---
+
+// --- GUIDs for system tables ---
+static EFI_GUID acpi2_guid = {0x8868e871,0xe4f1,0x11d3,{0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81}};
+static EFI_GUID acpi_guid  = {0xeb9d2d30,0x2d88,0x11d3,{0x9a,0x16,0x00,0x90,0x27,0x3f,0xc1,0x4d}};
+static EFI_GUID smbios3_guid = {0xf2fd1544,0x9794,0x4a2c,{0x99,0x2e,0xe5,0xbb,0xcf,0x20,0xe3,0x94}};
+static EFI_GUID smbios_guid  = {0xeb9d2d31,0x2d88,0x11d3,{0x9a,0x16,0x00,0x90,0x27,0x3f,0xc1,0x4d}};
+
+// --- Find UEFI config table by GUID ---
+static void *find_uefi_config_table(EFI_SYSTEM_TABLE *st, EFI_GUID *guid) {
+    for (UINTN i = 0; i < st->NumberOfTableEntries; ++i)
+        if (!memcmp(&st->ConfigurationTable[i].VendorGuid, guid, sizeof(EFI_GUID)))
+            return st->ConfigurationTable[i].VendorTable;
+    return NULL;
+}
+
+// --- ACPI DSDT from RSDP/XSDT/RSDT ---
+static uint64_t find_acpi_dsdt(uint64_t rsdp_addr) {
+    if (!rsdp_addr) return 0;
+    struct acpi_rsdp {
+        char sig[8]; uint8_t chksum; char oemid[6]; uint8_t rev;
+        uint32_t rsdt, len; uint64_t xsdt;
+    } *rsdp = (void*)(uintptr_t)rsdp_addr;
+    if (rsdp->rev >= 2 && rsdp->xsdt) {
+        uint64_t *entries = (uint64_t *)((char *)(uintptr_t)rsdp->xsdt + 36);
+        uint32_t count = (*(uint32_t *)((char *)(uintptr_t)rsdp->xsdt + 4) - 36) / 8;
+        for (uint32_t i=0; i<count; i++) {
+            char *h = (char *)(uintptr_t)entries[i];
+            if (!memcmp(h, "FACP", 4)) return *(uint64_t *)(h + 40);
+        }
+    }
+    if (rsdp->rsdt) {
+        uint32_t *entries = (uint32_t *)((char *)(uintptr_t)rsdp->rsdt + 36);
+        uint32_t count = (*(uint32_t *)((char *)(uintptr_t)rsdp->rsdt + 4) - 36) / 4;
+        for (uint32_t i=0; i<count; i++) {
+            char *h = (char *)(uintptr_t)entries[i];
+            if (!memcmp(h, "FACP", 4)) return (uint64_t)*(uint32_t *)(h + 28);
+        }
+    }
+    return 0;
+}
+
+// --- MADT parsing for LAPIC/CPU/IOAPIC ---
+static void parse_madt(uint64_t madt_addr, bootinfo_t *bi) {
+    if (!madt_addr) return;
+    struct madt_hdr { char sig[4]; uint32_t len; uint8_t rev, cksum, oemid[6], oemtabid[8], oemrev[4], creator[4], creator_rev[4]; uint32_t lapic_addr; uint32_t flags; } __attribute__((packed));
+    struct madt_hdr *hdr = (void*)(uintptr_t)madt_addr;
+    bi->lapic_addr = hdr->lapic_addr;
+    uint8_t *p = (uint8_t *)hdr + 44; // sizeof(MADT header)
+    uint8_t *end = (uint8_t *)hdr + hdr->len;
+    uint32_t cpu_count = 0, ioapic_count = 0;
+    while (p < end) {
+        uint8_t type = p[0], len = p[1];
+        if (type == 0 && len >= 8 && cpu_count < MAX_CPUS) { // Processor Local APIC
+            uint8_t acpi_id = p[2], apic_id = p[3], flags = p[4];
+            if (flags & 1) {
+                bi->cpus[cpu_count].apic_id = apic_id;
+                bi->cpus[cpu_count].acpi_id = acpi_id;
+                bi->cpus[cpu_count].online = 1;
+                bi->cpus[cpu_count].is_bsp = (cpu_count==0);
+                cpu_count++;
+            }
+        }
+        else if (type == 1 && len >= 12 && ioapic_count < 8) { // IOAPIC
+            bi->ioapics[ioapic_count].ioapic_id = p[2];
+            bi->ioapics[ioapic_count].ioapic_addr = *(uint32_t*)&p[4];
+            bi->ioapics[ioapic_count].gsi_base   = *(uint32_t*)&p[8];
+            ioapic_count++;
+        }
+        p += len;
+    }
+    bi->cpu_count = cpu_count;
+    bi->ioapic_count = ioapic_count;
+}
+
+// --- Framebuffer info ---
 typedef struct {
     uint32_t magic;
-    uint32_t size;
-    const char *bootloader_name;
+    void *base;
+    uint32_t width, height, pitch, bpp;
+} fbinfo_t;
+static EFI_STATUS find_framebuffer(EFI_SYSTEM_TABLE *st, fbinfo_t *fb) {
+    static EFI_GUID gop_guid = {0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a}};
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = NULL;
+    EFI_STATUS s = st->BootServices->LocateProtocol(&gop_guid, NULL, (void **)&gop);
+    if (EFI_ERROR(s)) return s;
+    fb->magic = FBINFO_MAGIC;
+    fb->base = (void *)(uintptr_t)gop->Mode->FrameBufferBase;
+    fb->width = gop->Mode->Info->HorizontalResolution;
+    fb->height = gop->Mode->Info->VerticalResolution;
+    fb->pitch = gop->Mode->Info->PixelsPerScanLine * 4;
+    fb->bpp = 32;
+    return EFI_SUCCESS;
+}
 
-    // Kernel image info
-    void *kernel_entry;
-    uint64_t kernel_load_base;
-    uint64_t kernel_load_size;
+// --- Scan and load modules: Any file with name "module*.bin" ---
+static void scan_modules(EFI_SYSTEM_TABLE *SystemTable, EFI_FILE_PROTOCOL *root, bootinfo_t *bi) {
+    EFI_FILE_PROTOCOL *dir = root;
+    EFI_STATUS status;
+    EFI_FILE_INFO *info;
+    UINTN bufsz = 512 + sizeof(EFI_FILE_INFO);
+    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, bufsz, (void **)&info);
+    if (EFI_ERROR(status)) return;
+    UINTN n = 0;
+    for (;;) {
+        UINTN sz = bufsz;
+        status = dir->Read(dir, &sz, info);
+        if (EFI_ERROR(status) || sz == 0) break;
+        // Only load files (not dirs)
+        if (!(info->Attribute & 0x10)) {
+            CHAR16 *name = info->FileName;
+            // Very simple pattern match: module*.bin
+            size_t i = 0;
+            while (name[i] && MODULE_PREFIX[i] && name[i] == MODULE_PREFIX[i]) i++;
+            if (MODULE_PREFIX[i] == 0 && name[i] >= '0' && name[i] <= '9') {
+                // Now check for .bin at end
+                size_t j = i+1;
+                size_t len = 0; while (name[len]) ++len;
+                if (len > j+4 && name[len-4]=='.' && name[len-3]=='b' && name[len-2]=='i' && name[len-1]=='n') {
+                    // Matched pattern!
+                    void *buf = NULL; UINTN fsz = 0;
+                    status = load_file(SystemTable, root, name, &buf, &fsz);
+                    if (!EFI_ERROR(status) && n < MAX_MODULES) {
+                        bi->modules[n].base = buf;
+                        bi->modules[n].size = fsz;
+                        static char cname[64];
+                        size_t k = 0;
+                        while (name[k] && k < 63) { cname[k] = (char)name[k]; ++k; }
+                        cname[k] = 0;
+                        bi->modules[n].name = cname;
+                        n++;
+                    }
+                }
+            }
+        }
+    }
+    bi->module_count = n;
+    SystemTable->BootServices->FreePool(info);
+}
 
-    // Command line
-    const char *cmdline;
+//
+// --- MAIN ENTRY ---
+//
+EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
+    print_ascii(SystemTable, "\r\n[O2] Universal UEFI bootloader\r\n");
 
-    // ACPI
-    uint64_t acpi_rsdp;   // Physical address of RSDP
-    uint64_t acpi_xsdt;   // Physical address of XSDT (if available)
-    uint64_t acpi_rsdt;   // Physical address of RSDT (legacy)
-    uint64_t acpi_dsdt;   // Physical address of DSDT (optional)
+    EFI_LOADED_IMAGE_PROTOCOL *loaded;
+    EFI_STATUS status = SystemTable->BootServices->HandleProtocol(ImageHandle,
+        (EFI_GUID*)&gEfiLoadedImageProtocolGuid, (void**)&loaded);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "LoadProtocol failed\r\n"); return status; }
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
+    status = SystemTable->BootServices->HandleProtocol(loaded->DeviceHandle,
+        (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (void**)&fs);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "FS Protocol failed\r\n"); return status; }
+    EFI_FILE_PROTOCOL *root;
+    status = fs->OpenVolume(fs, &root);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "OpenVolume failed\r\n"); return status; }
 
-    // LAPIC/CPU info (from MADT)
-    uint64_t lapic_addr;
-    uint32_t cpu_count;
-    struct {
-        uint32_t apic_id;
-        uint8_t  is_bsp;
-        uint8_t  reserved[7];
-    } cpus[256]; // Up to 256 CPUs, expand if needed
+    // --- Load kernel ---
+    void *kernel_file = NULL; UINTN kernel_size = 0;
+    status = load_file(SystemTable, root, KERNEL_NAME, &kernel_file, &kernel_size);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "Kernel not found\r\n"); return status; }
+    kernel_type_t ktype = detect_kernel_type((const uint8_t*)kernel_file, kernel_size);
+    print_ascii(SystemTable, "[O2] Kernel type: ");
+    if (ktype == KERNEL_ELF) print_ascii(SystemTable, "ELF64\r\n");
+    else if (ktype == KERNEL_MACHO) print_ascii(SystemTable, "Mach-O 64\r\n");
+    else if (ktype == KERNEL_BIN) print_ascii(SystemTable, "Flat bin\r\n");
+    else { print_ascii(SystemTable, "Unknown format!\r\n"); return EFI_LOAD_ERROR; }
+    void *entry = NULL;
+    if (ktype == KERNEL_ELF) status = load_elf(SystemTable, kernel_file, kernel_size, &entry);
+    else if (ktype == KERNEL_MACHO) status = load_macho(SystemTable, kernel_file, kernel_size, &entry);
+    else if (ktype == KERNEL_BIN) status = load_flat(SystemTable, kernel_file, kernel_size, &entry);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "Kernel load error\r\n"); return status; }
+    print_ascii(SystemTable, "[O2] Kernel entry: ");
+    print_hex(SystemTable, (uint64_t)(uintptr_t)entry);
+    print_ascii(SystemTable, "\r\n");
+    SystemTable->BootServices->FreePool(kernel_file);
 
-    // IOAPICs (from MADT)
-    struct {
-        uint32_t ioapic_id;
-        uint32_t ioapic_addr;
-        uint32_t gsi_base;
-    } ioapics[8];
-    uint32_t ioapic_count;
+    // --- Build bootinfo ---
+    bootinfo_t *bi;
+    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(bootinfo_t), (void**)&bi);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "bootinfo alloc fail\r\n"); return status; }
+    memset(bi, 0, sizeof(*bi));
+    bi->magic = BOOTINFO_MAGIC_UEFI;
+    bi->size = sizeof(*bi);
+    bi->bootloader_name = "O2 UEFI";
+    bi->kernel_entry = entry;
+    bi->cmdline = ""; // Optional: parse from EFI variable or file
 
-    // Memory map
-    void *mmap;
-    uint64_t mmap_entries;
-    uint64_t mmap_desc_size;
-    uint32_t mmap_desc_ver;
+    // --- ACPI RSDP/XSDT/RSDT/DSDT ---
+    void *rsdp = find_uefi_config_table(SystemTable, &acpi2_guid);
+    if (!rsdp) rsdp = find_uefi_config_table(SystemTable, &acpi_guid);
+    bi->acpi_rsdp = (uint64_t)(uintptr_t)rsdp;
+    if (rsdp) {
+        uint64_t xsdt = 0, rsdt = 0, dsdt = 0;
+        if (((uint8_t*)rsdp)[15] >= 2) {
+            xsdt = *(uint64_t *)((uint8_t*)rsdp + 24);
+            bi->acpi_xsdt = xsdt;
+        }
+        rsdt = *(uint32_t *)((uint8_t*)rsdp + 16);
+        bi->acpi_rsdt = rsdt;
+        bi->acpi_dsdt = find_acpi_dsdt((uint64_t)(uintptr_t)rsdp);
 
-    // Framebuffer info
-    struct {
-        uint32_t magic;
-        void *base;
-        uint32_t width;
-        uint32_t height;
-        uint32_t pitch;
-        uint32_t bpp;
-    } fb;
+        // --- Find MADT for LAPIC/cpu/ioapic ---
+        uint64_t madt = 0;
+        if (xsdt) {
+            uint64_t *entries = (uint64_t *)((char *)(uintptr_t)xsdt + 36);
+            uint32_t count = (*(uint32_t *)((char *)(uintptr_t)xsdt + 4) - 36) / 8;
+            for (uint32_t i=0; i<count; i++) {
+                char *h = (char *)(uintptr_t)entries[i];
+                if (!memcmp(h, "APIC", 4)) madt = (uint64_t)(uintptr_t)h;
+            }
+        }
+        if (!madt && rsdt) {
+            uint32_t *entries = (uint32_t *)((char *)(uintptr_t)rsdt + 36);
+            uint32_t count = (*(uint32_t *)((char *)(uintptr_t)rsdt + 4) - 36) / 4;
+            for (uint32_t i=0; i<count; i++) {
+                char *h = (char *)(uintptr_t)entries[i];
+                if (!memcmp(h, "APIC", 4)) madt = (uint64_t)(uintptr_t)h;
+            }
+        }
+        if (madt) parse_madt(madt, bi);
+    }
 
-    // Modules (e.g., initrd)
-    struct {
-        void *base;
-        uint64_t size;
-        const char *name;
-    } modules[16];
-    uint32_t module_count;
+    // --- SMBIOS (for hardware/BIOS info) ---
+    void *smbios = find_uefi_config_table(SystemTable, &smbios3_guid);
+    if (!smbios) smbios = find_uefi_config_table(SystemTable, &smbios_guid);
+    bi->smbios_entry = (uint64_t)(uintptr_t)smbios;
 
-    // Boot device
-    uint32_t boot_device_type; // e.g., 0=unknown, 1=AHCI, 2=NVMe, 3=USB, etc.
-    uint32_t boot_partition;
+    // --- RTC (UEFI time) ---
+    EFI_TIME t;
+    if (!SystemTable->RuntimeServices->GetTime(&t, NULL)) {
+        bi->current_year   = t.Year;
+        bi->current_month  = t.Month;
+        bi->current_day    = t.Day;
+        bi->current_hour   = t.Hour;
+        bi->current_minute = t.Minute;
+        bi->current_second = t.Second;
+    }
+    bi->uefi_system_table = SystemTable;
 
-    // SMBIOS
-    uint64_t smbios_entry;     // Physical address of SMBIOS entry point (optional)
+    // --- Framebuffer info
+    fbinfo_t *fb;
+    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(fbinfo_t), (void**)&fb);
+    if (!EFI_ERROR(status)) {
+        if (!EFI_ERROR(find_framebuffer(SystemTable, fb))) {
+            bi->fb.magic = FBINFO_MAGIC;
+            bi->fb.base = fb->base;
+            bi->fb.width = fb->width;
+            bi->fb.height = fb->height;
+            bi->fb.pitch = fb->pitch;
+            bi->fb.bpp = fb->bpp;
+        }
+    }
 
-    // Real-time clock (RTC)
-    uint16_t current_year, current_month, current_day;
-    uint16_t current_hour, current_minute, current_second;
+    // --- Memory map ---
+    UINTN mmapSize = 0, mapKey = 0, descSize = 0; UINT32 descVer = 0;
+    SystemTable->BootServices->GetMemoryMap(&mmapSize, NULL, &mapKey, &descSize, &descVer);
+    mmapSize += descSize * 2;
+    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, mmapSize, (void**)&bi->mmap);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "MMap alloc fail\r\n"); return status; }
+    status = SystemTable->BootServices->GetMemoryMap(&mmapSize, bi->mmap, &mapKey, &descSize, &descVer);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "MMap read fail\r\n"); return status; }
+    bi->mmap_entries = mmapSize / descSize;
+    bi->mmap_desc_size = descSize;
+    bi->mmap_desc_ver  = descVer;
 
-    // UEFI system table (optional, rarely used)
-    void *uefi_system_table;
+    // --- Module scan/load ---
+    scan_modules(SystemTable, root, bi);
 
-    // Additional reserved fields for future expansion
-    uint64_t reserved[32];
-} bootinfo_t;
+    // --- Boot device info (not implemented here) ---
+    bi->boot_device_type = 0;
+    bi->boot_partition = 0;
+
+    // --- Exit Boot Services ---
+    status = SystemTable->BootServices->ExitBootServices(ImageHandle, mapKey);
+    if (EFI_ERROR(status)) { print_ascii(SystemTable, "ExitBootServices fail\r\n"); return status; }
+
+    print_ascii(SystemTable, "[O2] Jumping to kernel...\r\n");
+
+    // --- Jump to kernel entry ---
+    void (*kernel_entry)(bootinfo_t*) = (void(*)(bootinfo_t*))bi->kernel_entry;
+    kernel_entry(bi);
+    return EFI_SUCCESS;
+}
