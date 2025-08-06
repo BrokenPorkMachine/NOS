@@ -166,4 +166,6 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
 
     puts_out("[login] starting shell\n");
     nsh_main(NULL, self_id);
+    puts_out("[login] starting nsh\n");
+    nsh_main(&fs_queue, &pkg_queue, &upd_queue, self_id);
 }

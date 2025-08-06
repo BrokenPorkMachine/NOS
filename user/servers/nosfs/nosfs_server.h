@@ -3,7 +3,7 @@
 
 #include "../../../kernel/IPC/ipc.h"
 
-// NOSFS IPC message types (match these in your shell/server code)
+// NOSFS IPC message types (match these in your nsh code)
 enum {
     NOSFS_MSG_CREATE = 1,   // Create file (msg.data=name, arg1=capacity, arg2=perm)
     NOSFS_MSG_WRITE,        // Write file  (arg1=handle, arg2=offset, msg.len=len, msg.data=buffer)

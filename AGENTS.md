@@ -1,4 +1,7 @@
-\$1
+# NitrOS Agents
+
+This repo now uses the O2 boot agent, N2 kernel, NOSM modules, NOSFS filesystem, and NitroShell (nsh). Legacy components have been removed.
+
 
 ## Appendix: N2 vs XNU (macOS Kernel)
 
