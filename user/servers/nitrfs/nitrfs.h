@@ -6,7 +6,7 @@
 #include <time.h>
 
 // Cross-platform thread support: use real pthreads if available
-#if __has_include(<pthread.h>)itr
+#if __has_include(<pthread.h>)
 #include <pthread.h>
 #else
 typedef int pthread_mutex_t;
