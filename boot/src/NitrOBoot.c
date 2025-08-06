@@ -7,7 +7,7 @@ static void (*g_entry)(bootinfo_t *) = NULL;
 
 
 #define KERNEL_PATH L"\\kernel.bin"
-#define KERNEL_MAX_SIZE (2 * 1024 * 1024)
+#define KERNEL_MAX_SIZE (8 * 1024 * 1024) // allow up to 8MB
 
 // --- Minimal Hex Printer for CHAR16 (prints 0x...64bit) ---
 static void uefi_hex16(CHAR16 *buf, uint64_t val) {
