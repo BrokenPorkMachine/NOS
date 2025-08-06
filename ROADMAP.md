@@ -84,6 +84,18 @@ This roadmap outlines the core phases and milestones for building NitrOS—the n
 
 ---
 
+## **5. NitroShell (nsh)**
+
+* **Goal:**
+  Provide an agent-based user interface for managing NOSFS and agents.
+* **Milestones:**
+
+  * [ ] Basic command set and IPC with NOSFS
+  * [ ] Package and update management via nosmctl
+  * [ ] Remote sessions over SSH or VNC
+
+---
+
 ## **Long-term Integration**
 
 * [ ] Cross-platform build system & CI

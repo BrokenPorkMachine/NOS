@@ -21,16 +21,16 @@ brief overview of the stack and how current servers make use of it follows.
 - **Purpose**: Expose the system display over a Virtual Network Computing (VNC) protocol so that a remote client can view and control the NitrOS console.
 - **Status**: Sends a greeting on port 1 of the loopback stack and responds to `ping` with `pong`.
 - **Future work**: Requires keyboard/mouse events over the network and a frame
-  buffer driver so remote users can interact with the login server and shell.
+  buffer driver so remote users can interact with the login server and NitroShell (nsh).
 
 ## SSH Server with SCP Support
 
-- **Purpose**: Offer a secure remote shell over the network with optional file copy using the SCP protocol.
-- **Status**: Provides a line-based echo shell on port 2 of the loopback stack.
+- **Purpose**: Offer a secure remote NitroShell (nsh) over the network with optional file copy using the SCP protocol.
+- **Status**: Provides a line-based echo NitroShell session on port 2 of the loopback stack.
   Commands such as `exit` close the session. Encryption and real networking are
   not yet present.
 - **Future work**: Implement key exchange, authentication, encryption, and
-  integration with the login server so remote users can launch the shell after
+  integration with the login server so remote users can launch the NitroShell after
   successful authentication.
 
 ## FTP Server
@@ -52,7 +52,7 @@ brief overview of the stack and how current servers make use of it follows.
 
 - **Purpose**: Authenticate local users and expose the current IP address for
   remote services such as SSH and VNC.
-- **Status**: Displays the network address at boot and launches the shell after
+- **Status**: Displays the network address at boot and launches NitroShell (nsh) after
   checking credentials against an in-memory table.
 - **Future work**: Accept credentials from the SSH server via IPC and manage
   multiple concurrent sessions.
