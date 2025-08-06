@@ -1,6 +1,5 @@
 #include "thread.h"
 #include "../IPC/ipc.h"
-#include "../../user/servers/init/init.h"
 #include "../../user/libc/libc.h"
 #include "../drivers/IO/serial.h"
 #include <stdint.h>
@@ -350,8 +349,7 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
 
 // System thread startup: create and start init server
 static void thread_init_func(void) {
-    serial_puts("[init] init server started\n");
-    init_main(&fs_queue, thread_current()->id);
+    serial_puts("[init] init server not included\n");
     for (;;) thread_yield(); // Should never return
 }
 

@@ -10,6 +10,7 @@ static int first_poll = 1;
 
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
+ipc_queue_t fs_queue;
 
 /* Stubs for the TTY driver used by the login server */
 int tty_getchar(void) {
