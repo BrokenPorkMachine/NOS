@@ -359,7 +359,21 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     memset(bi, 0, bi_pages * 0x1000);
     bi->magic = BOOTINFO_MAGIC_UEFI;
     bi->size = sizeof(*bi);
-    bi->bootloader_name = "O2 UEFI";
+
+    // Copy bootloader name into loader-allocated memory so the kernel can
+    // safely access it after ExitBootServices reclaims the loader image.
+    const char bl_name[] = "O2 UEFI";
+    char *bl_copy = NULL;
+    status = SystemTable->BootServices->AllocatePool(EfiLoaderData,
+                                                     sizeof(bl_name),
+                                                     (void **)&bl_copy);
+    if (!EFI_ERROR(status)) {
+        memcpy(bl_copy, bl_name, sizeof(bl_name));
+        bi->bootloader_name = bl_copy;
+    } else {
+        bi->bootloader_name = NULL;
+    }
+
     bi->kernel_entry = entry;
     bi->kernel_load_base = g_kernel_base;
     bi->kernel_load_size = g_kernel_size;
