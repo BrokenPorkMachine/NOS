@@ -4,7 +4,7 @@ LD := $(CROSS_COMPILE)ld
 NASM := nasm
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
 	-fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-	-I include -I boot/include
+	-I include -I boot/include -no-pie
 
 all: libc kernel boot disk.img
 
