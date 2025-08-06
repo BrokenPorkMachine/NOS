@@ -23,6 +23,7 @@ int tty_getchar(void) {
 
 void tty_write(const char *s) { (void)s; }
 void tty_clear(void) { }
+void tty_init(void) { }
 static int yield_count = 0;
 void thread_yield(void) { yield_count++; }
 

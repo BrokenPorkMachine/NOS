@@ -130,6 +130,8 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
 {
     health_q = q;
     login_tid = self_id;
+    /* Reinitialize the TTY to ensure output devices are ready before clearing */
+    tty_init();
     tty_clear();
     puts_out("[login] login server starting\n");
     uint32_t ip = net_get_ip();
