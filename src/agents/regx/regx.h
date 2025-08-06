@@ -2,6 +2,8 @@
 #include <stdint.h>
 #define REGX_MAX_ENTRIES 256
 
+size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max);
+
 typedef struct {
     char name[32];
     int  type;                // 1=device, 2=driver, 3=agent, 4=service, 5=bus
