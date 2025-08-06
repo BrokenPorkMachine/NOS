@@ -28,10 +28,10 @@ void idt_install(void);
 void set_idt_entry(int vec, void *isr, uint8_t type_attr);
 
 // Assembly ISR stubs
-extern void isr_default_stub(void);
 extern void isr_timer_stub(void);
 extern void isr_syscall_stub(void);
 extern void isr_keyboard_stub(void);
 extern void isr_mouse_stub(void);
 extern void isr_page_fault_stub(void);
 extern void isr_ipi_stub(void);
+extern void *isr_stub_table[];
