@@ -16,7 +16,11 @@
 
 static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s);
 static EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root,
-                            const CHAR16 *path, void **buf, UINTN *size);
+                             const CHAR16 *path, void **buf, UINTN *size);
+
+// Track where the kernel was placed so bootinfo can report it
+static uint64_t g_kernel_base = 0;
+static uint64_t g_kernel_size = 0;
 
 static void *memcpy(void *dst, const void *src, size_t n) {
     uint8_t *d = dst; const uint8_t *s = src; while (n--) *d++ = *s++; return dst;
@@ -43,7 +47,65 @@ static kernel_type_t detect_kernel_type(const uint8_t *data, size_t size) {
 }
 
 static EFI_STATUS load_elf(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
-    (void)st; (void)image; (void)size; (void)entry; return EFI_SUCCESS;
+    typedef struct {
+        unsigned char e_ident[16];
+        UINT16  e_type;
+        UINT16  e_machine;
+        UINT32  e_version;
+        UINT64  e_entry;
+        UINT64  e_phoff;
+        UINT64  e_shoff;
+        UINT32  e_flags;
+        UINT16  e_ehsize;
+        UINT16  e_phentsize;
+        UINT16  e_phnum;
+        UINT16  e_shentsize;
+        UINT16  e_shnum;
+        UINT16  e_shstrndx;
+    } Elf64_Ehdr;
+    typedef struct {
+        UINT32  p_type;
+        UINT32  p_flags;
+        UINT64  p_offset;
+        UINT64  p_vaddr;
+        UINT64  p_paddr;
+        UINT64  p_filesz;
+        UINT64  p_memsz;
+        UINT64  p_align;
+    } Elf64_Phdr;
+
+    if (size < sizeof(Elf64_Ehdr)) return EFI_LOAD_ERROR;
+    const Elf64_Ehdr *eh = (const Elf64_Ehdr *)image;
+    if (eh->e_ident[0] != 0x7F || eh->e_ident[1] != 'E' ||
+        eh->e_ident[2] != 'L' || eh->e_ident[3] != 'F')
+        return EFI_LOAD_ERROR;
+
+    const Elf64_Phdr *ph = (const Elf64_Phdr *)((const UINT8 *)image + eh->e_phoff);
+
+    UINT64 first = (UINT64)-1, last = 0;
+    for (UINT16 i = 0; i < eh->e_phnum; ++i, ++ph) {
+        if (ph->p_type != 1) continue; /* PT_LOAD */
+        UINTN pages = (ph->p_memsz + 0xFFF) / 0x1000;
+        EFI_PHYSICAL_ADDRESS seg = ph->p_paddr;
+        EFI_STATUS s = st->BootServices->AllocatePages(EFI_ALLOCATE_ADDRESS,
+                                                        EfiLoaderData,
+                                                        pages, &seg);
+        if (EFI_ERROR(s)) return s;
+        memcpy((void *)(uintptr_t)seg,
+               (const UINT8 *)image + ph->p_offset,
+               ph->p_filesz);
+        if (ph->p_memsz > ph->p_filesz)
+            memset((void *)(uintptr_t)(seg + ph->p_filesz), 0,
+                   ph->p_memsz - ph->p_filesz);
+
+        if (seg < first) first = seg;
+        if (seg + ph->p_memsz > last) last = seg + ph->p_memsz;
+    }
+
+    g_kernel_base = first;
+    g_kernel_size = last - first;
+    *entry = (void *)(uintptr_t)eh->e_entry;
+    return EFI_SUCCESS;
 }
 static EFI_STATUS load_macho(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
     (void)st; (void)image; (void)size; (void)entry; return EFI_SUCCESS;
@@ -290,6 +352,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->size = sizeof(*bi);
     bi->bootloader_name = "O2 UEFI";
     bi->kernel_entry = entry;
+    bi->kernel_load_base = g_kernel_base;
+    bi->kernel_load_size = g_kernel_size;
     bi->cmdline = ""; // Optional: parse from EFI variable or file
 
     // --- ACPI RSDP/XSDT/RSDT/DSDT ---
