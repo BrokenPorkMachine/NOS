@@ -11,15 +11,6 @@
 // ---- Your kernel-mode recursive spinlock mutex ----
 extern uint32_t thread_self(void);
 
-int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) { ... }
-int pthread_mutex_lock(pthread_mutex_t *mutex) { ... }
-int pthread_mutex_unlock(pthread_mutex_t *mutex) { ... }
-int pthread_mutex_destroy(pthread_mutex_t *mutex) { ... }
-#endif
-
-// --- Kernel-mode pthread_mutex_t implementation ---
-extern uint32_t thread_self(void);
-
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
     (void)attr;
     mutex->lock = 0;
@@ -52,7 +43,6 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
     return 0;
 }
 #endif
-
 
 // ================== STRING AND MEMORY ===================
 void *memset(void *s, int c, size_t n) {
