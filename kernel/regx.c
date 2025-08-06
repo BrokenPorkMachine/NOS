@@ -1,6 +1,5 @@
 #include "regx.h"
 #include <string.h>
-#include <stddef.h>
 #include <stdio.h>
 
 static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
@@ -50,12 +49,28 @@ const regx_entry_t *regx_query(uint64_t id) {
     return NULL;
 }
 
-void regx_tree(uint64_t parent, int level) {
+// Device/agent tree output (for tools or diagnostics)
+void regx_tree(uint64_t parent, int level, FILE *outf) {
     for (size_t i = 0; i < regx_count; ++i) {
         if (regx_registry[i].parent_id == parent) {
-            for (int l = 0; l < level; ++l) printf("  ");
-            printf("%llu %s\n", (unsigned long long)regx_registry[i].id, regx_registry[i].manifest.name);
-            regx_tree(regx_registry[i].id, level+1);
+            for (int l = 0; l < level; ++l) fprintf(outf, "  ");
+            fprintf(outf, "%llu %s\n", (unsigned long long)regx_registry[i].id, regx_registry[i].manifest.name);
+            regx_tree(regx_registry[i].id, level+1, outf);
         }
     }
+}
+
+// Export/serialize the full registry to manifest (JSON)
+void regx_export_json(FILE *outf) {
+    fprintf(outf, "[\n");
+    for (size_t i=0; i<regx_count; ++i) {
+        const regx_entry_t *e = &regx_registry[i];
+        fprintf(outf, "  { \"id\": %llu, \"parent\": %llu, \"name\": \"%s\", \"type\": %d, "
+                "\"version\": \"%s\", \"abi\": \"%s\", \"capabilities\": \"%s\" }%s\n",
+                (unsigned long long)e->id, (unsigned long long)e->parent_id,
+                e->manifest.name, e->manifest.type,
+                e->manifest.version, e->manifest.abi, e->manifest.capabilities,
+                (i+1==regx_count)?"":",");
+    }
+    fprintf(outf, "]\n");
 }
