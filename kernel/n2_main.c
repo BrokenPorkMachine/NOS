@@ -3,7 +3,7 @@
 #include <string.h>
 #include "../boot/include/bootinfo.h"
 #include "agent.h"
-#include "nosm.h"
+#include <nosm.h>
 #include "agent_loader.h"
 #include "regx.h"
 #include "drivers/IO/serial.h"
