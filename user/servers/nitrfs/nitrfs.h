@@ -101,4 +101,12 @@ void   nitrfs_flush_async(nitrfs_fs_t *fs);
 // Optionally, force a synchronous flush (blocking).
 void   nitrfs_flush_sync(nitrfs_fs_t *fs);
 
+// Checks filesystem integrity and repairs if possible. Returns number of errors fixed.
+int nitrfs_fsck(nitrfs_fs_t *fs);
+
+// Set a global file or size quota (per-FS, per-user, per-group possible)
+void   nitrfs_set_quota(nitrfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes);
+// Query the current usage
+void   nitrfs_get_usage(nitrfs_fs_t *fs, uint32_t *used_files, uint32_t *used_bytes);
+
 #endif // NITRFS_H
