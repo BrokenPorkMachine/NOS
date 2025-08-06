@@ -12,6 +12,16 @@
 #include "../pkg/server.h"
 #include "../update/server.h"
 
+__attribute__((section("__O2INFO,__manifest")))
+const char mo2_manifest[] =
+"{\n"
+"  \"name\": \"init\",\n"
+"  \"type\": \"service_launcher\",\n"
+"  \"version\": \"1.0.0\",\n"
+"  \"entry\": \"init_main\"\n"
+"}\n";
+
+
 // --------- Service enable/disable flags (simulated config, replace with file or cmdline) -----------
 static int enable_ftp   = 1;
 static int enable_login = 1;
