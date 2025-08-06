@@ -4,16 +4,16 @@ global enter_user_mode
 
 ; void enter_user_mode(void *entry, void *user_stack)
 ; Arguments:
-;   rdi = entry point (RIP)
-;   rsi = user stack pointer (top, for RSP)
+;   rdi = entry point (user RIP)
+;   rsi = user stack pointer (user RSP)
 ;
-; Uses GDT selectors:
-;   GDT_SEL_USER_DATA_R3 = user data (ring 3)
-;   GDT_SEL_USER_CODE_R3 = user code (ring 3)
+; GDT Selectors (should be 0x23 for data, 0x1B for code with RPL=3)
+;   GDT_SEL_USER_DATA_R3  equ 0x23
+;   GDT_SEL_USER_CODE_R3  equ 0x1B
 
 section .text
 enter_user_mode:
-    ; Set up segment selectors for user mode
+    ; Set user-mode segment registers
     mov  ax, GDT_SEL_USER_DATA_R3
     mov  ds, ax
     mov  es, ax
@@ -21,22 +21,30 @@ enter_user_mode:
     mov  gs, ax
     mov  ss, ax
 
-    ; Prepare iretq stack frame (SS, RSP, RFLAGS, CS, RIP)
-    mov  rcx, rdi         ; entry point -> rcx
-    mov  rax, rsi         ; user stack  -> rax
+    ; Load arguments
+    mov  rcx, rdi         ; rcx = user entry point (RIP)
+    mov  rax, rsi         ; rax = user stack pointer (RSP)
 
-    push GDT_SEL_USER_DATA_R3
-    push rax              ; RSP (user stack pointer)
-    pushfq                ; RFLAGS (preserve IF)
-    push GDT_SEL_USER_CODE_R3
-    push rcx              ; RIP (entry point)
+    ; Prepare iretq frame: SS, RSP, RFLAGS, CS, RIP (in that order, bottom to top)
+    push GDT_SEL_USER_DATA_R3  ; User SS
+    push rax                   ; User RSP
+    pushfq                     ; RFLAGS (current flags, but be sure IF=1)
+    push GDT_SEL_USER_CODE_R3  ; User CS
+    push rcx                   ; User RIP
 
-    iretq                 ; Enter user mode!
+    ; Double-check: ensure IF=1 (interrupts enabled) in RFLAGS
+    ; This is optional, but safest if you want user code to see interrupts
+    ; (Uncomment if needed:)
+    ; pop rdx
+    ; or  rdx, 0x200      ; Set IF
+    ; push rdx
 
-    ; Should never return
+    ; Far return to user mode, privilege transition!
+    iretq
+
+    ; Should never return; just in case, halt forever
+.dead:
     hlt
-    jmp $
+    jmp .dead
 
-; Indicate that this object file does not require an executable stack
 section .note.GNU-stack noalloc nobits align=1
-
