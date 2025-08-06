@@ -2,7 +2,7 @@
 
 ## Overview
 
-**NitrOS (NOS)** is a new experimental operating system inspired by the original CMU Mach microkernel and modern security, flexibility, and developer-centric features. It is written from scratch for x86\_64 and is designed as a pure microkernel: the kernel manages only scheduling, memory, IPC, and hardware abstraction; all higher-level services run in user space as isolated, message-passing servers.
+**NitrOS (NOS)** is evolving into a unified, secure platform where every layer is signed, versioned, and hot-swappable. The system is written from scratch for x86_64 and leans on a microkernel/hybrid design: the kernel enforces isolation while higher-level services and drivers run as sandboxed agents. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full blueprint of the new stack.
 
 ---
 
@@ -10,6 +10,8 @@
 
 * O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
 * True x86\_64 long mode kernel
+* Signed, manifest-driven **NOSM** modules with hot reload
+* Transactional **NitrFS** filesystem
 * Four-ring GDT layout (rings 0–3; user/kernel split)
 * Full paging and memory protection (NX, SMEP, SMAP)
 * Modular, timer-driven preemptive multitasking
@@ -17,7 +19,6 @@
 * Early ACPI table parsing for basic hardware enumeration
 * Basic thread and task abstractions
 * Mach-style IPC message passing (prototype queue implementation)
-* NitrFS secure in-memory filesystem server with optional block storage
 * Simple secure heap allocator for user-space memory
 * Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode servers
 * Minimal network stack with loopback support, IPv4 addressing and ARP replies
@@ -27,6 +28,7 @@
 * Early NUMA node enumeration from bootloader memory map
 * IPC shared memory channels with rights masks
 * Adjustable kernel log verbosity via `loglevel=` and `quiet` boot options
+* Versioned ABI with manifest-based capability declaration
 
 ---
 
