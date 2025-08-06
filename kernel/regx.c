@@ -1,118 +1,60 @@
-#include "../include/regx.h"
+#include "regx.h"
 #include <string.h>
+#include <stddef.h>
 
-/* Simple spinlock for atomic operations.  Real kernel would use arch‑specific
- * primitives. */
-typedef int spinlock_t;
-static spinlock_t regx_lock;
-static void lock(spinlock_t *l)
-{
-    while (__sync_lock_test_and_set(l, 1)) {
-        /* spin */
-    }
-}
-static void unlock(spinlock_t *l)
-{
-    __sync_lock_release(l);
-}
+static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
+static size_t regx_count = 0;
+static uint64_t regx_next_id = 1;
 
-static regx_entry_t registry[REGX_MAX_ENTRIES];
-static size_t registry_count;
-static uint64_t next_id = 1; /* 0 reserved */
-
-/* Atomic registration.  The entry is copied so callers can free their
- * manifest/signature afterwards.  Security checks (signatures, permissions)
- * would occur before insertion. */
-int regx_register(const regx_entry_t *entry) {
-    if (!entry)
-        return -1;
-    lock(&regx_lock);
-    if (registry_count >= REGX_MAX_ENTRIES) {
-        unlock(&regx_lock);
-        return -1;
-    }
-    regx_entry_t *dst = &registry[registry_count];
-    memcpy(dst, entry, sizeof(*dst));
-    dst->id = next_id++;
-    dst->generation = 1;
-    registry_count++;
-    unlock(&regx_lock);
-    return 0;
+uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id) {
+    if (regx_count >= REGX_MAX_ENTRIES) return 0;
+    regx_entry_t *e = &regx_registry[regx_count++];
+    e->id = regx_next_id++;
+    e->parent_id = parent_id;
+    e->manifest = *m;
+    return e->id;
 }
 
-/* Atomic removal of an entry by ID. */
 int regx_unregister(uint64_t id) {
-    lock(&regx_lock);
-    for (size_t i = 0; i < registry_count; ++i) {
-        if (registry[i].id == id) {
-            memmove(&registry[i], &registry[i + 1],
-                    (registry_count - i - 1) * sizeof(regx_entry_t));
-            registry_count--;
-            unlock(&regx_lock);
+    for (size_t i=0; i<regx_count; ++i) {
+        if (regx_registry[i].id == id) {
+            regx_registry[i] = regx_registry[--regx_count];
             return 0;
         }
     }
-    unlock(&regx_lock);
     return -1;
 }
 
-/* Update selected fields atomically.  Only runtime state, parent or private
- * data are mutable; manifest and ID remain constant. */
-int regx_update(uint64_t id, const regx_entry_t *delta) {
-    if (!delta)
-        return -1;
-    lock(&regx_lock);
-    for (size_t i = 0; i < registry_count; ++i) {
-        if (registry[i].id == id) {
-            registry[i].state = delta->state ? delta->state : registry[i].state;
-            registry[i].parent_id =
-                delta->parent_id ? delta->parent_id : registry[i].parent_id;
-            registry[i].priv = delta->priv ? delta->priv : registry[i].priv;
-            registry[i].generation++;
-            unlock(&regx_lock);
-            return 0;
+size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max) {
+    size_t n=0;
+    for (size_t i=0; i<regx_count && n<max; ++i) {
+        if (sel) {
+            if (sel->type && regx_registry[i].manifest.type != sel->type)
+                continue;
+            if (sel->parent_id && regx_registry[i].parent_id != sel->parent_id)
+                continue;
+            if (sel->name_prefix[0] &&
+                strncmp(regx_registry[i].manifest.name, sel->name_prefix, strlen(sel->name_prefix)) != 0)
+                continue;
         }
+        out[n++] = regx_registry[i];
     }
-    unlock(&regx_lock);
-    return -1;
+    return n;
 }
 
-/* Lookup by ID.  Caller receives a const pointer; modifications require
- * regx_update. */
 const regx_entry_t *regx_query(uint64_t id) {
-    lock(&regx_lock);
-    for (size_t i = 0; i < registry_count; ++i) {
-        if (registry[i].id == id) {
-            const regx_entry_t *ret = &registry[i];
-            unlock(&regx_lock);
-            return ret;
-        }
-    }
-    unlock(&regx_lock);
+    for (size_t i=0; i<regx_count; ++i)
+        if (regx_registry[i].id == id)
+            return &regx_registry[i];
     return NULL;
 }
 
-/* Enumerate entries matching the selector.  Results are copied out to avoid
- * exposing internal state. */
-size_t regx_enumerate(const regx_selector_t *sel,
-                      regx_entry_t *out, size_t max) {
-    if (!out || !max)
-        return 0;
-    size_t count = 0;
-    lock(&regx_lock);
-    for (size_t i = 0; i < registry_count && count < max; ++i) {
-        regx_entry_t *e = &registry[i];
-        if (sel) {
-            if (sel->type && e->manifest.type != sel->type)
-                continue;
-            if (sel->parent_id && e->parent_id != sel->parent_id)
-                continue;
-            if (sel->capability &&
-                !strstr(e->manifest.capabilities, sel->capability))
-                continue;
+void regx_tree(uint64_t parent, int level) {
+    for (size_t i = 0; i < regx_count; ++i) {
+        if (regx_registry[i].parent_id == parent) {
+            for (int l = 0; l < level; ++l) printf("  ");
+            printf("%llu %s\n", (unsigned long long)regx_registry[i].id, regx_registry[i].manifest.name);
+            regx_tree(regx_registry[i].id, level+1);
         }
-        out[count++] = *e;
     }
-    unlock(&regx_lock);
-    return count;
 }
