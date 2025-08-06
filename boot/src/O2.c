@@ -252,18 +252,34 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->bootloader_name = "O2 UEFI";
 
     // Load kernel -------------------------------------------------------
-    void *kernel; UINTN ksize;
-    status = load_file(SystemTable, root, L"\\kernel.bin", &kernel, &ksize);
+    void *tmp; UINTN ksize;
+    status = load_file(SystemTable, root, L"\\kernel.bin", &tmp, &ksize);
     if (EFI_ERROR(status)) return status;
+
+    EFI_PHYSICAL_ADDRESS kphys = 0x100000; // load kernel at 1MB
+    UINTN pages = (ksize + 0xFFF) / 0x1000;
+    status = SystemTable->BootServices->AllocatePages(AllocateAddress,
+                                                      EfiLoaderData,
+                                                      pages, &kphys);
+    if (EFI_ERROR(status)) {
+        SystemTable->BootServices->FreePool(tmp);
+        return status;
+    }
+
+    void *kernel = (void*)(uintptr_t)kphys;
+    memcpy(kernel, tmp, ksize);
+    SystemTable->BootServices->FreePool(tmp);
+
     uint8_t ksig[32];
     if (secure_boot) {
-        status = verify_signature(SystemTable, root, L"\\kernel.bin.sig", kernel, ksize, ksig);
+        status = verify_signature(SystemTable, root, L"\\kernel.bin.sig",
+                                  kernel, ksize, ksig);
         if (EFI_ERROR(status)) return status;
     } else {
         compute_sha256(kernel, ksize, ksig);
     }
     bi->kernel_entry = kernel;
-    bi->kernel_segs.file_base = (uint64_t)(uintptr_t)kernel;
+    bi->kernel_segs.file_base = (uint64_t)kphys;
     bi->kernel_segs.file_size = ksize;
 
     // Load modules ------------------------------------------------------
