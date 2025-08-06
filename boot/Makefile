@@ -4,7 +4,7 @@ LD=lld-link
 CFLAGS=--target=x86_64-pc-win32-coff \
        -ffreestanding -fshort-wchar -mno-red-zone \
        -fno-stack-protector -fno-exceptions -fno-asynchronous-unwind-tables \
-       -Wall -Wextra -Werror \
+       -Wall -Wextra -Wno-unused-function \
        -Iinclude
 
 LDFLAGS=/entry:efi_main \

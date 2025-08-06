@@ -1,6 +1,7 @@
 #include "agent_loader.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // ---- Minimal JSON parser ----------------------------------------------------
 // extracts a string associated with a key in a flat JSON object
@@ -163,5 +164,16 @@ int load_agent_auto(const void *image, size_t size) {
         case AGENT_FORMAT_FLAT:   return load_agent_flat(image, size);
         case AGENT_FORMAT_NOSM:   return load_agent_nosm(image, size);
         default: return -1;
+    }
+}
+
+int load_agent(const void *image, size_t size, agent_format_t fmt) {
+    switch (fmt) {
+        case AGENT_FORMAT_MACHO2: return load_agent_macho2(image, size);
+        case AGENT_FORMAT_MACHO:  return load_agent_macho(image, size);
+        case AGENT_FORMAT_ELF:    return load_agent_elf(image, size);
+        case AGENT_FORMAT_FLAT:   return load_agent_flat(image, size);
+        case AGENT_FORMAT_NOSM:   return load_agent_nosm(image, size);
+        default:                  return load_agent_auto(image, size);
     }
 }

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <time.h>
+#include <stdarg.h>
 
 // ---- Your kernel-mode recursive spinlock mutex ----
 extern uint32_t thread_self(void);
@@ -109,6 +110,85 @@ int strncmp(const char *s1, const char *s2, size_t n) {
         if (s1[i] != s2[i] || !s1[i] || !s2[i])
             return (unsigned char)s1[i] - (unsigned char)s2[i];
     return 0;
+}
+
+void *memchr(const void *s, int c, size_t n) {
+    const unsigned char *p = (const unsigned char *)s;
+    for (size_t i = 0; i < n; ++i) {
+        if (p[i] == (unsigned char)c)
+            return (void *)(p + i);
+    }
+    return NULL;
+}
+
+void *memmem(const void *haystack, size_t haystacklen,
+             const void *needle, size_t needlelen) {
+    if (needlelen == 0) return (void *)haystack;
+    const unsigned char *h = (const unsigned char *)haystack;
+    const unsigned char *n = (const unsigned char *)needle;
+    for (size_t i = 0; i + needlelen <= haystacklen; ++i) {
+        if (h[i] == n[0] && memcmp(h + i, n, needlelen) == 0)
+            return (void *)(h + i);
+    }
+    return NULL;
+}
+
+static int itoa_dec(char *buf, size_t buf_sz, int val) {
+    char tmp[32];
+    int neg = val < 0;
+    unsigned int u = neg ? -val : val;
+    int i = 0;
+    do { tmp[i++] = '0' + (u % 10); u /= 10; } while (u && i < (int)sizeof(tmp));
+    if (neg && i < (int)sizeof(tmp)) tmp[i++] = '-';
+    if (i >= (int)buf_sz) i = buf_sz - 1;
+    for (int j = 0; j < i; ++j) buf[j] = tmp[i - j - 1];
+    buf[i] = '\0';
+    return i;
+}
+
+int snprintf(char *str, size_t size, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    size_t pos = 0;
+    for (const char *p = fmt; *p && pos + 1 < size; ++p) {
+        if (*p != '%') {
+            str[pos++] = *p;
+            continue;
+        }
+        ++p;
+        if (*p == 's') {
+            const char *s = va_arg(ap, const char *);
+            while (*s && pos + 1 < size) str[pos++] = *s++;
+        } else if (*p == 'd') {
+            char tmp[32];
+            itoa_dec(tmp, sizeof(tmp), va_arg(ap, int));
+            for (char *t = tmp; *t && pos + 1 < size; ++t) str[pos++] = *t;
+        } else {
+            str[pos++] = '%';
+            if (pos + 1 < size) str[pos++] = *p;
+        }
+    }
+    str[pos] = '\0';
+    va_end(ap);
+    return (int)pos;
+}
+
+long strtol(const char *nptr, char **endptr, int base) {
+    (void)base;
+    const char *p = nptr;
+    while (*p == ' ' || *p == '\t') p++;
+    int neg = 0;
+    if (*p == '+' || *p == '-') {
+        neg = (*p == '-');
+        p++;
+    }
+    long val = 0;
+    while (*p >= '0' && *p <= '9') {
+        val = val * 10 + (*p - '0');
+        p++;
+    }
+    if (endptr) *endptr = (char *)p;
+    return neg ? -val : val;
 }
 
 char *strchr(const char *s, int c) {
