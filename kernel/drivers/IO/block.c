@@ -11,14 +11,14 @@ int block_read(uint32_t lba, uint8_t *buf, size_t count) {
     if (lba + count > BLOCK_DEVICE_BLOCKS)
         return -1;
     memcpy(buf, &storage[lba * BLOCK_SIZE], count * BLOCK_SIZE);
-    return 0;
+    return (int)count;
 }
 
 int block_write(uint32_t lba, const uint8_t *buf, size_t count) {
     if (lba + count > BLOCK_DEVICE_BLOCKS)
         return -1;
     memcpy(&storage[lba * BLOCK_SIZE], buf, count * BLOCK_SIZE);
-    return 0;
+    return (int)count;
 }
 
 int block_handle_ipc(ipc_message_t *msg) {
