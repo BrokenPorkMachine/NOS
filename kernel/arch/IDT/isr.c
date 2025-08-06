@@ -27,7 +27,7 @@ void isr_default_handler(struct isr_context *ctx) {
     const char *msg = "FAULT! IRQ: ";
     for (int i = 0; msg[i]; ++i)
         vga[i] = msg[i] | (0x47 << 8);
-    vga[12] = '0' + (ctx->int_no % 10) | (0x47 << 8);
+    vga[12] = ('0' + (ctx->int_no % 10)) | (0x47 << 8);
 
     while (1) __asm__ volatile ("hlt");
 }
