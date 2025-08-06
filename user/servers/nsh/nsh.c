@@ -1,5 +1,8 @@
 #include "../../../kernel/IPC/ipc.h"
 #include "../../libc/libc.h"
+
+#define NOSFS_NAME_LEN 32
+
 #include "../pkg/pkg.h"
 #include "../update/update.h"
 #include "../../include/nosfs.h"

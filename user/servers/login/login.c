@@ -16,9 +16,6 @@ static uint32_t login_tid = 0;
 // Weak fallback so unit tests can link without the full netstack.
 __attribute__((weak)) uint32_t net_get_ip(void) { return 0x0A00020F; }
 
-extern ipc_queue_t fs_queue;
-extern ipc_queue_t pkg_queue;
-extern ipc_queue_t upd_queue;
 
 typedef struct {
     const char *user;
@@ -167,6 +164,8 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
         }
     }
 
+    puts_out("[login] starting shell\n");
+    nsh_main(NULL, self_id);
     puts_out("[login] starting nsh\n");
     nsh_main(&fs_queue, &pkg_queue, &upd_queue, self_id);
 }
