@@ -5,15 +5,6 @@
 #include <pthread.h>
 #include <unistd.h> // for usleep if needed
 
-typedef struct {
-    nitrfs_file_t files[NITRFS_MAX_FILES];
-    size_t file_count;
-    pthread_mutex_t mutex;
-    // Quota fields:
-    uint32_t max_files;
-    uint32_t max_bytes;
-} nitrfs_fs_t;
-
 void nitrfs_set_quota(nitrfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes) {
     pthread_mutex_lock(&fs->mutex);
     fs->max_files = max_files;
