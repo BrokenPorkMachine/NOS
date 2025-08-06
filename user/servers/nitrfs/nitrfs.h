@@ -100,5 +100,5 @@ void   nitrfs_flush_async(nitrfs_fs_t *fs);
 
 // Optionally, force a synchronous flush (blocking).
 void   nitrfs_flush_sync(nitrfs_fs_t *fs);
-åß
+
 #endif // NITRFS_H
