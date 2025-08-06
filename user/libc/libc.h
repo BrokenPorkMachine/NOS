@@ -1,6 +1,13 @@
 #pragma once
 #include <stddef.h>
+#include <stdint.h>
+#include <time.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// --- Memory and String ---
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
@@ -15,6 +22,14 @@ char *strcpy(char *dest, const char *src);
 char *strcat(char *dest, const char *src);
 char *strstr(const char *haystack, const char *needle);
 
+void *malloc(size_t size);
+void *calloc(size_t nmemb, size_t size);
+void free(void *ptr);
+void *realloc(void *ptr, size_t size);
+void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen);
+char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen);
+
+// --- File I/O ---
 typedef struct {
     int handle;
     unsigned int pos;
@@ -32,18 +47,35 @@ int rename(const char *old, const char *new);
 long ftell(FILE *stream);
 int fseek(FILE *stream, long offset, int whence);
 
+// --- Math ---
 int abs(int x);
 long labs(long x);
 long long llabs(long long x);
 double sqrt(double x);
 
-void *malloc(size_t size);
-void *calloc(size_t nmemb, size_t size);
-void free(void *ptr);
-void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen);
-char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen);
-
+// --- System ---
 int fork(void);
 int exec(const char *path);
 void *sbrk(long inc);
 
+// --- Time ---
+int clock_gettime(int clk_id, struct timespec *tp);
+time_t time(time_t *t);
+
+// --- Pthread Mutex ---
+typedef struct {
+    volatile int lock;
+    uint32_t owner;
+    int count;
+} pthread_mutex_t;
+
+typedef void* pthread_mutexattr_t;
+
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
+int pthread_mutex_lock(pthread_mutex_t *mutex);
+int pthread_mutex_unlock(pthread_mutex_t *mutex);
+int pthread_mutex_destroy(pthread_mutex_t *mutex);
+
+#ifdef __cplusplus
+}
+#endif
