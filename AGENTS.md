@@ -1,178 +1,174 @@
-# AGENTS.md
+AGENTS.md
+NitrOS Agents Architecture
+Welcome to NitrOS—the next-generation operating system designed from the ground up for modularity, security, and rapid innovation.
+This document outlines the major agents (core components and services) that work together to deliver NitrOS’s reliability, extensibility, and performance.
 
----
+Agent Types
+Boot Agents:
+UEFI-based bootloader and pre-kernel loaders.
 
-## Project: Mach Microkernel Operating System
+Kernel Agents:
+The microkernel/hybrid kernel, including module loaders, security managers, and core schedulers.
 
-**Purpose:**
-Document the roles (“agents”) in the system, including both kernel and user-space actors, their responsibilities, and how they interact.
-This file is intended as a high-level guide and technical reference for all contributors.
+Module Agents (NOSM):
+Dynamically loadable kernel modules (“NOSM” files), implementing drivers, filesystems, services, and more.
 
----
+Userland Agents:
+Privileged system daemons and user processes that interact with the kernel and modules via a secure API.
 
-## **Agents Overview**
+Filesystem Agents (NitrFS):
+Both in-kernel and user-facing utilities for transactional, versioned, and secure storage.
 
-| Agent                | Privilege | Type/Scope  | Example Roles                              |
-| -------------------- | --------- | ----------- | ------------------------------------------ |
-| Bootloader           | Ring 0    | UEFI app    | Loads kernel, passes boot info, exits      |
-| Mach Microkernel     | Ring 0    | Kernel      | Scheduling, memory, IPC, trap/syscall, IRQ |
-| Device Driver Server | Rings 1&2 | Driver svc  | Handles hardware via supervised IPC       |
-| User Task/Thread     | Ring 3    | User proc   | Runs app/server code, uses syscalls, IPC   |
-| NitrFS Server       | Ring 3    | User server | Secure in-memory filesystem              |
-| Audio Server        | Ring 3    | User server | Provides PCM playback via kernel audio driver |
-| Window Server        | Ring 3    | User server | (Planned) Manages GUI, display, input      |
-| IPC Subsystem        | Kernel    | Logic/Abstr | Manages message passing, port rights       |
-| Network Server       | Ring 3    | User server | (Planned) TCP/IP stack, drivers, sockets   |
-| Login/Session Agent  | Ring 3    | User server | Handles login prompt and user authentication |
-| Supervisor/Update    | Ring 3    | User server | (Planned) System updates, integrity        |
+Core Agents & Responsibilities
+1. UEFI Loader Agent
+Role: Securely loads the NitrOS kernel and all required NOSM modules at boot.
 
----
+Responsibilities:
 
-## **1. Bootloader Agent**
+Validate and authenticate all loaded binaries (kernel, modules, boot config).
 
-* **Type:** UEFI Application (Ring 0, trusted boot-time only)
-* **Responsibilities:**
+Pass a complete manifest (“bootinfo”) to the kernel (memory map, modules, config, ACPI, etc).
 
-  * Initialize platform via UEFI
-  * Load the kernel from FAT/FAT32/EFI partition into memory
-  * Pass optional boot info (memory map, video mode, etc.) to kernel
-  * Exit after handing off execution to kernel
-* **Interactions:**
+Support for fallback and recovery boot.
 
-  * Reads disk, passes control to kernel at specified entry point
+2. Kernel Agent
+Role: The core execution environment and service coordinator.
 
----
+Responsibilities:
 
-## **2. Mach Microkernel Agent**
+Enforce memory protection, isolation, and resource management.
 
-* **Type:** Kernel (Ring 0, privileged, always resident)
-* **Responsibilities:**
+Provide the system call API for userland and module agents.
 
-  * Set up hardware abstraction (CPU, interrupts, PIT timer, paging/MMU)
-  * Manage all system memory (physical and virtual)
-  * Preemptive thread scheduling (timer-driven, round-robin or better)
-  * Inter-process communication (Mach IPC: messages, ports, rights)
-  * Trap/syscall entry and exit (int \$0x80 or syscall gates)
-  * Enforce user/kernel separation and isolation
-  * Handle device interrupts and mediate hardware access
-* **Interactions:**
+Load, sandbox, and manage NOSM kernel modules.
 
-  * Context switches and schedules user agents
-  * Handles system calls and IPC on behalf of user tasks
-  * Receives and processes hardware IRQs
+Expose registry for agent discovery, introspection, and status.
 
----
+Support hot reloading and live upgrades for kernel modules and agents.
 
-## **3. Driver Tasks (Mid-privilege Agents)**
+3. NOSM Module Agents
+Role: Dynamically extend the kernel with new drivers, filesystems, network stacks, or security logic.
 
-* **Type:** Driver processes (Rings 1 & 2)
-* **Responsibilities:**
+Responsibilities:
 
-  * Perform hardware access with more privilege than user tasks
-  * Expose low-level services (e.g., keyboard, disk, network) via IPC
-* **Interactions:**
+Must be self-describing, signed, and versioned (.nosm format).
 
-  * Invoke supervised kernel interfaces for sensitive operations
-  * Respond to user task requests over IPC
+Register/unregister themselves with the kernel, exposing their services and interfaces.
 
----
+Declare their capabilities, required privileges, dependencies, and API surface in the embedded manifest.
 
-## **4. User Tasks & Threads (User Agents)**
+Clean up all resources/state on unload to guarantee reliability and security.
 
-* **Type:** User mode processes (Ring 3, unprivileged)
-* **Responsibilities:**
+Support multi-language development (C, Rust, optionally WebAssembly and more).
 
-  * Execute user application or server code
-  * Use system calls and IPC to interact with kernel and other agents
-  * Serve as Mach “servers”: file system, networking, GUI, etc.
-* **Examples:**
+4. NitrFS Agent
+Role: Provides next-gen transactional, versioned, and secure filesystem services to kernel and userland.
 
-  * **NitrFS server:** Secure in-memory filesystem via IPC
-  * **Shell server:** Command interpreter using IPC with built-in file commands (`cd`, `ls`, `dir`, `mkdir`, `mv`)
-  * **Demo tasks:** Print to VGA, test syscalls, simple multi-threaded demos
-* **Interactions:**
+Responsibilities:
 
-  * Trap into kernel for privileged actions (system calls, memory mapping)
-  * Send and receive IPC messages to/from other user agents and kernel
-  * Receive context switches and preemption via scheduler
+All operations are atomic, verifiable, and journaled.
 
----
+File/metadata operations support robust ACLs, timestamps, and xattrs.
 
-## **5. IPC Subsystem (Mach Ports/Messages)**
+Supports snapshot, rollback, and real-time integrity verification.
 
-* **Type:** Logical subsystem (kernel and user)
-* **Responsibilities:**
+Userland interacts via the nitrfsctl utility and syscalls for management, mounting, snapshotting, and recovery.
 
-  * Allow agents to send and receive messages (Mach messages)
-  * Provide port abstractions and enforce port rights/security
-  * Mediate and multiplex message passing between user agents and kernel
-* **Interactions:**
+5. Userland Agents
+Role: High-level system daemons and tools (nosmctl, nitrfsctl, etc), as well as user applications.
 
-  * User agents request port creation, rights, message sending/receiving via syscalls or IPC
-  * Kernel delivers and routes messages as per rights and policy
+Responsibilities:
 
----
+Interface with the kernel via well-defined syscalls and IPC.
 
-## **6. Planned/Future System Agents**
+Discover available agents and capabilities dynamically.
 
-* **Network Stack/Server:** User-space TCP/IP, NIC drivers, socket/port IPC
-* **Window/Display Server:** Handles graphics output, user input, windowing
-* **Login/Session Agent:** Provides login prompt and manages authentication
-* **Supervisor/Update Agent:** System update, patching, and recovery
+Support live module loading/unloading and system introspection.
 
----
+Provide UI/CLI/REST access to system status and agent management.
 
-## **Agent Interaction Diagram (Textual)**
+Help enforce system-wide policy (security, updates, auditing).
 
-```
-[Bootloader]
-     |
-     v
-[Mach Microkernel]
-  /   |   |   \
-[App][FS][Dev][Window]
-   \    |     /
-     <==IPC==>
-```
+Design Principles for All Agents
+Security First:
+All agents/modules are signed, versioned, sandboxed, and capability-scoped by default.
 
-* **Bootloader:** Loads and starts the kernel, then exits.
-* **Kernel:** Schedules and mediates all user agents. Handles IPC.
-* **User Agents:** Communicate with each other and kernel via Mach IPC.
-* **FS/Device/Window Servers:** Provide services to apps and each other via message passing.
+Manifest-Based:
+Every agent (kernel, module, userland, FS) must provide a machine-readable manifest for introspection and dependency resolution.
 
----
+Hot Reloadable:
+Agents can be upgraded, swapped, or rolled back live with no downtime.
 
-## **Agent Interaction Table**
+Introspectable:
+System state, agent registry, and capabilities are always discoverable at runtime.
 
-| From       | To              | Mechanism     | Purpose                        |
-| ---------- | --------------- | ------------- | ------------------------------ |
-| Bootloader | Kernel          | Direct jump   | Boot handoff                   |
-| User task  | Kernel          | Syscall/trap  | System calls, IPC, mapping     |
-| User task  | FS/Dev server   | Mach IPC      | File/dev/network requests      |
-| User task  | Audio server    | Mach IPC      | PCM playback requests          |
-| Kernel     | User task       | Scheduler/IRQ | Preemption, async notification |
-| Kernel     | All user agents | Mach IPC/IRQ  | Message delivery, interrupt    |
-| Any agent  | Any agent       | Mach IPC      | Message, service, async        |
+Language Neutral:
+Agent interfaces support multiple languages and ABIs for rapid evolution.
 
----
+Agent Lifecycle
+Discovery:
+On boot, UEFI agent discovers all available modules, verifies, and passes to kernel.
 
-## **Summary: Agent Roles in the OS**
+Initialization:
+Kernel agent loads and starts core agents (drivers, filesystems, security, etc).
 
-* **Bootloader:** Loads kernel, never returns
-* **Kernel:** Scheduler, MMU, IPC, security, system calls, device IRQs
-* **User Tasks:** Application logic, networking, GUI components
-* **IPC Subsystem:** Messaging/port framework binding the whole OS
-* **Servers:** (FS, network, display, audio, etc) implemented as user agents
-* **NitrFS:** Initial secure in-memory filesystem server
-* **Rings 1 & 2:** Mid-privilege layer for supervised device drivers
+Registration:
+Each NOSM and Userland Agent registers with the kernel registry and declares its interfaces.
 
----
+Operation:
+Agents cooperate, communicate, and extend the system as needed.
 
-## **Development Notes**
+Upgrade/Unload:
+Agents can be upgraded or removed cleanly at runtime, with full resource reclamation.
 
-* Agents may be further subdivided (e.g., supervisor, security monitor) as project grows.
-* Keep this file updated as you add, rename, or split agent roles.
+Sample: NOSM Module Manifest (JSON)
+json
+Copy
+Edit
+{
+  "name": "NitrFS",
+  "version": "1.2.0",
+  "author": "NitrOS Core Team",
+  "description": "Transactional, secure, versioned filesystem",
+  "abi": "NitrOS-1.0",
+  "entrypoint": "nitrfs_init",
+  "dependencies": ["core", "crypto"],
+  "capabilities": ["filesystem", "snapshot", "rollback"],
+  "permissions": ["read_disk", "write_disk"],
+  "signature": "BASE64-ENCODED-SIGNATURE"
+}
+Agent Registry & Query Example
+Agents are registered and discoverable via the kernel agent registry:
 
----
+bash
+Copy
+Edit
+$ nosmctl list
+Name         Version    Status      Capabilities
+-------------------------------------------------------
+NitrFS       1.2.0      Active      filesystem,snapshot
+VirtNet      0.9.1      Active      network,virtual
+AudioDrv     0.1.3      Loaded      audio
+...
+Inspiration & Comparison
+NOSM modules = “kexts” (macOS) + “kmods” (Linux) + “WebAssembly for kernel”
 
-**This document is intended to serve as an authoritative reference for all project contributors and as architectural documentation for future review.**
+NitrFS is to NitrOS as APFS is to macOS, but more open and introspectable
+
+Agents are like daemons/services, but are first-class, discoverable, and manageable
+
+Contributing New Agents
+To write a new agent:
+
+Start with the provided manifest template and agent API.
+
+Implement all required registration, cleanup, and capabilities.
+
+Sign your module and test using nosmctl.
+
+Document all exported interfaces for other agents to discover.
+
+For more details, see docs/NOSM.md, docs/NitrFS.md, and kernel API documentation.
+
+NitrOS AGENTS: The future of modular, self-healing, secure operating systems.
+
