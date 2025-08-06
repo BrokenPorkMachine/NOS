@@ -13,7 +13,7 @@ void cow_init(uint64_t total_frames) {
     refcounts = calloc(frames, sizeof(uint16_t));
     cow_flags = calloc(frames, sizeof(uint8_t));
     if (!refcounts || !cow_flags) {
-        serial_puts("[cow] alloc failure\n");
+        serial_puts("[cow] allocation failure\n");
         for(;;) __asm__("hlt");
     }
 }
@@ -22,11 +22,10 @@ void cow_inc_ref(uint64_t phys) {
     if (!refcounts) return;
     uint64_t frame = phys / PAGE_SIZE;
     if (frame < frames) {
-        if (refcounts[frame] == 0xFFFF) {
+        if (refcounts[frame] == 0xFFFF)
             serial_puts("[cow] refcount overflow!\n");
-        } else {
+        else
             refcounts[frame]++;
-        }
     }
 }
 
@@ -53,10 +52,8 @@ static int cow_flag_index(uint64_t virt) {
 void cow_mark(uint64_t virt) {
     int idx = cow_flag_index(virt);
     if (idx < 0) return;
-
     uint64_t phys = paging_virt_to_phys(virt);
     if (!phys) return;
-
     cow_flags[idx] = 1;
     paging_unmap(virt);
     paging_map(virt, phys, PAGE_PRESENT | PAGE_USER);
@@ -65,10 +62,8 @@ void cow_mark(uint64_t virt) {
 void cow_unmark(uint64_t virt) {
     int idx = cow_flag_index(virt);
     if (idx < 0) return;
-
     uint64_t phys = paging_virt_to_phys(virt);
     if (!phys) return;
-
     cow_flags[idx] = 0;
     paging_unmap(virt);
     paging_map(virt, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
@@ -80,10 +75,6 @@ int cow_is_marked(uint64_t virt) {
     return cow_flags[idx] ? 1 : 0;
 }
 
-/**
- * (Optional) Called by your frame allocator when freeing a page.
- * Returns 1 if really free, 0 if still has references.
- */
 int cow_free_frame(uint64_t phys) {
     uint64_t frame = phys / PAGE_SIZE;
     if (frame < frames && refcounts[frame] == 0) {
@@ -93,10 +84,6 @@ int cow_free_frame(uint64_t phys) {
     return 0;
 }
 
-/**
- * Handles a page fault at addr with given error code.
- * Demand-zero pages on absent, COW on write to COW, else halts.
- */
 void handle_page_fault(uint64_t err, uint64_t addr) {
     uint64_t virt = addr & ~(PAGE_SIZE - 1);
     uint64_t phys = paging_virt_to_phys(virt);
@@ -109,14 +96,13 @@ void handle_page_fault(uint64_t err, uint64_t addr) {
             memset((void*)virt, 0, PAGE_SIZE);
             cow_inc_ref((uint64_t)page);
             return;
-        } else {
-            serial_puts("[cow] alloc_page fail in pfault\n");
         }
+        serial_puts("[cow] alloc_page failed in pfault\n");
     } else if ((err & 2) && cow_is_marked(virt)) { // Write fault, COW page
         if (cow_refcount(phys) > 1) {
             void *newp = alloc_page();
             if (!newp) {
-                serial_puts("[cow] alloc_page fail in COW\n");
+                serial_puts("[cow] alloc_page failed in COW\n");
                 for(;;) __asm__("hlt");
             }
             memcpy(newp, (void*)phys, PAGE_SIZE);
@@ -124,12 +110,12 @@ void handle_page_fault(uint64_t err, uint64_t addr) {
             cow_inc_ref((uint64_t)newp);
             paging_map(virt, (uint64_t)newp, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
         } else {
-            cow_unmark(virt); // Only one ref, remove COW and make writable
+            cow_unmark(virt); // Only one ref, just remove COW and restore writable
         }
         return;
     }
 
     serial_puts("[cow] unhandled pfault: addr=0x");
-    // You can add hex print here if you want
+    // Add hex print here if you wish
     for(;;) __asm__("hlt");
 }
