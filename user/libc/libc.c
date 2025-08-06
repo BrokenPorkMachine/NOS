@@ -135,13 +135,6 @@ int exec(const char *path) { return (int)syscall3(SYS_EXEC, (long)path, 0, 0); }
 void *sbrk(long inc) { return (void *)syscall3(SYS_SBRK, inc, 0, 0); }
 
 // ================== THREADING: RECURSIVE MUTEX ===================
-typedef struct {
-    volatile int lock;
-    uint32_t owner;
-    int count;
-} pthread_mutex_t;
-
-typedef void* pthread_mutexattr_t;
 
 extern uint32_t thread_self(void);
 
@@ -154,7 +147,7 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) 
 }
 
 int pthread_mutex_lock(pthread_mutex_t *mutex) {
-    uint32_t self = thread_self ? thread_self() : 1;
+    uint32_t self = thread_self();
     if (mutex->owner == self) {
         mutex->count++;
         return 0;
@@ -167,7 +160,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex) {
-    if (mutex->owner != (thread_self ? thread_self() : 1))
+    if (mutex->owner != thread_self())
         return -1;
     if (--mutex->count == 0) {
         mutex->owner = (uint32_t)-1;
@@ -180,7 +173,7 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
     (void)mutex;
     return 0;
 }
-
+    
 // ================== MALLOC FAMILY: THREAD-SAFE ===================
 #define HEAP_SIZE (1024 * 1024)
 #define HEAP_MAGIC 0xC0DECAFE
