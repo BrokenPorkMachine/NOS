@@ -16,7 +16,7 @@ kernel: libc
 	$(CC) $(CFLAGS) -c kernel/n2_main.c -o kernel/n2_main.o
 	$(CC) $(CFLAGS) -c kernel/agent.c -o kernel/agent.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
-	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
+        $(CC) $(CFLAGS) -c src/agents/regx/regx.c -o src/agents/regx/regx.o
 	$(CC) $(CFLAGS) -c kernel/macho2.c -o kernel/macho2.o
 	$(CC) $(CFLAGS) -c kernel/printf.c -o kernel/printf.o
 	$(CC) $(CFLAGS) -c kernel/nosm.c -o kernel/nosm.o
@@ -36,7 +36,7 @@ kernel: libc
 	$(CC) $(CFLAGS) -c kernel/drivers/Net/netstack.c -o kernel/drivers/Net/netstack.o
 	$(CC) $(CFLAGS) -c kernel/drivers/Net/e1000.c -o kernel/drivers/Net/e1000.o
 	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o \
-	kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
+         kernel/agent.o kernel/agent_loader.o src/agents/regx/regx.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
 	kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
 	kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
 	kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
@@ -59,7 +59,7 @@ disk.img: boot kernel
 
 clean:
 	        rm -f kernel/n2_entry.o kernel/n2_main.o kernel/agent.o \
-	            kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/macho2.o kernel/printf.o kernel.bin user/libc/libc.o disk.img \
+                    kernel/nosm.o kernel/agent_loader.o src/agents/regx/regx.o kernel/macho2.o kernel/printf.o kernel.bin user/libc/libc.o disk.img \
 	            kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
 	            kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
 	            kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \

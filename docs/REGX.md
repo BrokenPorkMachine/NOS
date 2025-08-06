@@ -7,8 +7,8 @@ atomic, versioned and auditable.
 
 ## Data Model
 
-Each entry is described by a [`regx_manifest_t`](../include/regx.h) and stored in
-a [`regx_entry_t`](../include/regx.h).  Devices and buses form a hierarchy via
+Each entry is described by a [`regx_manifest_t`](../src/agents/regx/regx.h) and stored in
+a [`regx_entry_t`](../src/agents/regx/regx.h).  Devices and buses form a hierarchy via
 `parent_id` while agents and services are flat.
 
 Key manifest fields:
@@ -28,7 +28,7 @@ Runtime metadata:
 
 ## Kernel API
 
-The kernel exports an API implemented in [`regx.c`](../kernel/regx.c):
+The kernel exports an API implemented in [`regx.c`](../src/agents/regx/regx.c):
 
 ```c
 uint64_t regx_register(const regx_entry_t *entry);
@@ -79,7 +79,8 @@ size_t n = regx_enumerate(&sel, out, 4);
 ## Userland CLI – `regxctl`
 
 `regxctl` exposes registry information to users and scripts.  The CLI obtains
-its data through system calls mirroring the kernel API.
+its data through system calls implemented in [`regx_ipc.c`](../src/agents/regx/regx_ipc.c)
+which mirror the kernel API.
 
 ### Commands
 

@@ -1,4 +1,4 @@
-#include "regx.h"
+#include "regx_ipc.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "list") == 0) {
         regx_entry_t entries[64];
-        size_t n = regx_enumerate(NULL, entries, 64);
+        size_t n = regx_ipc_enumerate(NULL, entries, 64);
         for (size_t i = 0; i < n; ++i)
             printf("%llu %s %s gen=%u state=%d\n",
                    (unsigned long long)entries[i].id,
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
                    entries[i].state);
     } else if (strcmp(argv[1], "query") == 0 && argc >= 3) {
         uint64_t id = strtoull(argv[2], NULL, 0);
-        const regx_entry_t *e = regx_query(id);
+        const regx_entry_t *e = regx_ipc_query(id);
         if (e)
             printf("%llu %s %s gen=%u state=%d\n",
                    (unsigned long long)e->id,
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
                    e->state);
     } else if (strcmp(argv[1], "manifest") == 0 && argc >= 3) {
         uint64_t id = strtoull(argv[2], NULL, 0);
-        const regx_entry_t *e = regx_query(id);
+        const regx_entry_t *e = regx_ipc_query(id);
         if (e)
             printf("id=%llu\nname=%s\ntype=%d\nversion=%s\nabi=%s\ncapabilities=%s\nstate=%d\ngeneration=%u\n",
                    (unsigned long long)e->id,
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
                    e->state,
                    e->generation);
     } else if (strcmp(argv[1], "tree") == 0) {
-        regx_tree(0, 0);
+        regx_ipc_tree(0, 0);
     } else {
         usage();
         return 1;

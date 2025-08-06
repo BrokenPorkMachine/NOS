@@ -14,10 +14,10 @@ enum {
 
 // Runtime state flags
 enum {
-    REGX_STATE_INACTIVE = 0,
-    REGX_STATE_ACTIVE,
-    REGX_STATE_PAUSED,
-    REGX_STATE_ERROR,
+    REGX_STATE_NONE   = 0,
+    REGX_STATE_ACTIVE = 1 << 0,
+    REGX_STATE_PAUSED = 1 << 1,
+    REGX_STATE_ERROR  = 1 << 2,
 };
 
 typedef struct {
