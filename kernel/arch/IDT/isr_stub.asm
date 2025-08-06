@@ -1,10 +1,10 @@
-global isr_default_stub
 global isr_timer_stub
 global isr_keyboard_stub
 global isr_mouse_stub
 global isr_page_fault_stub
 global isr_syscall_stub
 global isr_ipi_stub
+global isr_stub_table
 
 extern isr_default_handler
 extern isr_timer_handler
@@ -14,10 +14,10 @@ extern isr_page_fault_handler
 extern isr_syscall_handler
 extern isr_ipi_handler
 
-; Default handler stub for unexpected interrupts
-isr_default_stub:
+%macro ISR_DEFAULT 1
+global isr_stub_%1
+isr_stub_%1:
     cli
-    ; Save general purpose registers
     push r15
     push r14
     push r13
@@ -34,25 +34,30 @@ isr_default_stub:
     push rcx
     push rax
 
-    ; Vector number unknown, pass 0
+    mov rax, %1
+    push rax          ; int_no
     xor rax, rax
-    push rax
-    ; No error code
-    push rax
-    ; No cr2
-    push rax
+    push rax          ; error code
+    push rax          ; cr2 (unused)
 
-    ; Send EOI in case this was an IRQ
     mov al, 0x20
     out 0x20, al
 
-    ; Call default handler (does not return)
     mov rdi, rsp
     call isr_default_handler
 
-.hang:
+.hang%1:
     hlt
-    jmp .hang
+    jmp .hang%1
+%endmacro
+
+%assign i 0
+%rep 256
+%if i != 32 && i != 33 && i != 44 && i != 14 && i != 0x80 && i != 0xF0
+    ISR_DEFAULT i
+%endif
+%assign i i+1
+%endrep
 
 isr_timer_stub:
     cli
@@ -366,3 +371,26 @@ isr_ipi_stub:
     iretq
 
 section .note.GNU-stack noalloc nobits align=1
+
+section .data
+global isr_stub_table
+isr_stub_table:
+%assign i 0
+%rep 256
+%if i = 32
+    dq isr_timer_stub
+%elif i = 33
+    dq isr_keyboard_stub
+%elif i = 44
+    dq isr_mouse_stub
+%elif i = 14
+    dq isr_page_fault_stub
+%elif i = 0x80
+    dq isr_syscall_stub
+%elif i = 0xF0
+    dq isr_ipi_stub
+%else
+    dq isr_stub_%+i
+%endif
+%assign i i+1
+%endrep
