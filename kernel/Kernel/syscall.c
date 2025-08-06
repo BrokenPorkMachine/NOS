@@ -10,6 +10,26 @@
 int kernel_clock_gettime(int clk_id, struct timespec *tp);
 void *kernel_vm_allocate(uint64_t size);
 
+int kernel_clock_gettime(int clk_id, struct timespec *tp) {
+    if (!tp) return -1;
+    // Example: fake monotonic time
+    static uint64_t ticks = 0;
+    ticks += 10000000; // nanoseconds (10ms per call)
+    tp->tv_sec = ticks / 1000000000ULL;
+    tp->tv_nsec = ticks % 1000000000ULL;
+    return 0;
+}
+
+void *kernel_vm_allocate(uint64_t size) {
+    // Implement page allocation, return user pointer or NULL.
+    // Example: Just static for bootstrapping
+    extern uint8_t _heap[];
+    static size_t used = 0;
+    void *ptr = _heap + used;
+    used += (size + 0xFFF) & ~0xFFF; // page align
+    return ptr;
+}
+
 // --- VGA Output Helper ---
 static uint64_t sys_write_vga(const char *s) {
     volatile uint16_t *vga = (uint16_t *)0xB8000 + 80 * 6;
