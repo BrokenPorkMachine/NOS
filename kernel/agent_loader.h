@@ -19,6 +19,10 @@ agent_format_t detect_agent_format(const void *image, size_t size);
 // Auto-detect and load any supported agent
 int load_agent_auto(const void *image, size_t size);
 
+// Explicit format loader. Useful when the caller already knows the
+// agent type (e.g., built-in images) and wants to skip detection.
+int load_agent(const void *image, size_t size, agent_format_t fmt);
+
 // Format-specific loaders
 int load_agent_elf(const void *image, size_t size);
 int load_agent_macho(const void *image, size_t size);

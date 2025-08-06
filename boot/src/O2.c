@@ -30,6 +30,28 @@ static int memcmp(const void *a, const void *b, size_t n) {
 static size_t strlen(const char *s) { size_t i=0; while(s[i]) ++i; return i; }
 static void strcpy(char *dst, const char *src) { while((*dst++ = *src++)); }
 
+// --- Kernel loading stubs ----------------------------------------------------
+typedef enum { KERNEL_ELF, KERNEL_MACHO, KERNEL_BIN } kernel_type_t;
+
+static kernel_type_t detect_kernel_type(const uint8_t *data, size_t size) {
+    if (size >= 4 && data[0]==0x7F && data[1]=='E' && data[2]=='L' && data[3]=='F')
+        return KERNEL_ELF;
+    if (size >= 4 && ((data[0]==0xCF && data[1]==0xFA && data[2]==0xED && data[3]==0xFE) ||
+                      (data[0]==0xFE && data[1]==0xED && data[2]==0xFA && data[3]==0xCF)))
+        return KERNEL_MACHO;
+    return KERNEL_BIN;
+}
+
+static EFI_STATUS load_elf(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
+    (void)st; (void)image; (void)size; (void)entry; return EFI_SUCCESS;
+}
+static EFI_STATUS load_macho(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
+    (void)st; (void)image; (void)size; (void)entry; return EFI_SUCCESS;
+}
+static EFI_STATUS load_flat(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
+    (void)st; (void)image; (void)size; (void)entry; return EFI_SUCCESS;
+}
+
 // --- Print UINT64 as hex ---
 static void print_hex(EFI_SYSTEM_TABLE *st, uint64_t val) {
     char buf[19] = "0x0000000000000000";
@@ -275,7 +297,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     if (!rsdp) rsdp = find_uefi_config_table(SystemTable, &acpi_guid);
     bi->acpi_rsdp = (uint64_t)(uintptr_t)rsdp;
     if (rsdp) {
-        uint64_t xsdt = 0, rsdt = 0, dsdt = 0;
+        uint64_t xsdt = 0, rsdt = 0;
         if (((uint8_t*)rsdp)[15] >= 2) {
             xsdt = *(uint64_t *)((uint8_t*)rsdp + 24);
             bi->acpi_xsdt = xsdt;
@@ -327,12 +349,13 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     status = SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(fbinfo_t), (void**)&fb);
     if (!EFI_ERROR(status)) {
         if (!EFI_ERROR(find_framebuffer(SystemTable, fb))) {
-            bi->fb.magic = FBINFO_MAGIC;
-            bi->fb.base = fb->base;
-            bi->fb.width = fb->width;
-            bi->fb.height = fb->height;
-            bi->fb.pitch = fb->pitch;
-            bi->fb.bpp = fb->bpp;
+            bi->fb.address = (uint64_t)(uintptr_t)fb->base;
+            bi->fb.width   = fb->width;
+            bi->fb.height  = fb->height;
+            bi->fb.pitch   = fb->pitch;
+            bi->fb.bpp     = fb->bpp;
+            bi->fb.type    = 0;
+            bi->fb.reserved= 0;
         }
     }
 

@@ -56,6 +56,11 @@ char   *strchr(const char *s, int c);
 char   *strcpy(char *dest, const char *src);
 char   *strcat(char *dest, const char *src);
 char   *strstr(const char *haystack, const char *needle);
+void   *memchr(const void *s, int c, size_t n);
+void   *memmem(const void *haystack, size_t haystacklen,
+               const void *needle, size_t needlelen);
+int     snprintf(char *str, size_t size, const char *fmt, ...);
+long    strtol(const char *nptr, char **endptr, int base);
 
 // ===================
 // MEMORY ALLOCATION

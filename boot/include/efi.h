@@ -109,6 +109,7 @@ struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
 // Forward Declarations
 // ====================
 struct EFI_SYSTEM_TABLE; typedef struct EFI_SYSTEM_TABLE EFI_SYSTEM_TABLE;
+typedef struct EFI_CONFIGURATION_TABLE EFI_CONFIGURATION_TABLE;
 struct EFI_BOOT_SERVICES; typedef struct EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
 struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL; typedef struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL; typedef struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
@@ -143,13 +144,13 @@ struct EFI_SYSTEM_TABLE {
     struct EFI_RUNTIME_SERVICES*              RuntimeServices;
     struct EFI_BOOT_SERVICES*                 BootServices;
     UINTN                                     NumberOfTableEntries;
-    VOID*                                     ConfigurationTable;
+    EFI_CONFIGURATION_TABLE*                  ConfigurationTable;
 };
 
-typedef struct {
+struct EFI_CONFIGURATION_TABLE {
     EFI_GUID VendorGuid;
     VOID    *VendorTable;
-} EFI_CONFIGURATION_TABLE;
+};
 
 // ====================
 // Runtime Services table
