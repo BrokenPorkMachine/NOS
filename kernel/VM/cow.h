@@ -1,7 +1,9 @@
 #pragma once
 #include <stdint.h>
 
+#ifndef PAGE_SIZE
 #define PAGE_SIZE 4096
+#endif
 
 /**
  * Initialize the COW system with the total number of page frames.
@@ -38,6 +40,10 @@ void cow_unmark(uint64_t virt);
  * Return 1 if the virtual address is marked COW, 0 otherwise.
  */
 int cow_is_marked(uint64_t virt);
+
+// Allocate and free multiple contiguous pages
+void *alloc_pages(uint32_t pages);
+void free_pages(void *addr, uint32_t pages);
 
 /**
  * (Optional) Called by frame allocator to free a page only if fully unreferenced.
