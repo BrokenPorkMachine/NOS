@@ -1,9 +1,11 @@
 CROSS_COMPILE ?= x86_64-linux-gnu-
+CC := $(CROSS_COMPILE)gcc
+CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD
 
 all: libc kernel boot disk.img
 
 libc:
-	$(CROSS_COMPILE)gcc -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD -c user/libc/libc.c -o user/libc/libc.o
+	$(CC) $(CFLAGS) -c user/libc/libc.c -o user/libc/libc.o
 
 kernel: libc
 	make -C kernel/Kernel CROSS_COMPILE=$(CROSS_COMPILE)
