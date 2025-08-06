@@ -1,6 +1,7 @@
 #include "../nosfs/nosfs_server.h"
 #include "../../libc/libc.h"
 #include "../../../kernel/IPC/ipc.h"
+#include "../../../include/agent.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -13,11 +14,14 @@ int main(void) {
 
     ipc_queue_init(&q); // stubbed helper from libc
 
-    /* Request a directory listing from the NOSFS server.  In a real system the
-     * server's ID would be discovered dynamically. */
+    /* Discover the filesystem agent dynamically and request a directory
+     * listing. */
+    const n2_agent_t *fs = n2_agent_find_capability("filesystem");
+    if (!fs)
+        return 1; /* agent not found */
     msg.type = NOSFS_MSG_LIST;
-    ipc_send(&q, 1, &msg);      // send to filesystem agent with ID 1
-    ipc_receive_blocking(&q, 1, &reply);
+    ipc_send(&q, fs->id, &msg);      // send using agent registry ID
+    ipc_receive_blocking(&q, fs->id, &reply);
 
     if (reply.arg1 > 0) {
         size_t count = reply.arg1;

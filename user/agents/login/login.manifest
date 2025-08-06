@@ -1,0 +1,9 @@
+{
+  "name": "login",
+  "version": "0.1",
+  "description": "User login agent",
+  "entrypoint": "login_server",
+  "capabilities": ["auth", "session"],
+  "permissions": ["ipc_send", "ipc_recv", "tty"],
+  "sandbox": { "profile": "login-default", "max_mem": "32M" }
+}

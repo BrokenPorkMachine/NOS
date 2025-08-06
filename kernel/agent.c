@@ -12,6 +12,7 @@ int n2_agent_register(const n2_agent_t *agent) {
     if (!agent || registry_count >= N2_MAX_AGENTS)
         return -1;
     registry[registry_count] = *agent;
+    registry[registry_count].id = (uint32_t)registry_count;
     registry_count++;
     return 0;
 }
@@ -44,4 +45,15 @@ size_t n2_agent_list(n2_agent_t *out, size_t max) {
     size_t n = registry_count < max ? registry_count : max;
     memcpy(out, registry, n * sizeof(n2_agent_t));
     return n;
+}
+
+const n2_agent_t *n2_agent_find_capability(const char *cap) {
+    if (!cap)
+        return NULL;
+    for (size_t i = 0; i < registry_count; ++i) {
+        const char *man = (const char *)registry[i].manifest;
+        if (man && strstr(man, cap))
+            return &registry[i];
+    }
+    return NULL;
 }

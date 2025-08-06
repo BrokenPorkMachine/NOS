@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>
-#include "../../user/servers/ftp/ftp.h"
+#include "../../user/agents/ftp/ftp.h"
 #include "../../kernel/IPC/ipc.h"
 #include "../../user/libc/libc.h"
 #include "../../kernel/drivers/Net/netstack.h"

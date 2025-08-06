@@ -20,10 +20,10 @@
 * Basic thread and task abstractions
 * Mach-style IPC message passing (prototype queue implementation)
 * Simple secure heap allocator for user-space memory
-* Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode servers
+* Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode agents
 * Minimal network stack with loopback support, IPv4 addressing and ARP replies
-* Credential-driven login server that prints the current IP before launching NitroShell (nsh)
-* Stub VNC, SSH(SCP), and FTP servers that ride on the loopback stack and store files in NOSFS (no real networking yet)
+* Credential-driven login agent that prints the current IP before launching NitroShell (nsh)
+* Stub VNC, SSH(SCP), and FTP agents that ride on the loopback stack and store files in NOSFS (no real networking yet)
 * Experimental copy-on-write paging and basic demand paging
 * Early NUMA node enumeration from bootloader memory map
 * IPC shared memory channels with rights masks
@@ -105,7 +105,7 @@ kernel/              # N2 kernel core and subsystems
     Net/
 user/
   libc/              # Minimal C library for user programs
-  servers/           # User-space services (NOSFS, nsh, etc.)
+  agents/           # User-space agents (NOSFS, nsh, etc.)
 docs/                # Project documentation
 ```
 
@@ -188,7 +188,7 @@ rm -r testdemo
 
 ## Agents & Architecture
 
-See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents (kernel, bootloader, user-mode servers, IPC framework, etc).
+See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents (kernel, bootloader, user-mode agents, IPC framework, etc).
 
 ---
 
