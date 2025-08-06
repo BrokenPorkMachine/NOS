@@ -1,9 +1,125 @@
-# AGENTS.md
+\$1
 
-## NitrOS Agents Architecture
+## Appendix: N2 vs XNU (macOS Kernel)
 
-Welcome to **NitrOS**—the next-generation operating system designed from the ground up for modularity, security, and rapid innovation.
-This document outlines the major *agents* (core components and services) that work together to deliver NitrOS’s reliability, extensibility, and performance.
+Here’s how the N2 kernel of NitrOS is fundamentally different from Apple’s XNU (macOS kernel):
+
+---
+
+### 1. **True Modularity and Agent Architecture**
+
+* **N2:**
+
+  * Modular “agent” architecture: kernel, modules, filesystem, and bootloader are all self-describing, hot-reloadable, and versioned agents.
+  * NOSM modules are signed, manifest-based, introspectable, and designed for easy live upgrades.
+  * Every part of the system exposes a machine-readable manifest and can be queried at runtime.
+* **XNU:**
+
+  * Hybrid monolithic/microkernel, but only some drivers and kexts are loadable.
+  * Kexts are less self-describing, not easily introspectable or upgradable at runtime, and not all kernel functionality is modular.
+
+---
+
+### 2. **Security & Integrity**
+
+* **N2:**
+
+  * Security-first by default: Every agent/module is signed, versioned, and sandboxed.
+  * Manifest-driven privilege and capability declaration for all code loaded into kernel space.
+  * Agents can only do what they declare; everything is least-privilege and auditable.
+* **XNU:**
+
+  * Gatekeeper, kext signing, SIP, and sandboxing exist, but some are optional, retrofitted, or inconsistent across the system.
+
+---
+
+### 3. **Hot Swapping and Live Upgrade**
+
+* **N2:**
+
+  * Any agent or module—including kernel services—can be hot-upgraded, rolled back, or swapped at runtime with zero downtime.
+  * Robust lifecycle management for agents: load, register, upgrade, unload with automatic cleanup.
+* **XNU:**
+
+  * No true hot-patching of core kernel code; kexts can be unloaded/loaded, but not always cleanly or without reboot.
+
+---
+
+### 4. **Discovery & Introspection**
+
+* **N2:**
+
+  * Agent registry and introspection API: userland and other modules can discover, query, and manage all agents, modules, and filesystems at runtime.
+  * Consistent manifest and metadata for all components.
+* **XNU:**
+
+  * No built-in runtime discovery of all kernel services, and userland access is limited.
+
+---
+
+### 5. **Filesystem & Storage**
+
+* **N2:**
+
+  * NitrFS is fully transactional, versioned, atomic, and journaled by design.
+  * Snapshots, deduplication, and rollback are built-in.
+  * Filesystem agent is modular and hot-replaceable, not hardwired.
+* **XNU:**
+
+  * APFS is robust, but some operations aren’t atomic at the OS level, and filesystem drivers are not designed to be hot-swapped.
+
+---
+
+### 6. **Language Neutrality and Future Proofing**
+
+* **N2:**
+
+  * NOSM modules can be written in C, Rust, WebAssembly, or other languages.
+  * Kernel and modules communicate via versioned, introspectable ABIs.
+  * Design supports “kernel containers” for future language or security upgrades.
+* **XNU:**
+
+  * Primarily C and C++, kernel extensions are C-based.
+  * No WASM, no explicit ABI versioning for modules.
+
+---
+
+### 7. **Manifest-Based Everything**
+
+* **N2:**
+
+  * Every agent/module has a manifest (JSON/CBOR/struct) stating its name, version, dependencies, capabilities, permissions, and signature.
+  * Boot, runtime, and security policies are driven by machine-readable manifests—no opaque blobs.
+* **XNU:**
+
+  * Plist files are used for kexts, but manifest-driven runtime and security is not enforced kernel-wide.
+
+---
+
+### 8. **Unified System Design**
+
+* **N2:**
+
+  * O2 bootloader, N2 kernel, NOSM modules, and NitrFS all use a single, unified, extensible system ABI.
+  * All system components communicate and integrate using a discoverable, hot-upgradable model.
+* **XNU:**
+
+  * Mix of Mach APIs, BSD syscalls, and legacy interfaces.
+
+---
+
+#### **Summary Table**
+
+| Feature             | **N2 (NitrOS)**                                  | **XNU (macOS)**          |
+| ------------------- | ------------------------------------------------ | ------------------------ |
+| Modularity          | Agents & manifest modules (NOSM), hot-reloadable | Kexts, some monolithic   |
+| Security            | Signed, sandboxed, manifest-based permissions    | Kext signing, SIP        |
+| Hot Swap            | Yes, for any agent/module                        | No, only kexts, limited  |
+| Filesystem          | Transactional, atomic, hot-swappable (NitrFS)    | APFS, not hot-swap       |
+| Language neutrality | C, Rust, WASM, more                              | C, C++ only              |
+| Discovery           | Registry/introspection for all agents/modules    | None                     |
+| System ABI          | Unified, extensible for all system layers        | Hybrid Mach/BSD/legacy   |
+| Upgrade Model       | Live, atomic, rollback/forward                   | Requires reboot for core |
 
 ---
 
