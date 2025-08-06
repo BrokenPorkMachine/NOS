@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,7 +17,16 @@ enum syscall_num {
     // Add more as needed
 };
 
+// Main syscall dispatcher (in syscall.c)
 uint64_t syscall_handle(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3);
+
+// Kernel helper APIs
+struct timespec {
+    long tv_sec;
+    long tv_nsec;
+};
+int kernel_clock_gettime(int clk_id, struct timespec *tp);
+void *kernel_vm_allocate(uint64_t size);
 
 #ifdef __cplusplus
 }
