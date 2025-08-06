@@ -32,13 +32,13 @@ void gdt_install(void) {
 
     gdt_set_gate(0, 0, 0, 0, 0);                           // Null
     gdt_set_gate(GDT_SEL_KERNEL_CODE >> 3, 0, 0xFFFFF, 0x9A, 0xA0);
-    gdt_set_gate(GDT_SEL_KERNEL_DATA >> 3, 0, 0xFFFFF, 0x92, 0xA0);
+    gdt_set_gate(GDT_SEL_KERNEL_DATA >> 3, 0, 0xFFFFF, 0x92, 0x80);
     gdt_set_gate(GDT_SEL_RING1_CODE >> 3,  0, 0xFFFFF, 0x9A | 0x20, 0xA0);
-    gdt_set_gate(GDT_SEL_RING1_DATA >> 3,  0, 0xFFFFF, 0x92 | 0x20, 0xA0);
+    gdt_set_gate(GDT_SEL_RING1_DATA >> 3,  0, 0xFFFFF, 0x92 | 0x20, 0x80);
     gdt_set_gate(GDT_SEL_RING2_CODE >> 3,  0, 0xFFFFF, 0x9A | 0x40, 0xA0);
-    gdt_set_gate(GDT_SEL_RING2_DATA >> 3,  0, 0xFFFFF, 0x92 | 0x40, 0xA0);
+    gdt_set_gate(GDT_SEL_RING2_DATA >> 3,  0, 0xFFFFF, 0x92 | 0x40, 0x80);
     gdt_set_gate(GDT_SEL_USER_CODE >> 3,   0, 0xFFFFF, 0x9A | 0x60, 0xA0);
-    gdt_set_gate(GDT_SEL_USER_DATA >> 3,   0, 0xFFFFF, 0x92 | 0x60, 0xA0);
+    gdt_set_gate(GDT_SEL_USER_DATA >> 3,   0, 0xFFFFF, 0x92 | 0x60, 0x80);
 
     gdt_flush((uint64_t)&gp);
 }
