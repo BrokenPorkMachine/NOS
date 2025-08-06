@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <time.h>
+#include <pthread.h>
 
 // ================== STRING AND MEMORY ===================
 void *memset(void *s, int c, size_t n) {
