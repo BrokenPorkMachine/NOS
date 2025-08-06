@@ -335,5 +335,5 @@ time_t time(time_t *t) {
     return ts.tv_sec;
 }
 
-// ================== FILE I/O (NitrFS) ===================
+// ================== FILE I/O (NOSFS) ===================
 // ... (Insert your FILE I/O implementation here) ...

@@ -2,8 +2,8 @@
 #include "../../libc/libc.h"
 #include "../pkg/pkg.h"
 #include "../update/update.h"
-#include "../nitrfs/nitrfs.h"
-#include "../nitrfs/server.h"
+#include "../../include/nosfs.h"
+#include "../nosfs/nosfs_server.h"
 #include "../../../kernel/drivers/IO/tty.h"
 #include <stdint.h>
 #include <stddef.h>
@@ -15,21 +15,21 @@
 static void putc_out(char c) { tty_putc(c); }
 static void puts_out(const char *s) { tty_write(s); }
 
-static char cwd[NITRFS_NAME_LEN] = "";
+static char cwd[NOSFS_NAME_LEN] = "";
 
-static void build_path(const char *name, char out[NITRFS_NAME_LEN]) {
+static void build_path(const char *name, char out[NOSFS_NAME_LEN]) {
     if (name[0] == '/') {
-        strncpy(out, name + 1, NITRFS_NAME_LEN - 1);
-        out[NITRFS_NAME_LEN - 1] = '\0';
+        strncpy(out, name + 1, NOSFS_NAME_LEN - 1);
+        out[NOSFS_NAME_LEN - 1] = '\0';
         return;
     }
     size_t len = strlen(cwd);
-    strncpy(out, cwd, NITRFS_NAME_LEN - 1);
-    out[NITRFS_NAME_LEN - 1] = '\0';
-    if (len && len < NITRFS_NAME_LEN - 1)
+    strncpy(out, cwd, NOSFS_NAME_LEN - 1);
+    out[NOSFS_NAME_LEN - 1] = '\0';
+    if (len && len < NOSFS_NAME_LEN - 1)
         out[len++] = '/';
-    strncpy(out + len, name, NITRFS_NAME_LEN - len - 1);
-    out[NITRFS_NAME_LEN - 1] = '\0';
+    strncpy(out + len, name, NOSFS_NAME_LEN - len - 1);
+    out[NOSFS_NAME_LEN - 1] = '\0';
 }
 
 
@@ -94,16 +94,16 @@ static int tokenize(char *line, char *argv[], int max) {
 
 // --- Filesystem IPC helpers ---
 static int find_handle(ipc_queue_t *q, uint32_t self_id, const char *name) {
-    char path[NITRFS_NAME_LEN];
+    char path[NOSFS_NAME_LEN];
     build_path(name, path);
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_LIST;
+    msg.type = NOSFS_MSG_LIST;
     msg.len = 0;
     ipc_send(q, self_id, &msg);
     ipc_receive(q, self_id, &reply);
     for (int i = 0; i < (int)reply.arg1; i++) {
-        char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
-        if (strncmp(n, path, NITRFS_NAME_LEN) == 0)
+        char *n = (char *)reply.data + i * NOSFS_NAME_LEN;
+        if (strncmp(n, path, NOSFS_NAME_LEN) == 0)
             return i;
     }
     return -1;
@@ -112,11 +112,11 @@ static int find_handle(ipc_queue_t *q, uint32_t self_id, const char *name) {
 // --- Commands ---
 static void cmd_ls(ipc_queue_t *q, uint32_t self_id) {
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_LIST; msg.len = 0;
+    msg.type = NOSFS_MSG_LIST; msg.len = 0;
     ipc_send(q, self_id, &msg);
     ipc_receive(q, self_id, &reply);
     for (int i = 0; i < (int)reply.arg1; i++) {
-        const char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
+        const char *n = (char *)reply.data + i * NOSFS_NAME_LEN;
         size_t pref = strlen(cwd);
         if (pref && strncmp(n, cwd, pref) != 0)
             continue;
@@ -130,7 +130,7 @@ static void cmd_cat(ipc_queue_t *q, uint32_t self_id, const char *name) {
     int h = find_handle(q, self_id, name);
     if (h < 0) { puts_out("not found\n"); return; }
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_READ; msg.arg1 = h; msg.arg2 = 0;
+    msg.type = NOSFS_MSG_READ; msg.arg1 = h; msg.arg2 = 0;
     msg.len = IPC_MSG_DATA_MAX;
     ipc_send(q, self_id, &msg);
     ipc_receive(q, self_id, &reply);
@@ -140,11 +140,11 @@ static void cmd_cat(ipc_queue_t *q, uint32_t self_id, const char *name) {
     putc_out('\n');
 }
 static void cmd_create(ipc_queue_t *q, uint32_t self_id, const char *name) {
-    char path[NITRFS_NAME_LEN];
+    char path[NOSFS_NAME_LEN];
     build_path(name, path);
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_CREATE; msg.arg1 = IPC_MSG_DATA_MAX;
-    msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
+    msg.type = NOSFS_MSG_CREATE; msg.arg1 = IPC_MSG_DATA_MAX;
+    msg.arg2 = NOSFS_PERM_READ | NOSFS_PERM_WRITE;
     size_t len = strlen(path);
     if (len > IPC_MSG_DATA_MAX - 1)
         len = IPC_MSG_DATA_MAX - 1;
@@ -161,7 +161,7 @@ static void cmd_write(ipc_queue_t *q, uint32_t self_id, const char *name, const 
     ipc_message_t msg = {0}, reply = {0};
     size_t len = strlen(data);
     if (len > IPC_MSG_DATA_MAX) len = IPC_MSG_DATA_MAX;
-    msg.type = NITRFS_MSG_WRITE; msg.arg1 = h; msg.arg2 = 0;
+    msg.type = NOSFS_MSG_WRITE; msg.arg1 = h; msg.arg2 = 0;
     memcpy(msg.data, data, len); msg.len = len;
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     puts_out(reply.arg1 == 0 ? "ok\n" : "error\n");
@@ -170,7 +170,7 @@ static void cmd_rm(ipc_queue_t *q, uint32_t self_id, const char *name) {
     int h = find_handle(q, self_id, name);
     if (h < 0) { puts_out("not found\n"); return; }
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_DELETE; msg.arg1 = h; msg.len = 0;
+    msg.type = NOSFS_MSG_DELETE; msg.arg1 = h; msg.len = 0;
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     puts_out(reply.arg1 == 0 ? "deleted\n" : "error\n");
 }
@@ -178,9 +178,9 @@ static void cmd_mv(ipc_queue_t *q, uint32_t self_id, const char *old, const char
     int h = find_handle(q, self_id, old);
     if (h < 0) { puts_out("not found\n"); return; }
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_RENAME;
+    msg.type = NOSFS_MSG_RENAME;
     msg.arg1 = h;
-    char path[NITRFS_NAME_LEN];
+    char path[NOSFS_NAME_LEN];
     build_path(new, path);
     size_t len = strlen(path);
     if (len > IPC_MSG_DATA_MAX - 1)
@@ -197,7 +197,7 @@ static void cmd_crc(ipc_queue_t *q, uint32_t self_id, const char *name) {
     int h = find_handle(q, self_id, name);
     if (h < 0) { puts_out("not found\n"); return; }
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_CRC; msg.arg1 = h; msg.len = 0;
+    msg.type = NOSFS_MSG_CRC; msg.arg1 = h; msg.len = 0;
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     if (reply.arg1 != 0) { puts_out("error\n"); return; }
     char buf[9];
@@ -211,14 +211,14 @@ static void cmd_verify(ipc_queue_t *q, uint32_t self_id, const char *name) {
     int h = find_handle(q, self_id, name);
     if (h < 0) { puts_out("not found\n"); return; }
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_VERIFY; msg.arg1 = h; msg.len = 0;
+    msg.type = NOSFS_MSG_VERIFY; msg.arg1 = h; msg.len = 0;
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     puts_out(reply.arg1 == 0 ? "ok\n" : "fail\n");
 }
 
 static void cmd_cd(ipc_queue_t *q, uint32_t self_id, const char *path) {
     (void)q; (void)self_id;
-    char new[NITRFS_NAME_LEN];
+    char new[NOSFS_NAME_LEN];
     if (path[0] == '/' && path[1] == '\0') {
         cwd[0] = '\0';
         return;
@@ -226,7 +226,7 @@ static void cmd_cd(ipc_queue_t *q, uint32_t self_id, const char *path) {
     build_path(path, new);
     size_t len = strlen(new);
     if (len && new[len-1] != '/') {
-        if (len >= NITRFS_NAME_LEN-1) { puts_out("path too long\n"); return; }
+        if (len >= NOSFS_NAME_LEN-1) { puts_out("path too long\n"); return; }
         new[len] = '/'; new[len+1] = '\0';
     }
     if (find_handle(q, self_id, new) < 0) { puts_out("no such dir\n"); return; }
@@ -234,15 +234,15 @@ static void cmd_cd(ipc_queue_t *q, uint32_t self_id, const char *path) {
 }
 
 static void cmd_mkdir(ipc_queue_t *q, uint32_t self_id, const char *name) {
-    char path[NITRFS_NAME_LEN];
+    char path[NOSFS_NAME_LEN];
     build_path(name, path);
     size_t len = strlen(path);
-    if (len >= NITRFS_NAME_LEN-1) { puts_out("name too long\n"); return; }
+    if (len >= NOSFS_NAME_LEN-1) { puts_out("name too long\n"); return; }
     if (path[len-1] != '/') { path[len] = '/'; path[len+1] = '\0'; }
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_CREATE; msg.arg1 = 0; // zero capacity
-    msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
-    strlcpy((char *)msg.data, path, NITRFS_NAME_LEN);
+    msg.type = NOSFS_MSG_CREATE; msg.arg1 = 0; // zero capacity
+    msg.arg2 = NOSFS_PERM_READ | NOSFS_PERM_WRITE;
+    strlcpy((char *)msg.data, path, NOSFS_NAME_LEN);
     msg.len = strlen((char *)msg.data);
     ipc_send(q, self_id, &msg); ipc_receive(q, self_id, &reply);
     puts_out(reply.arg1 == 0 ? "created\n" : "error\n");

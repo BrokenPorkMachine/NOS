@@ -65,7 +65,7 @@ This roadmap outlines the core phases and milestones for building NitrOS—the n
 
 ---
 
-## **4. NitrFS Filesystem Agent**
+## **4. NOSFS Filesystem Agent**
 
 * **Goal:**
   Build the next-gen transactional, versioned filesystem for NitrOS:
@@ -75,10 +75,10 @@ This roadmap outlines the core phases and milestones for building NitrOS—the n
   * Pluggable as a NOSM agent; discoverable and upgradable.
 * **Milestones:**
 
-  * [ ] NitrFS format and spec
+  * [ ] NOSFS format and spec
   * [ ] Minimal block device & in-memory FS
   * [ ] Transactional core logic
-  * [ ] Userland utility (nitrfsctl)
+  * [ ] Userland utility (nosfsctl)
   * [ ] Snapshots and rollback support
   * [ ] Integration with agent discovery and agent registry
 
