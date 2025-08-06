@@ -46,6 +46,8 @@ typedef struct {
     uint64_t size;
     char     name[64];
     uint8_t  sha256[32];
+    uint64_t manifest_addr;
+    uint64_t manifest_size;
 } bootinfo_module_t;
 
 typedef struct {
