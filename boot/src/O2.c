@@ -55,14 +55,14 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // Secure Boot check
     UINT8 secure = 0; UINTN ssz = sizeof(secure);
-    bool (void)secure_boot = false;
+    bool secure_boot = false;
     EFI_STATUS status = SystemTable->RuntimeServices->GetVariable(
         L"SecureBoot", (EFI_GUID*)&gEfiGlobalVariableGuid, NULL, &ssz, &secure);
     if (EFI_ERROR(status) || secure == 0) {
         print_ascii(SystemTable, "[O2] Secure Boot disabled\r\n");
     } else {
         print_ascii(SystemTable, "[O2] Secure Boot enabled\r\n");
-        secure_boot = true;
+        (void)secure_boot = true;
     }
 
     EFI_LOADED_IMAGE_PROTOCOL *loaded;
