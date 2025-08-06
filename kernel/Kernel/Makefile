@@ -37,6 +37,7 @@ OBJS = \
     ../arch/GDT/user.o \
     elf.o \
     nitromod.o \
+    module.o \
     syscall.o \
     ../IPC/ipc.o \
     ../IPC/sharedmem.o \
