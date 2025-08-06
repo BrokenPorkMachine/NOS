@@ -38,14 +38,58 @@ int n2_syscall_register(uint32_t num, syscall_fn_t fn) {
 
 /* --- Sandboxing -------------------------------------------------------- */
 /* In a real kernel this would configure MPU/MMU permissions, IPC handles, etc.
- * Here it is a stub documenting intent. */
+ * This simplified version merely parses the agent manifest and rejects
+ * unknown capabilities or permissions to illustrate least‑privilege policy. */
+static int token_allowed(const char *tok, const char *const list[], size_t n)
+{
+    for (size_t i = 0; i < n; ++i)
+        if (strcmp(tok, list[i]) == 0)
+            return 1;
+    return 0;
+}
+
+static void enforce_field(const n2_agent_t *agent, const char *field,
+                          const char *const allowed[], size_t allowed_cnt)
+{
+    const char *p = strstr((const char *)agent->manifest, field);
+    if (!p)
+        return; /* field not present, default deny handled by caller */
+    p += strlen(field);
+    while (*p) {
+        size_t len = strcspn(p, ",");
+        if (len == 0)
+            break;
+        if (len >= 32)
+            len = 31;
+        char tok[32];
+        memcpy(tok, p, len);
+        tok[len] = '\0';
+        if (strchr(tok, '='))
+            break; /* reached next field */
+        if (!token_allowed(tok, allowed, allowed_cnt)) {
+            n2_agent_unregister(agent->name);
+            return;
+        }
+        p += len;
+        if (*p == ',')
+            p++;
+    }
+}
+
 static void sandbox_agent(const n2_agent_t *agent,
                           const bootinfo_module_t *mod) {
-    (void)agent; (void)mod;
-    /*
-     * TODO: parse agent->manifest for capability and permission fields and
-     *       enforce least‑privilege policies here.
-     */
+    (void)mod;
+    static const char *const cap_list[] = {
+        "filesystem", "snapshot", "rollback", "network", "audio", "video"
+    };
+    static const char *const perm_list[] = {
+        "read_disk", "write_disk", "net", "io"
+    };
+
+    enforce_field(agent, "capabilities=", cap_list,
+                  sizeof(cap_list) / sizeof(cap_list[0]));
+    enforce_field(agent, "permissions=", perm_list,
+                  sizeof(perm_list) / sizeof(perm_list[0]));
 }
 
 /* --- Module loading helpers ------------------------------------------- */

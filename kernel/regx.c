@@ -5,8 +5,16 @@
  * primitives. */
 typedef int spinlock_t;
 static spinlock_t regx_lock;
-static void lock(spinlock_t *l)   { (void)l; /* stub */ }
-static void unlock(spinlock_t *l) { (void)l; }
+static void lock(spinlock_t *l)
+{
+    while (__sync_lock_test_and_set(l, 1)) {
+        /* spin */
+    }
+}
+static void unlock(spinlock_t *l)
+{
+    __sync_lock_release(l);
+}
 
 static regx_entry_t registry[REGX_MAX_ENTRIES];
 static size_t registry_count;

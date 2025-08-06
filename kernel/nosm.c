@@ -2,11 +2,9 @@
 #include "agent.h"
 #include <string.h>
 #include <stdint.h>
-
-/* Optional memory protection constants */
-#define NOSM_FLAG_R 0x1
-#define NOSM_FLAG_W 0x2
-#define NOSM_FLAG_X 0x4
+#ifndef KERNEL_BUILD
+#include <sys/mman.h>
+#endif
 
 /*
  * nosm_load - load a NOSM module image already present in memory.
@@ -49,7 +47,15 @@ void *nosm_load(const void *image, size_t size)
         void *dest = (void *)(uintptr_t)s->vaddr;
         const void *src = data + s->offset;
         memcpy(dest, src, (size_t)s->size);
-        /* TODO: apply memory permissions according to s->flags */
+#ifndef KERNEL_BUILD
+        int prot = 0;
+        if (s->flags & NOSM_FLAG_R) prot |= PROT_READ;
+        if (s->flags & NOSM_FLAG_W) prot |= PROT_WRITE;
+        if (s->flags & NOSM_FLAG_X) prot |= PROT_EXEC;
+        mprotect(dest, (size_t)s->size, prot);
+#else
+        (void)dest; (void)s; /* Kernel would configure page tables here */
+#endif
     }
 
     void (*entry)(void) = (void (*)(void))(base + hdr->entry);
