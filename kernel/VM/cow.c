@@ -76,8 +76,9 @@ void handle_page_fault(uint64_t err, uint64_t addr) {
         // simple demand paging: allocate zero page
         void *page = alloc_page();
         if (page) {
-            memset(page, 0, PAGE_SIZE);
-            paging_map(virt, (uint64_t)page, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+            paging_map(virt, (uint64_t)page,
+                       PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+            memset((void*)virt, 0, PAGE_SIZE);
             cow_inc_ref((uint64_t)page);
             return;
         }
@@ -89,10 +90,10 @@ void handle_page_fault(uint64_t err, uint64_t addr) {
             memcpy(newp, (void*)phys, PAGE_SIZE);
             cow_dec_ref(phys);
             cow_inc_ref((uint64_t)newp);
-            paging_map(virt, (uint64_t)newp, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+            paging_map(virt, (uint64_t)newp,
+                       PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
         } else {
             cow_unmark(virt);
-            paging_map(virt, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
         }
         return;
     }
