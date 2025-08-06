@@ -1,6 +1,7 @@
 #include "regx.h"
 #include <string.h>
 #include <stddef.h>
+#include <stdio.h>
 
 static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
 static size_t regx_count = 0;
