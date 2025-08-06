@@ -27,6 +27,17 @@ static inline int bit_test(uint64_t bit) {
     return (bitmap[bit_byte(bit)] & bit_mask(bit)) != 0;
 }
 
+static void reserve_range(uint64_t start, uint64_t end) {
+    uint64_t s = start / PAGE_SIZE;
+    uint64_t e = (end + PAGE_SIZE - 1) / PAGE_SIZE;
+    for (uint64_t f = s; f < e && f < total_frames; ++f) {
+        if (!bit_test(f)) {
+            bit_set(f);
+            free_frames--;
+        }
+    }
+}
+
 void pmm_init(const bootinfo_t *bootinfo) {
     uint64_t max_addr = 0;
     for (uint32_t i = 0; i < bootinfo->mmap_entries; ++i) {
@@ -64,12 +75,16 @@ void pmm_init(const bootinfo_t *bootinfo) {
             bit_clear(f);
         free_frames += (e - s);
     }
-    for (uint64_t f = 0; f < total_frames && f < 512; ++f) {
-        if (!bit_test(f))
-            free_frames--;
-        bit_set(f);
-    }
-    next_free = (total_frames > 512) ? 512 : total_frames;
+    reserve_range(0, bootinfo->kernel_load_base);
+    reserve_range(bootinfo->kernel_load_base,
+                  bootinfo->kernel_load_base + bootinfo->kernel_load_size);
+    for (uint32_t i = 0; i < bootinfo->module_count; ++i)
+        reserve_range((uint64_t)bootinfo->modules[i].base,
+                      (uint64_t)bootinfo->modules[i].base + bootinfo->modules[i].size);
+
+    next_free = 0;
+    while (next_free < total_frames && bit_test(next_free))
+        next_free++;
 }
 
 void *alloc_page(void) {
