@@ -3,6 +3,33 @@
 #include <string.h>
 #include <stdio.h>
 
+// Minimal libc replacements so the kernel build does not depend on external
+// libraries.  These provide deterministic time and realloc implementations.
+static time_t nitrfs_time(time_t *t) {
+    static time_t current = 0;
+    if (t)
+        *t = current;
+    return current++;
+}
+
+static void *nitrfs_realloc(void *ptr, size_t size) {
+    if (!ptr)
+        return malloc(size);
+    if (size == 0) {
+        free(ptr);
+        return NULL;
+    }
+    void *new_ptr = malloc(size);
+    if (new_ptr) {
+        memcpy(new_ptr, ptr, size);
+        free(ptr);
+    }
+    return new_ptr;
+}
+
+#define time    nitrfs_time
+#define realloc nitrfs_realloc
+
 // ---------- Journal for normal operations ----------
 #define NITRFS_JOURNAL_MAX 32
 typedef struct {

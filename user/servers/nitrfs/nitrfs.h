@@ -4,7 +4,20 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <time.h>
+
+// Use pthreads when the header is available; otherwise provide no-op stubs so
+// the filesystem can build without the pthread library.  This keeps the kernel
+// build freestanding while allowing host unit tests to use real pthread locks.
+#if __has_include(<pthread.h>)
 #include <pthread.h>
+#else
+typedef int pthread_mutex_t;
+typedef int pthread_mutexattr_t;
+static inline int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a) { (void)m; (void)a; return 0; }
+static inline int pthread_mutex_lock(pthread_mutex_t *m) { (void)m; return 0; }
+static inline int pthread_mutex_unlock(pthread_mutex_t *m) { (void)m; return 0; }
+static inline int pthread_mutex_destroy(pthread_mutex_t *m) { (void)m; return 0; }
+#endif
 
 #define NITRFS_MAX_FILES    16
 #define NITRFS_NAME_LEN     32
