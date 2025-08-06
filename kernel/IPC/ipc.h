@@ -7,6 +7,10 @@
 #define IPC_MSG_DATA_MAX 64
 #define IPC_QUEUE_SIZE   16
 
+// Health check message types
+#define IPC_HEALTH_PING 0x1000
+#define IPC_HEALTH_PONG 0x1001
+
 // Capability flags
 #define IPC_CAP_SEND 0x1
 #define IPC_CAP_RECV 0x2

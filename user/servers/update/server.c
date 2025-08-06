@@ -11,6 +11,13 @@ void update_server(ipc_queue_t *update_q, ipc_queue_t *pkg_q, uint32_t self_id) 
             continue;
         memset(&reply, 0, sizeof(reply));
         reply.type = msg.type;
+
+        // Health check ping handler
+        if (msg.type == IPC_HEALTH_PING) {
+            reply.type = IPC_HEALTH_PONG;
+            ipc_send(update_q, self_id, &reply);
+            continue;
+        }
         switch (msg.type) {
         case UPDATE_MSG_KERNEL: {
             ipc_message_t pmsg = {0}, prep = {0};

@@ -24,9 +24,9 @@ extern ipc_queue_t pkg_queue;
 extern ipc_queue_t upd_queue;
 
 // --------- Service thread wrappers -----------
-static void login_thread(void)  { login_server(NULL, thread_self()); }
-static void vnc_thread(void)    { vnc_server(NULL, thread_self()); }
-static void ssh_thread(void)    { ssh_server(NULL, thread_self()); }
+static void login_thread(void)  { login_server(&fs_queue, thread_self()); }
+static void vnc_thread(void)    { vnc_server(&fs_queue, thread_self()); }
+static void ssh_thread(void)    { ssh_server(&fs_queue, thread_self()); }
 static void nitrfs_thread(void) { nitrfs_server(&fs_queue, thread_self()); }
 static void ftp_thread(void)    { ftp_server(&fs_queue, thread_self()); }
 static void pkg_thread(void)    { pkg_server(&pkg_queue, thread_self()); }
@@ -41,26 +41,29 @@ static ipc_queue_t *ftp_grants[]     = { &fs_queue };
 static ipc_queue_t *pkg_grants[]     = { &pkg_queue };
 static ipc_queue_t *update_grants[]  = { &upd_queue, &pkg_queue };
 
-// --------- Health check IPC protocol (adapt to your system) ----------
-#define IPC_HEALTH_PING  0x1000
-#define IPC_HEALTH_PONG  0x1001
-#define HEALTH_TIMEOUT_MS 10
+// --------- Health check IPC protocol ----------
+#define HEALTH_RETRIES 1000
 
-typedef struct {
-    uint32_t src;
-    uint32_t dest;
-    uint32_t type;
-    uint32_t value;
-    void *data;
-    size_t len;
-} ipc_msg_t;
+static uint32_t init_tid = 0;
 
-// --------- IPC ping helper (blocking wait for pong or timeout) ----------
-static int ipc_ping(uint32_t tid) {
-    ipc_send(tid, IPC_HEALTH_PING, 0, 0, NULL, 0);
-    ipc_msg_t reply;
-    int ok = ipc_recv_timeout(&reply, HEALTH_TIMEOUT_MS);
-    return (ok && reply.type == IPC_HEALTH_PONG);
+// Send a ping to a service and wait briefly for a pong response.
+static int ipc_ping(ipc_queue_t *q, uint32_t svc_tid) {
+    if (!q)
+        return 0;
+    ipc_message_t ping = {0};
+    ping.type = IPC_HEALTH_PING;
+    if (ipc_send(q, init_tid, &ping) != 0)
+        return 0;
+
+    for (int i = 0; i < HEALTH_RETRIES; ++i) {
+        ipc_message_t reply = {0};
+        if (ipc_receive(q, init_tid, &reply) == 0) {
+            if (reply.type == IPC_HEALTH_PONG && reply.sender == svc_tid)
+                return 1;
+        }
+        thread_yield();
+    }
+    return 0;
 }
 
 // --------- Service Descriptor Struct ----------
@@ -134,8 +137,12 @@ static int spawn_service(size_t i) {
 // --------- Health check: IPC ping ----------
 static int service_healthcheck(size_t i) {
     thread_t *t = service_state[i].t;
-    if (!t || !thread_is_alive(t)) return 0;
-    return ipc_ping(t->id);
+    if (!t || !thread_is_alive(t))
+        return 0;
+    ipc_queue_t *q = NULL;
+    if (services[i].num_grants > 0)
+        q = services[i].grant_queues[0];
+    return ipc_ping(q, t->id);
 }
 
 // --------- Periodic Health Check and Respawn ----------
@@ -169,7 +176,8 @@ static void health_check_and_respawn(void) {
 
 // --------- Main Init Entrypoint ----------
 void init_main(ipc_queue_t *q, uint32_t self_id) {
-    (void)q; (void)self_id;
+    (void)q;
+    init_tid = self_id;
 
     serial_puts("[init] reading service config...\n");
     apply_service_config();

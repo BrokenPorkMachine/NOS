@@ -12,6 +12,13 @@ void pkg_server(ipc_queue_t *q, uint32_t self_id) {
             continue;
         memset(&reply, 0, sizeof(reply));
         reply.type = msg.type;
+
+        // Health check ping handler
+        if (msg.type == IPC_HEALTH_PING) {
+            reply.type = IPC_HEALTH_PONG;
+            ipc_send(q, self_id, &reply);
+            continue;
+        }
         switch (msg.type) {
         case PKG_MSG_INSTALL:
             msg.data[msg.len] = '\0';

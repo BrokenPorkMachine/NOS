@@ -3,6 +3,7 @@
 #include "../../../kernel/Task/thread.h"
 #include "../../../kernel/drivers/Net/netstack.h"
 #include <string.h>
+#include "../../../kernel/IPC/ipc.h"
 
 // Port used for SSH traffic on the loopback stack
 #define SSH_PORT 2
@@ -14,7 +15,6 @@ static void trim_newline(char *s) {
 }
 
 void ssh_server(ipc_queue_t *q, uint32_t self_id) {
-    (void)q; (void)self_id;
     serial_puts("[ssh] SSH server starting\n");
     int sock = net_socket_open(SSH_PORT, NET_SOCK_STREAM);
     const char banner[] = "NOS SSH\r\n";
@@ -24,6 +24,17 @@ void ssh_server(ipc_queue_t *q, uint32_t self_id) {
     thread_yield();
     char buf[128];
     for (;;) {
+        // Check for health ping
+        if (q) {
+            ipc_message_t hmsg, hrep = {0};
+            if (ipc_receive(q, self_id, &hmsg) == 0 && hmsg.type == IPC_HEALTH_PING) {
+                hrep.type = IPC_HEALTH_PONG;
+                ipc_send(q, self_id, &hrep);
+                thread_yield();
+                continue;
+            }
+        }
+
         int n = net_socket_recv(sock, buf, sizeof(buf) - 1);
         if (n > 0) {
             buf[n] = '\0';
