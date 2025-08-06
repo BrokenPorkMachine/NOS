@@ -14,8 +14,6 @@ typedef enum {
     /* other types … */
 } regx_type_t;
 
-size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max);
-
 /* Registry entry types */
 #define REGX_TYPE_ANY        0
 #define REGX_TYPE_DEVICE     1
