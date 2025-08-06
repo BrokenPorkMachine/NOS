@@ -307,22 +307,21 @@ char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
 int clock_gettime(int clk_id, struct timespec *tp) {
     if (!tp) return -1;
     long ret;
-    // Try kernel syscall first
+    // Kernel syscall: cast all args to long (pointers!) for x86_64
     asm volatile("mov %1, %%rax; mov %2, %%rdi; mov %3, %%rsi; int $0x80; mov %%rax, %0"
-    : "=r"(ret)
-    : "r"((long)SYS_CLOCK_GETTIME), "r"((long)clk_id), "r"((long)(uintptr_t)tp)
-    : "rax", "rdi", "rsi");
+        : "=r"(ret)
+        : "r"((long)SYS_CLOCK_GETTIME), "r"((long)clk_id), "r"((long)(uintptr_t)tp)
+        : "rax", "rdi", "rsi");
     if (ret == 0) return 0;
-    // Fallback: monotonic TSC or incrementing fake time
-    static uint64_t fake_ticks = 0;
 #if defined(__x86_64__)
     uint64_t tsc_lo, tsc_hi;
     __asm__ volatile ("rdtsc" : "=a"(tsc_lo), "=d"(tsc_hi));
     uint64_t tsc = ((uint64_t)tsc_hi << 32) | tsc_lo;
-    uint64_t freq = 3000000000ULL; // Default to 3 GHz
+    uint64_t freq = 3000000000ULL; // 3 GHz default
     tp->tv_sec = tsc / freq;
     tp->tv_nsec = ((tsc % freq) * 1000000000ULL) / freq;
 #else
+    static uint64_t fake_ticks = 0;
     fake_ticks += 10000000;
     tp->tv_sec = fake_ticks / 1000000000ULL;
     tp->tv_nsec = fake_ticks % 1000000000ULL;
@@ -331,10 +330,11 @@ int clock_gettime(int clk_id, struct timespec *tp) {
 }
 
 time_t time(time_t *t) {
-    struct timespec ts;
+    struct timespec ts = {0, 0};
     clock_gettime(0, &ts);
     if (t) *t = ts.tv_sec;
     return ts.tv_sec;
+}
 }
 
 // ================== FILE I/O (NitrFS) ===================
