@@ -51,9 +51,60 @@ isr_stub_%1:
     jmp .hang%1
 %endmacro
 
+%macro ISR_ERROR 1
+global isr_stub_%1
+isr_stub_%1:
+    cli
+    push r15
+    push r14
+    push r13
+    push r12
+    push r11
+    push r10
+    push r9
+    push r8
+    push rdi
+    push rsi
+    push rbp
+    push rbx
+    push rdx
+    push rcx
+    push rax
+
+    mov rax, [rsp + 120]    ; fetch hardware error code
+    mov rbx, [rsp + 128]    ; move RIP up to cover error code slot
+    mov [rsp + 120], rbx
+    mov rbx, [rsp + 136]
+    mov [rsp + 128], rbx
+    mov rbx, [rsp + 144]
+    mov [rsp + 136], rbx
+    mov rbx, [rsp + 152]
+    mov [rsp + 144], rbx
+    mov rbx, [rsp + 160]
+    mov [rsp + 152], rbx
+
+    mov rcx, %1
+    push rcx               ; int_no
+    push rax               ; error code
+    xor rax, rax
+    push rax               ; cr2 (unused)
+
+    mov al, 0x20
+    out 0x20, al
+
+    mov rdi, rsp
+    call isr_default_handler
+
+.hang_err%1:
+    hlt
+    jmp .hang_err%1
+%endmacro
+
 %assign i 0
 %rep 256
-%if i != 32 && i != 33 && i != 44 && i != 14 && i != 0x80 && i != 0xF0
+%if i = 8 || i = 10 || i = 11 || i = 12 || i = 13 || i = 17
+    ISR_ERROR i
+%elif i != 32 && i != 33 && i != 44 && i != 14 && i != 0x80 && i != 0xF0
     ISR_DEFAULT i
 %endif
 %assign i i+1
