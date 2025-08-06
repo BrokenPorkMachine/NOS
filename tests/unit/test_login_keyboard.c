@@ -5,7 +5,7 @@
 #include "../../kernel/IPC/ipc.h"
 #include "../../user/libc/libc.h"
 #include "../../kernel/drivers/IO/tty.h"
-#include "../../user/servers/login/login.h"
+#include "../../user/agents/login/login.h"
 
 static const char *input = "admin\nadmin\n";
 static size_t pos = 0;

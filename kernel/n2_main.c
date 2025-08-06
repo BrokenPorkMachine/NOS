@@ -86,17 +86,6 @@ size_t n2_agent_enumerate(n2_agent_t *out, size_t max) {
 
 /* Trivial capability query: manifests are assumed to be UTF‑8 strings listing
  * capabilities separated by commas. */
-const n2_agent_t *n2_agent_find_capability(const char *cap) {
-    n2_agent_t tmp[N2_MAX_AGENTS];
-    size_t n = n2_agent_list(tmp, N2_MAX_AGENTS);
-    for (size_t i = 0; i < n; ++i) {
-        const char *man = (const char *)tmp[i].manifest;
-        if (man && cap && strstr(man, cap))
-            return n2_agent_get(tmp[i].name);
-    }
-    return NULL;
-}
-
 /* --- Scheduler loop --------------------------------------------------- */
 static void scheduler_loop(void) {
     while (1) {
