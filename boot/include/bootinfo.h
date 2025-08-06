@@ -5,6 +5,7 @@
 #define BOOTINFO_MAGIC_UEFI 0x4E49545255454649ULL // "NITRUEFI"
 #define BOOTINFO_MAX_MMAP 128
 #define BOOTINFO_MAX_SEGS 32
+#define BOOTINFO_MAX_MODULES 16
 #define KERNEL_FMT_ELF64 1
 #define KERNEL_FMT_MACHO64 2
 
@@ -41,6 +42,13 @@ typedef struct {
 } bootinfo_kernel_segments_t;
 
 typedef struct {
+    uint64_t base;
+    uint64_t size;
+    char     name[64];
+    uint8_t  sha256[32];
+} bootinfo_module_t;
+
+typedef struct {
     uint64_t magic;
     uint64_t size;
     char*    bootloader_name;
@@ -53,6 +61,8 @@ typedef struct {
     void*    framebuffer;
     void*    kernel_entry;
     bootinfo_kernel_segments_t kernel_segs;
+    uint32_t module_count;
+    bootinfo_module_t modules[BOOTINFO_MAX_MODULES];
     uint8_t  reserved[256];
 } bootinfo_t;
 

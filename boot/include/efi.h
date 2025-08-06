@@ -3,7 +3,17 @@
 
 #include <stddef.h> // for NULL
 
+#ifdef __GNUC__
+#define EFIAPI __attribute__((ms_abi))
+#else
+#define EFIAPI
+#endif
+
 #define EFI_FILE_MODE_READ      0x0000000000000001ULL
+#define EFI_FILE_DIRECTORY      0x0000000000000010ULL
+
+#define EFI_ERROR(x)            ((x) != EFI_SUCCESS)
+#define EFI_SECURITY_VIOLATION  ((EFI_STATUS)0x800000000000001e)
 
 // ====================
 // Basic UEFI Types
@@ -98,12 +108,13 @@ struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
 // ====================
 // Forward Declarations
 // ====================
-struct EFI_SYSTEM_TABLE;
-struct EFI_BOOT_SERVICES;
-struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
-struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
-struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
-struct EFI_FILE_PROTOCOL;
+struct EFI_SYSTEM_TABLE; typedef struct EFI_SYSTEM_TABLE EFI_SYSTEM_TABLE;
+struct EFI_BOOT_SERVICES; typedef struct EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
+struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL; typedef struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
+struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL; typedef struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
+struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL; typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
+struct EFI_FILE_PROTOCOL; typedef struct EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
+typedef struct EFI_MEMORY_DESCRIPTOR EFI_MEMORY_DESCRIPTOR;
 
 // ====================
 // EFI_TABLE_HEADER
@@ -139,6 +150,35 @@ typedef struct {
     EFI_GUID VendorGuid;
     VOID    *VendorTable;
 } EFI_CONFIGURATION_TABLE;
+
+// ====================
+// Runtime Services table
+// ====================
+struct EFI_RUNTIME_SERVICES {
+    EFI_TABLE_HEADER Hdr;
+
+    /* Time Services */
+    EFI_STATUS (*GetTime)(EFI_TIME*, UINT32*);
+    EFI_STATUS (*SetTime)(EFI_TIME*);
+    EFI_STATUS (*GetWakeupTime)(UINT8*, UINT8*, EFI_TIME*);
+    EFI_STATUS (*SetWakeupTime)(UINT8, UINT8, EFI_TIME*);
+
+    /* Virtual Memory Services */
+    EFI_STATUS (*SetVirtualAddressMap)(UINTN, UINTN, UINT32, EFI_MEMORY_DESCRIPTOR*);
+    EFI_STATUS (*ConvertPointer)(UINTN, VOID**);
+
+    /* Variable Services */
+    EFI_STATUS (*GetVariable)(CHAR16*, EFI_GUID*, UINT32*, UINTN*, VOID*);
+    EFI_STATUS (*GetNextVariableName)(UINTN*, CHAR16*, EFI_GUID*);
+    EFI_STATUS (*SetVariable)(CHAR16*, EFI_GUID*, UINT32, UINTN, VOID*);
+
+    /* Miscellaneous Services */
+    EFI_STATUS (*GetNextHighMonotonicCount)(UINT32*);
+    VOID (*ResetSystem)(UINT32, EFI_STATUS, UINTN, VOID*);
+    EFI_STATUS (*UpdateCapsule)(VOID**, UINTN, EFI_PHYSICAL_ADDRESS);
+    EFI_STATUS (*QueryCapsuleCapabilities)(VOID**, UINTN, UINT64*, UINT32*);
+    EFI_STATUS (*QueryVariableInfo)(UINT32, UINT64*, UINT64*, UINT64*);
+};
 
 // ====================
 // Boot Services table (ordered as in UEFI spec)
@@ -377,6 +417,10 @@ static const EFI_GUID gEfiLoadedImageProtocolGuid =
 static const EFI_GUID gEfiFileInfoGuid =
     { 0x09576e92, 0x6d3f, 0x11d2, { 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
 
+static const EFI_GUID gEfiGlobalVariableGuid =
+    { 0x8be4df61, 0x93ca, 0x11d2,
+      { 0xaa, 0x0d, 0x00, 0xe0, 0x98, 0x03, 0x2b, 0x8c } };
+
 typedef struct EFI_LOADED_IMAGE_PROTOCOL {
     UINT32     Revision;
     EFI_HANDLE ParentHandle;
@@ -391,13 +435,14 @@ typedef struct EFI_LOADED_IMAGE_PROTOCOL {
 // ====================
 // EFI_MEMORY_DESCRIPTOR
 // ====================
-typedef struct {
+struct EFI_MEMORY_DESCRIPTOR {
     UINT32                Type;
     EFI_PHYSICAL_ADDRESS  PhysicalStart;
     EFI_PHYSICAL_ADDRESS  VirtualStart;
     UINT64                NumberOfPages;
     UINT64                Attribute;
-} EFI_MEMORY_DESCRIPTOR;
+};
+typedef struct EFI_MEMORY_DESCRIPTOR EFI_MEMORY_DESCRIPTOR;
 
 // ====================
 // NULL Definition (if not included from stddef.h)
