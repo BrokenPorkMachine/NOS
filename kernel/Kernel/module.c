@@ -1,7 +1,6 @@
 #include "module.h"
 #include "elf.h"
 #include <stdint.h>
-#include "../../user/libc/libc.h" // for memcpy/memset if needed
 
 int kernel_load_module(const void *image, size_t size) {
     (void)size; // size currently unused but kept for future checks

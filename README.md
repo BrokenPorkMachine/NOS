@@ -8,7 +8,7 @@
 
 ## Features
 
-* Custom UEFI bootloader (no GRUB, no 3rd-party loaders)
+* O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
 * True x86\_64 long mode kernel
 * Four-ring GDT layout (rings 0–3; user/kernel split)
 * Full paging and memory protection (NX, SMEP, SMAP)
@@ -50,7 +50,7 @@
    ```
 3. **Prepare boot image:**
 
-   * Create a FAT-formatted image and copy `BOOTX64.EFI` (bootloader) and `kernel.bin`:
+* Create a FAT-formatted image and copy `BOOTX64.EFI` (O2 Boot Agent) and `kernel.bin`:
 
    ```sh
    mkfs.vfat -C disk.img 4096
@@ -85,7 +85,7 @@
 ## Directory Structure
 
 ```
-boot/                # UEFI bootloader source
+boot/                # O2 Boot Agent UEFI bootloader source
 kernel/              # Kernel core and subsystems
   Kernel/            # Core kernel code
   Task/              # Threading and context switching
@@ -176,7 +176,7 @@ rm -r testdemo
 
 ## How It Works
 
-1. **UEFI bootloader** loads the kernel from `/EFI/BOOT/kernel.bin` into RAM and jumps to its entry point in long mode.
+1. **O2 Boot Agent** loads the kernel from `/EFI/BOOT/kernel.bin` (and any `.nosm` modules) into RAM and jumps to its entry point in long mode.
 2. **Kernel** sets up the GDT, paging, IDT, and enables timer IRQ.
 3. **Threads** and **user tasks** are created, with kernel-mode and user-mode stacks and code.
 4. **Preemptive scheduling** happens via timer interrupt, with context switching between threads/tasks.
