@@ -5,6 +5,29 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// Minimal ELF64 definitions
+typedef struct {
+    unsigned char e_ident[16];
+    uint16_t e_type, e_machine;
+    uint32_t e_version;
+    uint64_t e_entry;
+    uint64_t e_phoff;
+    uint64_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx;
+} Elf64_Ehdr;
+
+typedef struct {
+    uint32_t p_type;
+    uint32_t p_flags;
+    uint64_t p_offset;
+    uint64_t p_vaddr;
+    uint64_t p_paddr;
+    uint64_t p_filesz;
+    uint64_t p_memsz;
+    uint64_t p_align;
+} Elf64_Phdr;
+
 static void *memcpy(void *dst, const void *src, size_t n) {
     uint8_t *d = dst; const uint8_t *s = src; while (n--) *d++ = *s++; return dst;
 }
