@@ -4,12 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
-
-typedef struct {
-    volatile int lock;
-    uint32_t owner;
-    int count;
-} pthread_mutex_t;
+#include <pthread.h>
 
 typedef void* pthread_mutexattr_t;
 
