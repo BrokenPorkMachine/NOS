@@ -5,7 +5,7 @@
 #include "agent.h"
 #include <nosm.h>
 #include "agent_loader.h"
-#include "regx.h"
+#include "../src/agents/regx/regx.h"
 #include "drivers/IO/serial.h"
 #include "drivers/IO/video.h"
 #include "drivers/IO/tty.h"
