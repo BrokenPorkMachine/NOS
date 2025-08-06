@@ -1,5 +1,8 @@
-#include "cow.h"
+#include "paging.h"
+#include "pmm.h"
+#include "../drivers/IO/serial.h"
 #include "../../user/libc/libc.h"
+#include "cow.h"
 
 // Static state for all frames in the system
 static uint16_t *refcounts = NULL;
@@ -41,6 +44,33 @@ uint16_t cow_refcount(uint64_t phys) {
     uint64_t frame = phys / PAGE_SIZE;
     if (frame < frames) return refcounts[frame];
     return 0;
+}
+
+void *alloc_pages(uint32_t pages) {
+    if (pages == 0)
+        return NULL;
+    uint64_t base = (uint64_t)alloc_page();
+    if (!base)
+        return NULL;
+    for (uint32_t i = 1; i < pages; ++i) {
+        uint64_t addr = (uint64_t)alloc_page();
+        if (!addr || addr != base + i * PAGE_SIZE) {
+            if (addr)
+                free_page((void*)addr);
+            for (uint32_t j = 0; j < i; ++j)
+                free_page((void*)(base + j * PAGE_SIZE));
+            return NULL;
+        }
+    }
+    return (void*)base;
+}
+
+void free_pages(void *addr, uint32_t pages) {
+    if (!addr)
+        return;
+    uint64_t base = (uint64_t)addr;
+    for (uint32_t i = 0; i < pages; ++i)
+        free_page((void*)(base + i * PAGE_SIZE));
 }
 
 // Get the frame index for a VA, or -1 if not mapped
