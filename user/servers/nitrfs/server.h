@@ -13,11 +13,9 @@ enum {
     NITRFS_MSG_LIST,         // List files  (no args)
     NITRFS_MSG_CRC,          // Compute CRC (arg1=handle)
     NITRFS_MSG_VERIFY,       // Verify CRC  (arg1=handle)
-    // Add new messages above this line if needed.
-    NITRFS_MSG_RESERVED      // Not used: for forward compatibility!
+    NITRFS_MSG_RESERVED
 };
 
-// Server entry point: call from main thread/task.
 void nitrfs_server(ipc_queue_t *q, uint32_t self_id);
 
 #endif // NITRFS_SERVER_H
