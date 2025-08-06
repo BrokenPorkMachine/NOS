@@ -219,12 +219,14 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // Secure Boot check
     UINT8 secure = 0; UINTN ssz = sizeof(secure);
+    bool secure_boot = false;
     EFI_STATUS status = SystemTable->RuntimeServices->GetVariable(
         L"SecureBoot", (EFI_GUID*)&gEfiGlobalVariableGuid, NULL, &ssz, &secure);
     if (EFI_ERROR(status) || secure == 0) {
         print_ascii(SystemTable, "[O2] Secure Boot disabled\r\n");
     } else {
         print_ascii(SystemTable, "[O2] Secure Boot enabled\r\n");
+        secure_boot = true;
     }
 
     EFI_LOADED_IMAGE_PROTOCOL *loaded;
@@ -254,8 +256,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     status = load_file(SystemTable, root, L"\\kernel.bin", &kernel, &ksize);
     if (EFI_ERROR(status)) return status;
     uint8_t ksig[32];
-    status = verify_signature(SystemTable, root, L"\\kernel.bin.sig", kernel, ksize, ksig);
-    if (EFI_ERROR(status)) return status;
+    if (secure_boot) {
+        status = verify_signature(SystemTable, root, L"\\kernel.bin.sig", kernel, ksize, ksig);
+        if (EFI_ERROR(status)) return status;
+    } else {
+        compute_sha256(kernel, ksize, ksig);
+    }
     bi->kernel_entry = kernel;
     bi->kernel_segs.file_base = (uint64_t)(uintptr_t)kernel;
     bi->kernel_segs.file_size = ksize;
@@ -283,8 +289,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         sigpath[flen+3] = L'g';
         sigpath[flen+4] = 0;
         uint8_t hash[32];
-        status = verify_signature(SystemTable, root, sigpath, mod, msz, hash);
-        if (EFI_ERROR(status)) { SystemTable->BootServices->FreePool(mod); continue; }
+        if (secure_boot) {
+            status = verify_signature(SystemTable, root, sigpath, mod, msz, hash);
+            if (EFI_ERROR(status)) { SystemTable->BootServices->FreePool(mod); continue; }
+        } else {
+            compute_sha256(mod, msz, hash);
+        }
         bootinfo_module_t *m = &bi->modules[bi->module_count];
         m->base = (uint64_t)(uintptr_t)mod;
         m->size = msz;
