@@ -2,6 +2,16 @@
 #include <string.h>
 #include <stdio.h>
 
+__attribute__((section("__O2INFO,__manifest")))
+const char mo2_manifest[] =
+"{\n"
+"  \"name\": \"regx\",\n"
+"  \"type\": \"service\",\n"
+"  \"version\": \"1.0.0\",\n"
+"  \"abi\": \"regx-v1\",\n"
+"  \"entry\": \"regx_main\"\n"
+"}\n";
+
 static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
 static size_t regx_count = 0;
 static uint64_t regx_next_id = 1;
