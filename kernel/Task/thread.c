@@ -10,24 +10,27 @@
 #define STACK_SIZE 8192
 #endif
 
-// Zombie list to track exited threads
+#define THREAD_MAGIC 0x74687264UL
+
+// Zombie list to track exited threads for reaping
 static thread_t *zombie_list = NULL;
 
-// Per‑CPU run queue pointers
+// Per-CPU run queue pointers
 thread_t *current_cpu[MAX_CPUS] = {0};
 static thread_t *tail_cpu[MAX_CPUS] = {0};
 
-// Next thread ID
+// Next thread ID (atomic in SMP, for now single-core-safe)
 static int next_id = 1;
 
 // Main thread stub (represents kernel_main)
 static thread_t main_thread;
 
+// IPC queues for servers (exposed globally)
 ipc_queue_t fs_queue;
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
 
-// Convert unsigned integer to decimal string (for logging)
+// Utility: Convert unsigned int to decimal string (for logging)
 static void utoa_dec(uint32_t val, char *buf) {
     char tmp[20];
     int i = 0, j = 0;
@@ -45,12 +48,13 @@ static void utoa_dec(uint32_t val, char *buf) {
     buf[j] = 0;
 }
 
-// Thread trampoline: invoked once per new thread
+// --- Thread trampoline ---
+// Runs each new thread's function, marks exited, yields forever
 __attribute__((used)) static void thread_start(void (*f)(void)) {
-    f(); // run the user function
-    thread_t *cur = current_cpu[smp_cpu_index()];
+    f(); // Run user function
+    thread_t *cur = thread_current();
     cur->state = THREAD_EXITED;
-    thread_yield(); // yield back to scheduler
+    thread_yield(); // Never returns
     for (;;) __asm__ volatile("hlt");
 }
 
@@ -70,16 +74,17 @@ thread_t *thread_current(void) {
 
 // Return ID of currently running thread
 uint32_t thread_self(void) {
-    return thread_current()->id;
+    thread_t *t = thread_current();
+    return t ? t->id : 0;
 }
 
-// Internal: add a thread to the zombie list for safe deletion
+// Add a thread to the zombie list for safe deletion
 static void add_to_zombie_list(thread_t *t) {
     t->next = zombie_list;
     zombie_list = t;
 }
 
-// Create a new thread with a specific priority
+// Create a new thread with specified priority
 thread_t *thread_create_with_priority(void (*func)(void), int priority) {
     if (priority < MIN_PRIORITY) priority = MIN_PRIORITY;
     if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
@@ -87,6 +92,7 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
     thread_t *t = malloc(sizeof(thread_t));
     if (!t) return NULL;
 
+    t->magic = THREAD_MAGIC;
     t->stack = malloc(STACK_SIZE);
     if (!t->stack) {
         free(t);
@@ -141,40 +147,40 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
 
 // Create a new thread with default (mid-level) priority
 thread_t *thread_create(void (*func)(void)) {
-    // Default priority: halfway between MIN_PRIORITY and MAX_PRIORITY
-    return thread_create_with_priority(func, (MAX_PRIORITY - MIN_PRIORITY) / 2);
+    return thread_create_with_priority(func, (MAX_PRIORITY + MIN_PRIORITY) / 2);
 }
 
-// Block a thread and reschedule
+// Mark thread as blocked, invoke scheduler if it is current
 void thread_block(thread_t *t) {
+    if (!t || t->magic != THREAD_MAGIC) return;
     char buf[20];
     serial_puts("[thread] block id=");
     utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
     t->state = THREAD_BLOCKED;
-    if (t == current_cpu[smp_cpu_index()])
+    if (t == thread_current())
         schedule();
 }
 
-// Unblock a thread (mark ready).  Pre‑empt if higher priority
+// Unblock a thread and pre-empt if higher prio
 void thread_unblock(thread_t *t) {
+    if (!t || t->magic != THREAD_MAGIC) return;
     char buf[20];
     serial_puts("[thread] unblock id=");
     utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
     t->state = THREAD_READY;
-    thread_t *cur = current_cpu[smp_cpu_index()];
+    thread_t *cur = thread_current();
     if (t->priority > cur->priority && cur->state == THREAD_RUNNING)
         schedule();
 }
 
-// Check whether a thread has not yet exited
+// Returns 1 if thread is not exited and pointer valid
 int thread_is_alive(thread_t *t) {
-    return t && t->state != THREAD_EXITED;
+    return t && t->magic == THREAD_MAGIC && t->state != THREAD_EXITED;
 }
 
-// Terminate a thread and remove it from the run queue
+// Kill a thread (remove from runqueue, mark as exited)
 void thread_kill(thread_t *t) {
-    if (!t) return;
-
+    if (!t || t->magic != THREAD_MAGIC) return;
     char buf[20];
     serial_puts("[thread] kill id=");
     utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
@@ -202,16 +208,16 @@ void thread_kill(thread_t *t) {
     add_to_zombie_list(t);
 }
 
-// Cooperatively yield CPU to another ready thread
+// Yield CPU to another ready thread
 void thread_yield(void) {
     char buf[20];
-    thread_t *cur = current_cpu[smp_cpu_index()];
+    thread_t *cur = thread_current();
     serial_puts("[thread] yield id=");
     utoa_dec(cur->id, buf); serial_puts(buf); serial_puts("\n");
     schedule();
 }
 
-// Free any exited threads (zombies)
+// Free all zombie threads
 static void thread_reap(void) {
     thread_t *t = zombie_list;
     zombie_list = NULL;
@@ -221,12 +227,13 @@ static void thread_reap(void) {
         serial_puts("[thread] free id=");
         utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
         if (t->stack) free(t->stack);
+        t->magic = 0;
         free(t);
         t = next;
     }
 }
 
-// Pick the next ready thread with the highest priority
+// Pick next ready thread with highest priority (round-robin among equals)
 static thread_t *pick_next(int cpu) {
     thread_t *start = current_cpu[cpu];
     thread_t *t = start;
@@ -249,7 +256,7 @@ static thread_t *pick_next(int cpu) {
     return best;
 }
 
-// The main scheduler (also used by yield/block/unblock)
+// Main scheduler (invoked by yield, block, unblock, etc)
 void schedule(void) {
     uint64_t rflags;
     // Save rflags and disable interrupts
@@ -258,11 +265,11 @@ void schedule(void) {
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
 
-    // Mark the current thread as ready if it was running
+    // Mark current as ready if it was running
     if (prev->state == THREAD_RUNNING)
         prev->state = THREAD_READY;
 
-    // Find the highest priority ready thread
+    // Pick next ready thread
     thread_t *next = pick_next(cpu);
 
     if (!next) {
@@ -292,35 +299,23 @@ void schedule(void) {
     // Restore saved rflags
     ((uint64_t *)prev->rsp)[6] = rflags;
 
-    // If the previous thread exited, add it to the zombie list
+    // If previous thread exited, add to zombies
     if (prev->state == THREAD_EXITED)
         add_to_zombie_list(prev);
 
-    // Free any zombie threads
     thread_reap();
 }
 
-// Scheduler entry from interrupt context
+// Scheduler entry from ISR context (interrupt/IRQ)
 uint64_t schedule_from_isr(uint64_t *old_rsp) {
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
-
-    // Shape the interrupt frame into the expected layout
-    uint64_t *frame = old_rsp;
-    uint64_t rbp = frame[4];
-    frame[4] = frame[13]; // rbx
-    frame[5] = rbp;       // rbp
-    frame[6] = frame[15]; // rflags
-    frame[7] = frame[17]; // rip
-
-    prev->rsp = (uint64_t)frame;
+    prev->rsp = (uint64_t)old_rsp;
     if (prev->state == THREAD_RUNNING)
         prev->state = THREAD_READY;
 
-    // Pick next ready thread
     thread_t *next = pick_next(cpu);
     if (!next) {
-        // No ready threads; continue running current
         current_cpu[cpu] = prev;
         prev->state = THREAD_RUNNING;
         return (uint64_t)old_rsp;
@@ -343,42 +338,44 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
     return next->rsp;
 }
 
-// Thread system init
+// System thread startup: create and start init server
 static void thread_init_func(void) {
     serial_puts("[init] init server started\n");
     init_main(&fs_queue, thread_current()->id);
-    // init_main never returns; keep yielding if it did
-    for (;;) thread_yield();
+    for (;;) thread_yield(); // Should never return
 }
 
+// Initialize threading system
 void threads_init(void) {
     ipc_init(&fs_queue);
     ipc_init(&pkg_queue);
     ipc_init(&upd_queue);
 
-    // Create init server with high but not max priority
+    // Create init server (userland server thread)
     thread_t *t = thread_create_with_priority(thread_init_func, 200);
     if (!t) {
         serial_puts("[thread] FATAL: cannot create init server\n");
         for (;;) __asm__ volatile("hlt");
     }
 
-    // Grant capabilities to init server
+    // Grant all capabilities to init
     ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
-    // Set up the main kernel thread so it can yield safely
+    // Set up main kernel thread so it can yield safely
+    main_thread.magic = THREAD_MAGIC;
     main_thread.id      = 0;
     main_thread.func    = NULL;
     main_thread.stack   = NULL;
     main_thread.state   = THREAD_RUNNING;
     main_thread.started = 1;
-    main_thread.priority = MIN_PRIORITY; // Lowest priority: other threads can pre‑empt
+    main_thread.priority = MIN_PRIORITY;
 
     int cpu = smp_cpu_index();
     main_thread.next = current_cpu[cpu];
-    tail_cpu[cpu]->next = &main_thread;
+    if (tail_cpu[cpu])
+        tail_cpu[cpu]->next = &main_thread;
     tail_cpu[cpu] = &main_thread;
     current_cpu[cpu] = &main_thread;
 }
