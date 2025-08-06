@@ -310,10 +310,10 @@ static void cmd_help(void) {
     puts_out("  help      - show this message\n");
 }
 
-// --- Shell main loop ---
-void shell_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_t self_id) {
+// --- NitroShell main loop ---
+void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_t self_id) {
     tty_clear();
-    puts_out("NOS shell ready\n");
+    puts_out("NitroShell ready\n");
     puts_out("type 'help' for commands\n");
     char line[80]; char *argv[4];
     for (;;) {

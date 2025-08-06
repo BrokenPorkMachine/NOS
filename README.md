@@ -22,7 +22,7 @@
 * Simple secure heap allocator for user-space memory
 * Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode servers
 * Minimal network stack with loopback support, IPv4 addressing and ARP replies
-* Credential-driven login server that prints the current IP before launching the shell
+* Credential-driven login server that prints the current IP before launching NitroShell (nsh)
 * Stub VNC, SSH(SCP), and FTP servers that ride on the loopback stack and store files in NOSFS (no real networking yet)
 * Experimental copy-on-write paging and basic demand paging
 * Early NUMA node enumeration from bootloader memory map
@@ -105,7 +105,7 @@ kernel/              # N2 kernel core and subsystems
     Net/
 user/
   libc/              # Minimal C library for user programs
-  servers/           # User-space services (NOSFS, shell, etc.)
+  servers/           # User-space services (NOSFS, nsh, etc.)
 docs/                # Project documentation
 ```
 
@@ -114,20 +114,20 @@ docs/                # Project documentation
 ## User Environment
 
 NitrOS boots directly into a minimal set of user-mode services. A small
-shell task communicates with the **NOSFS** filesystem server purely
+NitroShell task communicates with the **NOSFS** filesystem server purely
 through IPC to showcase how higher level applications will interact with
 the kernel and each other.
 
-### Shell Commands
+### NitroShell Commands
 
-When the shell starts it prints:
+When NitroShell starts it prints:
 
 ```
-NOS shell ready
+NitroShell ready
 type 'help' for commands
 ```
 
-The shell understands a handful of simple text commands. Examples:
+NitroShell understands a handful of simple text commands. Examples:
 
 ```
 > create hello.txt
@@ -153,7 +153,7 @@ Available commands include:
 
 ### File System Navigation
 
-Once the shell exposes these common commands you can move around the
+Once NitroShell exposes these common commands you can move around the
 NOSFS directory structure similarly to a regular Unix environment. A
 typical session might look like:
 
@@ -200,7 +200,7 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 * [x] Basic IPC primitives (prototype)
 * [x] NOSFS filesystem server (block storage capable)
 * [ ] Window server and networking agents
-* [x] Shell and developer tools (prototype shell)
+* [x] NitroShell and developer tools (prototype)
 
 ---
 

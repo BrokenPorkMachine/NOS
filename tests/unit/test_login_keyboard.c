@@ -47,10 +47,10 @@ void video_clear(uint32_t color) { (void)color; }
 static int yield_count = 0;
 void thread_yield(void) { yield_count++; }
 
-static int shell_started = 0;
-void shell_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_t self_id) {
+static int nsh_started = 0;
+void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_t self_id) {
     (void)fs_q; (void)pkg_q; (void)upd_q; (void)self_id;
-    shell_started = 1;
+    nsh_started = 1;
 }
 
 int main(void) {
@@ -60,7 +60,7 @@ int main(void) {
     assert(current_session.active);
     assert(current_session.uid == 0);
     assert(strcmp((const char*)current_session.username, "admin") == 0);
-    assert(shell_started);
+    assert(nsh_started);
     assert(yield_count > 0);
     return 0;
 }

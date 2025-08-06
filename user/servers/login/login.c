@@ -2,7 +2,7 @@
 #include "../../../kernel/drivers/IO/tty.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../libc/libc.h"
-#include "../shell/shell.h"
+#include "../nsh/nsh.h"
 #include "../../../kernel/drivers/Net/netstack.h"
 #include "../../../kernel/IPC/ipc.h"
 #include <stddef.h>
@@ -167,6 +167,6 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
         }
     }
 
-    puts_out("[login] starting shell\n");
-    shell_main(&fs_queue, &pkg_queue, &upd_queue, self_id);
+    puts_out("[login] starting nsh\n");
+    nsh_main(&fs_queue, &pkg_queue, &upd_queue, self_id);
 }
