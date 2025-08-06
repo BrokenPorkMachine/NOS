@@ -31,7 +31,7 @@ Runtime metadata:
 The kernel exports an API implemented in [`regx.c`](../kernel/regx.c):
 
 ```c
-int regx_register(const regx_entry_t *entry);
+uint64_t regx_register(const regx_entry_t *entry);
 int regx_unregister(uint64_t id);
 int regx_update(uint64_t id, const regx_entry_t *delta);
 const regx_entry_t *regx_query(uint64_t id);
@@ -65,13 +65,12 @@ regx_entry_t fs = {
                   .capabilities = "filesystem,snapshot" },
     .state = REGX_STATE_ACTIVE
 };
-regx_register(&fs);
+uint64_t id = regx_register(&fs);
 ```
 
 Another agent can discover it:
 ```c
-regx_selector_t sel = { .type = REGX_TYPE_FILESYSTEM,
-                         .capability = "snapshot" };
+regx_selector_t sel = { .type = REGX_TYPE_FILESYSTEM };
 regx_entry_t out[4];
 size_t n = regx_enumerate(&sel, out, 4);
 ```
