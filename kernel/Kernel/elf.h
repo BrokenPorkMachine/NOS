@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Minimal ELF64 structures for loader
+// --- Minimal ELF64 structures for loader ---
 
 typedef struct {
     unsigned char e_ident[16];
@@ -32,7 +32,10 @@ typedef struct {
     uint64_t p_align;
 } Elf64_Phdr;
 
-// Validate ELF image. Returns 0 on success.
+// --- ELF loader API ---
+
+// Validate ELF image. Returns 0 on success, -1 on failure.
 int elf_validate(const void *image);
+
 // Load ELF image into memory and return entry point, or NULL on failure.
 void *elf_load(const void *image);
