@@ -1,13 +1,27 @@
-#pragma once
+#ifndef LIBC_H
+#define LIBC_H
+
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
 
-#ifdef __cplusplus
-extern "C" {
+#if __has_include(<pthread.h>)
+#include <pthread.h>
+#else
+typedef struct {
+    volatile int lock;
+    uint32_t owner;
+    int count;
+} pthread_mutex_t;
+typedef void* pthread_mutexattr_t;
+
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
+int pthread_mutex_lock(pthread_mutex_t *mutex);
+int pthread_mutex_unlock(pthread_mutex_t *mutex);
+int pthread_mutex_destroy(pthread_mutex_t *mutex);
 #endif
 
-// --- Memory and String ---
+// String/mem functions
 void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
@@ -22,60 +36,23 @@ char *strcpy(char *dest, const char *src);
 char *strcat(char *dest, const char *src);
 char *strstr(const char *haystack, const char *needle);
 
-void *malloc(size_t size);
-void *calloc(size_t nmemb, size_t size);
-void free(void *ptr);
-void *realloc(void *ptr, size_t size);
-void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen);
-char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen);
-
-// --- File I/O ---
-typedef struct {
-    int handle;
-    unsigned int pos;
-} FILE;
-
-#define SEEK_SET 0
-#define SEEK_CUR 1
-#define SEEK_END 2
-
-FILE *fopen(const char *path, const char *mode);
-size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
-size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
-int fclose(FILE *stream);
-int rename(const char *old, const char *new);
-long ftell(FILE *stream);
-int fseek(FILE *stream, long offset, int whence);
-
-// --- Math ---
+// Math
 int abs(int x);
 long labs(long x);
 long long llabs(long long x);
 double sqrt(double x);
 
-// --- System ---
+// System call wrappers (these are for your kernel ABI)
 int fork(void);
 int exec(const char *path);
 void *sbrk(long inc);
 
-// --- Time ---
+// Safe checked memops
+void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen);
+char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen);
+
+// Time
 int clock_gettime(int clk_id, struct timespec *tp);
 time_t time(time_t *t);
 
-// --- Pthread Mutex ---
-typedef struct {
-    volatile int lock;
-    uint32_t owner;
-    int count;
-} pthread_mutex_t;
-
-typedef void* pthread_mutexattr_t;
-
-int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
-int pthread_mutex_lock(pthread_mutex_t *mutex);
-int pthread_mutex_unlock(pthread_mutex_t *mutex);
-int pthread_mutex_destroy(pthread_mutex_t *mutex);
-
-#ifdef __cplusplus
-}
-#endif
+#endif // LIBC_H
