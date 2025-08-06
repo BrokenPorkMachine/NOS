@@ -234,13 +234,20 @@ static void thread_reap(void) {
 }
 
 // Pick next ready thread with highest priority (round-robin among equals)
+// By default the scheduler includes the currently running thread when
+// selecting the "best" candidate. This caused `thread_yield()` to often pick
+// the same thread again if it had a higher priority, preventing other ready
+// threads from ever running. To implement cooperative yielding we walk the
+// run queue starting *after* the current thread and stop once we circle back
+// to it. The current thread is therefore never considered and will only be
+// chosen again if no other thread is ready.
 static thread_t *pick_next(int cpu) {
     thread_t *start = current_cpu[cpu];
-    thread_t *t = start;
+    thread_t *t = start->next; // begin search at the next thread
     thread_t *best = NULL;
     char buf[32];
-    do {
-        t = t->next;
+
+    while (t != start) {
         serial_puts("[sched] consider id=");
         utoa_dec(t->id, buf); serial_puts(buf);
         serial_puts(" state=");
@@ -248,11 +255,14 @@ static thread_t *pick_next(int cpu) {
         serial_puts(" prio=");
         utoa_dec(t->priority, buf); serial_puts(buf);
         serial_puts("\n");
+
         if (t->state == THREAD_READY) {
             if (!best || t->priority > best->priority)
                 best = t;
         }
-    } while (t != start);
+        t = t->next;
+    }
+
     return best;
 }
 
