@@ -10,51 +10,58 @@ This document outlines the major *agents* (core components and services) that wo
 ## **Agent Types**
 
 * **Boot Agents:**
-  UEFI-based bootloader and pre-kernel loaders.
-* **Kernel Agents:**
-  The microkernel/hybrid kernel, including module loaders, security managers, and core schedulers.
+  UEFI-based bootloader and pre-Nitrous loaders.
+* **Nitrous Kernel Agent:**
+  The Nitrous microNitrous/hybrid Nitrous, including module loaders, security managers, and core schedulers.
 * **Module Agents (NOSM):**
-  Dynamically loadable kernel modules (“NOSM” files), implementing drivers, filesystems, services, and more.
+  Dynamically loadable Nitrous modules (“NOSM” files), implementing drivers, filesystems, services, and more.
 * **Userland Agents:**
-  Privileged system daemons and user processes that interact with the kernel and modules via a secure API.
+  Privileged system daemons and user processes that interact with Nitrous and modules via a secure API.
 * **Filesystem Agents (NitrFS):**
-  Both in-kernel and user-facing utilities for transactional, versioned, and secure storage.
+  Both in-Nitrous and user-facing utilities for transactional, versioned, and secure storage.
+* **Module Agents (NOSM):**
+  Dynamically loadable Nitrous modules (“NOSM” files), implementing drivers, filesystems, services, and more.
+* **Userland Agents:**
+  Privileged system daemons and user processes that interact with the Nitrous and modules via a secure API.
+* **Filesystem Agents (NitrFS):**
+  Both in-Nitrous and user-facing utilities for transactional, versioned, and secure storage.
 
 ---
 
 ## **Core Agents & Responsibilities**
 
-### **1. UEFI Loader Agent**
+### **1. O2 Boot Agent**
 
-* **Role:** Securely loads the NitrOS kernel and all required NOSM modules at boot.
+* **Role:** Securely loads the NitrOS Nitrous and all required NOSM modules at boot.
 * **Responsibilities:**
 
-  * Validate and authenticate all loaded binaries (kernel, modules, boot config).
-  * Pass a complete manifest (“bootinfo”) to the kernel (memory map, modules, config, ACPI, etc).
+  * Validate and authenticate all loaded binaries (Nitrous, modules, boot config).
+  * Pass a complete manifest (“bootinfo”) to the Nitrous (memory map, modules, config, ACPI, etc).
   * Support for fallback and recovery boot.
+  * Provide clear, auditable logs: `[O2] ...`
 
 ---
 
-### **2. Kernel Agent**
+### **2. Nitrous Kernel Agent**
 
-* **Role:** The core execution environment and service coordinator.
+* **Role:** The core execution environment and service coordinator of NitrOS.
 * **Responsibilities:**
 
   * Enforce memory protection, isolation, and resource management.
   * Provide the system call API for userland and module agents.
-  * Load, sandbox, and manage NOSM kernel modules.
+  * Load, sandbox, and manage NOSM Nitrous modules.
   * Expose registry for agent discovery, introspection, and status.
-  * Support hot reloading and live upgrades for kernel modules and agents.
+  * Support hot reloading and live upgrades for Nitrous modules and agents.
 
 ---
 
 ### **3. NOSM Module Agents**
 
-* **Role:** Dynamically extend the kernel with new drivers, filesystems, network stacks, or security logic.
+* **Role:** Dynamically extend the Nitrous with new drivers, filesystems, network stacks, or security logic.
 * **Responsibilities:**
 
   * Must be self-describing, signed, and versioned (`.nosm` format).
-  * Register/unregister themselves with the kernel, exposing their services and interfaces.
+  * Register/unregister themselves with the Nitrous, exposing their services and interfaces.
   * Declare their capabilities, required privileges, dependencies, and API surface in the embedded manifest.
   * Clean up all resources/state on unload to guarantee reliability and security.
   * Support multi-language development (C, Rust, optionally WebAssembly and more).
@@ -63,7 +70,7 @@ This document outlines the major *agents* (core components and services) that wo
 
 ### **4. NitrFS Agent**
 
-* **Role:** Provides next-gen transactional, versioned, and secure filesystem services to kernel and userland.
+* **Role:** Provides next-gen transactional, versioned, and secure filesystem services to Nitrous and userland.
 * **Responsibilities:**
 
   * All operations are atomic, verifiable, and journaled.
@@ -78,7 +85,7 @@ This document outlines the major *agents* (core components and services) that wo
 * **Role:** High-level system daemons and tools (`nosmctl`, `nitrfsctl`, etc), as well as user applications.
 * **Responsibilities:**
 
-  * Interface with the kernel via well-defined syscalls and IPC.
+  * Interface with the Nitrous via well-defined syscalls and IPC.
   * Discover available agents and capabilities dynamically.
   * Support live module loading/unloading and system introspection.
   * Provide UI/CLI/REST access to system status and agent management.
@@ -91,7 +98,7 @@ This document outlines the major *agents* (core components and services) that wo
 * **Security First:**
   All agents/modules are signed, versioned, sandboxed, and capability-scoped by default.
 * **Manifest-Based:**
-  Every agent (kernel, module, userland, FS) must provide a machine-readable manifest for introspection and dependency resolution.
+  Every agent (Nitrous, module, userland, FS) must provide a machine-readable manifest for introspection and dependency resolution.
 * **Hot Reloadable:**
   Agents can be upgraded, swapped, or rolled back live with no downtime.
 * **Introspectable:**
@@ -104,11 +111,11 @@ This document outlines the major *agents* (core components and services) that wo
 ## **Agent Lifecycle**
 
 1. **Discovery:**
-   On boot, UEFI agent discovers all available modules, verifies, and passes to kernel.
+   On boot, UEFI agent discovers all available modules, verifies, and passes to Nitrous.
 2. **Initialization:**
    Kernel agent loads and starts core agents (drivers, filesystems, security, etc).
 3. **Registration:**
-   Each NOSM and Userland Agent registers with the kernel registry and declares its interfaces.
+   Each NOSM and Userland Agent registers with the Nitrous registry and declares its interfaces.
 4. **Operation:**
    Agents cooperate, communicate, and extend the system as needed.
 5. **Upgrade/Unload:**
@@ -153,7 +160,7 @@ AudioDrv     0.1.3      Loaded      audio
 
 ## **Inspiration & Comparison**
 
-* **NOSM** modules = “kexts” (macOS) + “kmods” (Linux) + “WebAssembly for kernel”
+* **NOSM** modules = “kexts” (macOS) + “kmods” (Linux) + “WebAssembly for Nitrous”
 * **NitrFS** is to NitrOS as APFS is to macOS, but more open and introspectable
 * **Agents** are like daemons/services, but are first-class, discoverable, and manageable
 
@@ -170,7 +177,7 @@ To write a new agent:
 
 ---
 
-For more details, see [docs/NOSM.md](docs/NOSM.md), [docs/NitrFS.md](docs/NitrFS.md), and [kernel API documentation](docs/api.md).
+For more details, see [docs/NOSM.md](docs/NOSM.md), [docs/NitrFS.md](docs/NitrFS.md), and [Nitrous API documentation](docs/api.md).
 
 ---
 
