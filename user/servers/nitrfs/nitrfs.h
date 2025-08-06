@@ -5,9 +5,7 @@
 #include <stddef.h>
 #include <time.h>
 
-// Use pthreads when the header is available; otherwise provide no-op stubs so
-// the filesystem can build without the pthread library.  This keeps the kernel
-// build freestanding while allowing host unit tests to use real pthread locks.
+// Cross-platform thread support: use real pthreads if available
 #if __has_include(<pthread.h>)
 #include <pthread.h>
 #else
@@ -92,7 +90,7 @@ int    nitrfs_load_blocks(nitrfs_fs_t *fs, const uint8_t *blocks, size_t blocks_
 int    nitrfs_save_device(nitrfs_fs_t *fs, uint32_t start_lba);
 int    nitrfs_load_device(nitrfs_fs_t *fs, uint32_t start_lba);
 
-// ====== External Block Driver ======
+// ====== External Block Driver (must be implemented elsewhere) ======
 extern int block_read(uint32_t lba, uint8_t *buf, size_t count);
 extern int block_write(uint32_t lba, const uint8_t *buf, size_t count);
 
