@@ -1,7 +1,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
-#include "regx.h"
+#include "../src/agents/regx/regx.h"
 
 // Supported formats
 typedef enum {
