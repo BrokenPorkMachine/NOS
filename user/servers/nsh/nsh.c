@@ -1,6 +1,6 @@
 #include "../../../kernel/IPC/ipc.h"
 #include "../../libc/libc.h"
-#include "../../include/nosfs.h"
+#define NOSFS_NAME_LEN 32
 #include "../../../kernel/drivers/IO/tty.h"
 #include <stdint.h>
 #include <stddef.h>

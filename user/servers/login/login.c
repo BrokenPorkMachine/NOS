@@ -2,7 +2,7 @@
 #include "../../../kernel/drivers/IO/tty.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../libc/libc.h"
-#include "../shell/shell.h"
+#include "../nsh/nsh.h"
 #include "../../../kernel/drivers/Net/netstack.h"
 #include "../../../kernel/IPC/ipc.h"
 #include <stddef.h>
@@ -16,9 +16,6 @@ static uint32_t login_tid = 0;
 // Weak fallback so unit tests can link without the full netstack.
 __attribute__((weak)) uint32_t net_get_ip(void) { return 0x0A00020F; }
 
-extern ipc_queue_t fs_queue;
-extern ipc_queue_t pkg_queue;
-extern ipc_queue_t upd_queue;
 
 typedef struct {
     const char *user;
@@ -168,5 +165,5 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
     }
 
     puts_out("[login] starting shell\n");
-    shell_main(&fs_queue, &pkg_queue, &upd_queue, self_id);
+    nsh_main(NULL, self_id);
 }

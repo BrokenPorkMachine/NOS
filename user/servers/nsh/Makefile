@@ -1,7 +1,12 @@
-CROSS_COMPILE ?= /opt/cross/bin/x86_64-elf-
+CROSS_COMPILE ?= x86_64-linux-gnu-
 CC      = $(CROSS_COMPILE)gcc
 CFLAGS  = -ffreestanding -O2 -Wall -Wextra -nostdlib -mno-red-zone
-OBJS    = nsh.o ../../../kernel/IPC/ipc.o ../../libc/libc.o
+OBJS    = nsh.o ../../../kernel/IPC/ipc.o ../../libc/libc.o \
+          ../../../kernel/drivers/IO/tty.o \
+          ../../../kernel/drivers/IO/video.o \
+          ../../../kernel/drivers/IO/serial.o \
+          ../../../kernel/drivers/IO/keyboard.o \
+          ../../../kernel/drivers/IO/pic.o
 
 all: nsh.bin
 
