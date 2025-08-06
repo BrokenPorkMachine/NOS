@@ -21,5 +21,15 @@ int main(void) {
     /* Ensure ring 2 selectors carry the correct RPL */
     assert((GDT_SEL_RING2_CODE_R2 & 0x3) == 2);
 
+    /* Data segments must not set the 64-bit flag */
+    gdt_get_entry(GDT_SEL_KERNEL_DATA >> 3, &entry);
+    assert((entry.granularity & 0x20) == 0);
+    gdt_get_entry(GDT_SEL_RING1_DATA >> 3, &entry);
+    assert((entry.granularity & 0x20) == 0);
+    gdt_get_entry(GDT_SEL_RING2_DATA >> 3, &entry);
+    assert((entry.granularity & 0x20) == 0);
+    gdt_get_entry(GDT_SEL_USER_DATA >> 3, &entry);
+    assert((entry.granularity & 0x20) == 0);
+
     return 0;
 }
