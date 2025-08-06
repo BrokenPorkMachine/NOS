@@ -1,0 +1,9 @@
+{
+  "name": "nsh",
+  "version": "0.1",
+  "description": "NitroShell – agent-aware interactive shell",
+  "entrypoint": "nsh_main",
+  "capabilities": ["ipc", "plugin-host"],
+  "permissions": ["read_home", "spawn_process", "ipc_send", "ipc_recv"],
+  "sandbox": { "profile": "shell-default", "max_mem": "64M" }
+}
