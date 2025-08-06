@@ -4,6 +4,7 @@ LD = $(CROSS_COMPILE)ld
 NASM = nasm
 
 CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib
+CFLAGS += -DKERNEL_BUILD
 LDFLAGS = -T kernel.ld -nostdlib
 
 OBJS = \
@@ -36,22 +37,6 @@ OBJS = \
     ../arch/GDT/user.o \
     elf.o \
     syscall.o \
-    ../../user/servers/nitrfs/nitrfs.o \
-    ../../user/servers/nitrfs/server.o \
-    ../../user/servers/init/init.o \
-    ../../user/servers/shell/shell.o \
-    ../../user/servers/vnc/vnc.o \
-    ../../user/servers/ssh/ssh.o \
-    ../../user/servers/ftp/ftp.o \
-    ../../user/servers/login/login.o \
-    ../../user/servers/pkg/pkg.o \
-    ../../user/servers/pkg/server.o \
-    ../../user/servers/audio/audio.o \
-    ../../user/servers/audio/server.o \
-    ../../user/servers/update/server.o \
-    ../../user/servers/cp/cp.o \
-    ../../user/servers/mv/mv.o \
-    ../../user/servers/grep/grep.o \
     ../IPC/ipc.o \
     ../IPC/sharedmem.o \
     ../arch/CPU/cpu.o \

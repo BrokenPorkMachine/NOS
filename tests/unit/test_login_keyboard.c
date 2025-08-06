@@ -12,6 +12,7 @@ static int first_poll = 1;
 
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
+ipc_queue_t fs_queue;
 
 /* Stubs for serial I/O used by the login server */
 void serial_write(char c) { (void)c; }
