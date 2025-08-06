@@ -1,44 +1,17 @@
-#include "login.h"
+  #include "login.h"
 #include "../../../kernel/drivers/IO/tty.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../libc/libc.h"
 #include "../nsh/nsh.h"
 #include "../../../kernel/drivers/Net/netstack.h"
 #include "../../../kernel/IPC/ipc.h"
-#include "../../../include/agent.h"
-#include "../../../include/nosm.h"
 #include <stddef.h>
 #include <string.h>
 
 volatile login_session_t current_session = {0};
 
-void login_server(ipc_queue_t *q, uint32_t self_id);
-
-static nosm_manifest_t login_manifest = {
-    .name = "login",
-    .version = "0.1"
-};
-
-static n2_agent_t login_agent = {
-    .name = "login",
-    .version = "0.1",
-    .entry = login_server,
-    .manifest = &login_manifest
-};
-
-static void login_register(void) {
-    static int registered = 0;
-    if (!registered) {
-        n2_agent_register(&login_agent);
-        registered = 1;
-    }
-}
-
 static ipc_queue_t *health_q = NULL;
 static uint32_t login_tid = 0;
-extern ipc_queue_t pkg_queue;
-extern ipc_queue_t upd_queue;
-extern ipc_queue_t fs_queue;
 
 // Weak fallback so unit tests can link without the full netstack.
 __attribute__((weak)) uint32_t net_get_ip(void) { return 0x0A00020F; }
@@ -152,7 +125,6 @@ static void ip_to_str(uint32_t ip, char *buf)
 
 void login_server(ipc_queue_t *q, uint32_t self_id)
 {
-    login_register();
     health_q = q;
     login_tid = self_id;
     /* Reinitialize the TTY to ensure output devices are ready before clearing */
@@ -193,5 +165,6 @@ void login_server(ipc_queue_t *q, uint32_t self_id)
     }
 
     puts_out("[login] starting nsh\n");
-    nsh_main(&fs_queue, &pkg_queue, &upd_queue, self_id);
+    /* launch NitroShell with no auxiliary queues for now */
+    nsh_main(NULL, NULL, NULL, self_id);
 }
