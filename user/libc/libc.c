@@ -1,3 +1,47 @@
+#ifdef KERNEL_BUILD
+#include "libc.h"
+#include <stdint.h>
+
+// Provide a thread_self() primitive, or a dummy version if not present
+extern uint32_t thread_self(void);
+
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
+    (void)attr;
+    mutex->lock = 0;
+    mutex->owner = (uint32_t)-1;
+    mutex->count = 0;
+    return 0;
+}
+
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
+    uint32_t self = thread_self ? thread_self() : 1;
+    if (mutex->owner == self) {
+        mutex->count++;
+        return 0;
+    }
+    while (__sync_lock_test_and_set(&mutex->lock, 1))
+        ; // busy wait (spinlock)
+    mutex->owner = self;
+    mutex->count = 1;
+    return 0;
+}
+
+int pthread_mutex_unlock(pthread_mutex_t *mutex) {
+    if (mutex->owner != (thread_self ? thread_self() : 1))
+        return -1;
+    if (--mutex->count == 0) {
+        mutex->owner = (uint32_t)-1;
+        __sync_lock_release(&mutex->lock);
+    }
+    return 0;
+}
+
+int pthread_mutex_destroy(pthread_mutex_t *mutex) {
+    (void)mutex;
+    return 0;
+}
+#endif // KERNEL_BUILD
+
 #include "libc.h"
 #include <stdint.h>
 #include <stddef.h>
