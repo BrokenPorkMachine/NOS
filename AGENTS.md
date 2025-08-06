@@ -61,7 +61,7 @@ Here’s how the N2 kernel of NitrOS is fundamentally different from Apple’s X
 
 * **N2:**
 
-  * NitrFS is fully transactional, versioned, atomic, and journaled by design.
+  * NOSFS is fully transactional, versioned, atomic, and journaled by design.
   * Snapshots, deduplication, and rollback are built-in.
   * Filesystem agent is modular and hot-replaceable, not hardwired.
 * **XNU:**
@@ -100,7 +100,7 @@ Here’s how the N2 kernel of NitrOS is fundamentally different from Apple’s X
 
 * **N2:**
 
-  * O2 bootloader, N2 kernel, NOSM modules, and NitrFS all use a single, unified, extensible system ABI.
+  * O2 bootloader, N2 kernel, NOSM modules, and NOSFS all use a single, unified, extensible system ABI.
   * All system components communicate and integrate using a discoverable, hot-upgradable model.
 * **XNU:**
 
@@ -115,7 +115,7 @@ Here’s how the N2 kernel of NitrOS is fundamentally different from Apple’s X
 | Modularity          | Agents & manifest modules (NOSM), hot-reloadable | Kexts, some monolithic   |
 | Security            | Signed, sandboxed, manifest-based permissions    | Kext signing, SIP        |
 | Hot Swap            | Yes, for any agent/module                        | No, only kexts, limited  |
-| Filesystem          | Transactional, atomic, hot-swappable (NitrFS)    | APFS, not hot-swap       |
+| Filesystem          | Transactional, atomic, hot-swappable (NOSFS)    | APFS, not hot-swap       |
 | Language neutrality | C, Rust, WASM, more                              | C, C++ only              |
 | Discovery           | Registry/introspection for all agents/modules    | None                     |
 | System ABI          | Unified, extensible for all system layers        | Hybrid Mach/BSD/legacy   |
@@ -133,13 +133,13 @@ Here’s how the N2 kernel of NitrOS is fundamentally different from Apple’s X
   Dynamically loadable N2 modules (“NOSM” files), implementing drivers, filesystems, services, and more.
 * **Userland Agents:**
   Privileged system daemons and user processes that interact with N2 and modules via a secure API.
-* **Filesystem Agents (NitrFS):**
+* **Filesystem Agents (NOSFS):**
   Both in-N2 and user-facing utilities for transactional, versioned, and secure storage.
 * **Module Agents (NOSM):**
   Dynamically loadable N2 modules (“NOSM” files), implementing drivers, filesystems, services, and more.
 * **Userland Agents:**
   Privileged system daemons and user processes that interact with the N2 and modules via a secure API.
-* **Filesystem Agents (NitrFS):**
+* **Filesystem Agents (NOSFS):**
   Both in-N2 and user-facing utilities for transactional, versioned, and secure storage.
 
 ---
@@ -184,7 +184,7 @@ Here’s how the N2 kernel of NitrOS is fundamentally different from Apple’s X
 
 ---
 
-### **4. NitrFS Agent**
+### **4. NOSFS Agent**
 
 * **Role:** Provides next-gen transactional, versioned, and secure filesystem services to N2 and userland.
 * **Responsibilities:**
@@ -192,13 +192,13 @@ Here’s how the N2 kernel of NitrOS is fundamentally different from Apple’s X
   * All operations are atomic, verifiable, and journaled.
   * File/metadata operations support robust ACLs, timestamps, and xattrs.
   * Supports snapshot, rollback, and real-time integrity verification.
-  * Userland interacts via the `nitrfsctl` utility and syscalls for management, mounting, snapshotting, and recovery.
+  * Userland interacts via the `nosfsctl` utility and syscalls for management, mounting, snapshotting, and recovery.
 
 ---
 
 ### **5. Userland Agents**
 
-* **Role:** High-level system daemons and tools (`nosmctl`, `nitrfsctl`, etc), as well as user applications.
+* **Role:** High-level system daemons and tools (`nosmctl`, `nosfsctl`, etc), as well as user applications.
 * **Responsibilities:**
 
   * Interface with the N2 via well-defined syscalls and IPC.
@@ -243,12 +243,12 @@ Here’s how the N2 kernel of NitrOS is fundamentally different from Apple’s X
 
 ```json
 {
-  "name": "NitrFS",
+  "name": "NOSFS",
   "version": "1.2.0",
   "author": "NitrOS Core Team",
   "description": "Transactional, secure, versioned filesystem",
   "abi": "NitrOS-1.0",
-  "entrypoint": "nitrfs_init",
+  "entrypoint": "nosfs_init",
   "dependencies": ["core", "crypto"],
   "capabilities": ["filesystem", "snapshot", "rollback"],
   "permissions": ["read_disk", "write_disk"],
@@ -266,7 +266,7 @@ Agents are registered and discoverable via the kernel agent registry:
 $ nosmctl list
 Name         Version    Status      Capabilities
 -------------------------------------------------------
-NitrFS       1.2.0      Active      filesystem,snapshot
+NOSFS       1.2.0      Active      filesystem,snapshot
 VirtNet      0.9.1      Active      network,virtual
 AudioDrv     0.1.3      Loaded      audio
 ...
@@ -277,7 +277,7 @@ AudioDrv     0.1.3      Loaded      audio
 ## **Inspiration & Comparison**
 
 * **NOSM** modules = “kexts” (macOS) + “kmods” (Linux) + “WebAssembly for N2”
-* **NitrFS** is to NitrOS as APFS is to macOS, but more open and introspectable
+* **NOSFS** is to NitrOS as APFS is to macOS, but more open and introspectable
 * **Agents** are like daemons/services, but are first-class, discoverable, and manageable
 
 ---
@@ -293,7 +293,7 @@ To write a new agent:
 
 ---
 
-For more details, see [docs/NOSM.md](docs/NOSM.md), [docs/NitrFS.md](docs/NitrFS.md), and [N2 API documentation](docs/api.md).
+For more details, see [docs/NOSM.md](docs/NOSM.md), [docs/NOSFS.md](docs/NOSFS.md), and [N2 API documentation](docs/api.md).
 
 ---
 

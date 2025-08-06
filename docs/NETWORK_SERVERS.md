@@ -36,7 +36,7 @@ brief overview of the stack and how current servers make use of it follows.
 ## FTP Server
 
 - **Purpose**: Provide file transfer capabilities for legacy clients.
-- **Status**: Responds on port 3 of the loopback stack. After a greeting, it processes `LIST`, `RETR`, `STOR`, and `QUIT` commands using the NitrFS server for storage. Commands are terminated with CRLF and trimmed before processing.
+- **Status**: Responds on port 3 of the loopback stack. After a greeting, it processes `LIST`, `RETR`, `STOR`, and `QUIT` commands using the NOSFS server for storage. Commands are terminated with CRLF and trimmed before processing.
 - **Example**:
   ```text
   LIST
@@ -46,7 +46,7 @@ brief overview of the stack and how current servers make use of it follows.
   QUIT
   ```
 - **Limitations**: Only the loopback device is supported and transfers are in-memory; there is no authentication or real TCP/IP stack yet.
-- **Future work**: Build on the NitrFS filesystem once a TCP/IP stack is available and hardware drivers are implemented.
+- **Future work**: Build on the NOSFS filesystem once a TCP/IP stack is available and hardware drivers are implemented.
 
 ## Login Server
 
@@ -57,14 +57,14 @@ brief overview of the stack and how current servers make use of it follows.
 - **Future work**: Accept credentials from the SSH server via IPC and manage
   multiple concurrent sessions.
 
-## NitrFS Integration
+## NOSFS Integration
 
 - **Purpose**: Provide backing storage for networked services. The FTP server
-  already stores data in NitrFS, and SCP will reuse the same interface.
+  already stores data in NOSFS, and SCP will reuse the same interface.
 - **Status**: RAM-backed filesystem with helpers for listing, deleting and
   verifying file contents. An export/import facility allows the filesystem to be
   snapshotted as a block image.
-- **Future work**: Map NitrFS images onto real block devices and add access
+- **Future work**: Map NOSFS images onto real block devices and add access
   controls for network clients.
 
 Each of these services is started as a kernel thread during system initialization. They use the loopback network stack (ports 1–3) for testing but remain placeholders until true network drivers and protocols are added.

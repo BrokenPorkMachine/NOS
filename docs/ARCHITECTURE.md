@@ -61,12 +61,12 @@ typedef struct {
 **Sample Manifest**
 ```json
 {
-  "name": "nitrfs",
+  "name": "nosfs",
   "version": "1.0.3",
   "abi": "nitr-1",
   "author": "Core Team",
   "deps": ["vfs>=1.0"],
-  "exports": ["nitrfs_mount"],
+  "exports": ["nosfs_mount"],
   "imports": ["kmalloc", "klog"],
   "security": {
     "caps": ["disk_io"],
@@ -75,7 +75,7 @@ typedef struct {
 }
 ```
 
-## NitrFS Filesystem
+## NOSFS Filesystem
 
 - Transactional, versioned, and cryptographically verifiable.
 - Copy‑on‑write blocks with journaling and deduplication.
@@ -91,7 +91,7 @@ typedef struct {
     uint64_t checkpoint_lba;
     uint8_t  fs_pubkey[32];
     uint8_t  reserved[4008];
-} nitrfs_superblock_t;
+} nosfs_superblock_t;
 ```
 
 ## System Calls & Tools
@@ -101,18 +101,18 @@ The kernel exposes a small syscall surface that userland tools build upon.
 ```c
 int sys_nosm_load(const char *path);
 int sys_nosm_unload(const char *name);
-int sys_nitrfs_snap(const char *path, uint64_t *snap_id);
+int sys_nosfs_snap(const char *path, uint64_t *snap_id);
 ```
 
 ### `nosmctl`
 ```
 $ nosmctl list
-nitrfs@1.0.3  [loaded]
+nosfs@1.0.3  [loaded]
 ```
 
-### `nitrfsctl`
+### `nosfsctl`
 ```
-$ nitrfsctl snapshot /
+$ nosfsctl snapshot /
 Snapshot 42 created.
 ```
 

@@ -1,0 +1,11 @@
+{
+  "name": "NOSFS",
+  "version": "1.0.0",
+  "author": "NitrOS Core Team",
+  "description": "Transactional, agent-driven filesystem",
+  "abi": "N2-1.0",
+  "entrypoint": "nosfs_init",
+  "capabilities": ["filesystem", "snapshot", "rollback"],
+  "permissions": ["read_disk", "write_disk"],
+  "signature": "DEADBEEF"
+}

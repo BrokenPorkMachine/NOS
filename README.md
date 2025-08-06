@@ -11,7 +11,7 @@
 * O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
 * N2 agent-based kernel running in true x86\_64 long mode
 * Signed, manifest-driven **NOSM** modules with hot reload
-* Transactional **NitrFS** filesystem
+* Transactional **NOSFS** filesystem
 * Four-ring GDT layout (rings 0–3; user/kernel split)
 * Full paging and memory protection (NX, SMEP, SMAP)
 * Modular, timer-driven preemptive multitasking
@@ -23,7 +23,7 @@
 * Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode servers
 * Minimal network stack with loopback support, IPv4 addressing and ARP replies
 * Credential-driven login server that prints the current IP before launching the shell
-* Stub VNC, SSH(SCP), and FTP servers that ride on the loopback stack and store files in NitrFS (no real networking yet)
+* Stub VNC, SSH(SCP), and FTP servers that ride on the loopback stack and store files in NOSFS (no real networking yet)
 * Experimental copy-on-write paging and basic demand paging
 * Early NUMA node enumeration from bootloader memory map
 * IPC shared memory channels with rights masks
@@ -105,7 +105,7 @@ kernel/              # N2 kernel core and subsystems
     Net/
 user/
   libc/              # Minimal C library for user programs
-  servers/           # User-space services (NitrFS, shell, etc.)
+  servers/           # User-space services (NOSFS, shell, etc.)
 docs/                # Project documentation
 ```
 
@@ -114,7 +114,7 @@ docs/                # Project documentation
 ## User Environment
 
 NitrOS boots directly into a minimal set of user-mode services. A small
-shell task communicates with the **NitrFS** filesystem server purely
+shell task communicates with the **NOSFS** filesystem server purely
 through IPC to showcase how higher level applications will interact with
 the kernel and each other.
 
@@ -154,7 +154,7 @@ Available commands include:
 ### File System Navigation
 
 Once the shell exposes these common commands you can move around the
-NitrFS directory structure similarly to a regular Unix environment. A
+NOSFS directory structure similarly to a regular Unix environment. A
 typical session might look like:
 
 ```sh
@@ -198,7 +198,7 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 * [x] System call interface with dispatcher and validation
 * [x] Interactive user task/server framework
 * [x] Basic IPC primitives (prototype)
-* [x] NitrFS filesystem server (block storage capable)
+* [x] NOSFS filesystem server (block storage capable)
 * [ ] Window server and networking agents
 * [x] Shell and developer tools (prototype shell)
 

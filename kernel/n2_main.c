@@ -70,7 +70,11 @@ int n2_unload_agent(const char *name) {
 /* Hot‑reload a filesystem agent by unloading the old instance and loading
  * the replacement provided by userland. */
 int n2_hot_reload_filesystem(const bootinfo_module_t *replacement) {
-    n2_unload_agent("NitrFS");
+    /* Unregister the currently active filesystem agent and load the
+     * replacement NOSFS module. The agent registry ensures that any
+     * outstanding references are cleaned up before the new version is
+     * published, providing hot‑swap safety. */
+    n2_unload_agent("NOSFS");
     return load_module(replacement);
 }
 
@@ -112,12 +116,23 @@ void n2_main(bootinfo_t *bootinfo) {
     for (uint32_t i = 0; i < bootinfo->module_count; ++i)
         load_module(&bootinfo->modules[i]);
 
+    /* After all modules are loaded the kernel queries the registry for the
+     * active filesystem agent.  The NOSFS module advertises the `filesystem`
+     * capability in its manifest, allowing the kernel to bind to it without
+     * hard‑coded names. */
+    const n2_agent_t *fs = n2_agent_find_capability("filesystem");
+    if (fs) {
+        /* In a full kernel we would set up syscall vectors here to forward
+         * VFS requests through fs->entry.  Keeping the reference allows us to
+         * hot‑swap or unload the filesystem later. */
+    }
+
     scheduler_loop();
 }
 
 /* Example static manifest for a hypothetical agent.  Real systems would use
  * JSON or CBOR; keeping it simple ensures the sample builds on any C toolchain.
  */
-const char nitrfs_manifest[] =
-    "name=NitrFS,version=1.2.0,capabilities=filesystem,snapshot,rollback";
+const char nosfs_manifest[] =
+    "name=NOSFS,version=1.0.0,capabilities=filesystem,snapshot,rollback";
 

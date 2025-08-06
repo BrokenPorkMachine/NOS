@@ -2,8 +2,8 @@
 #include "../../../kernel/drivers/IO/serial.h"
 #include "../../../kernel/Task/thread.h"
 #include "../../../kernel/drivers/Net/netstack.h"
-#include "../nitrfs/server.h"
-#include "../nitrfs/nitrfs.h"
+#include "../nosfs/nosfs_server.h"
+#include "../../include/nosfs.h"
 #include "../../../kernel/IPC/ipc.h"
 #include <string.h>
 
@@ -18,13 +18,13 @@ static void trim_newline(char *s) {
 
 static int find_handle(ipc_queue_t *q, uint32_t id, const char *name) {
     ipc_message_t msg = {0}, reply = {0};
-    msg.type = NITRFS_MSG_LIST;
+    msg.type = NOSFS_MSG_LIST;
     msg.len = 0;
     if (ipc_send(q, id, &msg) != 0 || ipc_receive(q, id, &reply) != 0)
         return -1;
     for (int i = 0; i < (int)reply.arg1; ++i) {
-        char *n = (char *)reply.data + i * NITRFS_NAME_LEN;
-        if (strncmp(n, name, NITRFS_NAME_LEN) == 0)
+        char *n = (char *)reply.data + i * NOSFS_NAME_LEN;
+        if (strncmp(n, name, NOSFS_NAME_LEN) == 0)
             return i;
     }
     return -1;
@@ -62,12 +62,12 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
             }
             if (q && !strncmp(buf, "LIST", 4)) {
                 ipc_message_t msg = {0}, reply = {0};
-                msg.type = NITRFS_MSG_LIST;
+                msg.type = NOSFS_MSG_LIST;
                 msg.len = 0;
                 ipc_send(q, self_id, &msg);
                 if (ipc_receive(q, self_id, &reply) == 0) {
                     for (int i = 0; i < (int)reply.arg1; i++) {
-                        char *name = (char *)reply.data + i * NITRFS_NAME_LEN;
+                        char *name = (char *)reply.data + i * NOSFS_NAME_LEN;
                         net_socket_send(sock, name, strlen(name));
                         net_socket_send(sock, "\r\n", 2);
                     }
@@ -86,7 +86,7 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                     continue;
                 }
                 ipc_message_t msg = {0}, reply = {0};
-                msg.type = NITRFS_MSG_READ;
+                msg.type = NOSFS_MSG_READ;
                 msg.arg1 = h;
                 msg.arg2 = 0;
                 msg.len = IPC_MSG_DATA_MAX;
@@ -114,9 +114,9 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                 int h = find_handle(q, self_id, name);
                 ipc_message_t msg = {0}, reply = {0};
                 if (h < 0) {
-                    msg.type = NITRFS_MSG_CREATE;
+                    msg.type = NOSFS_MSG_CREATE;
                     msg.arg1 = IPC_MSG_DATA_MAX;
-                    msg.arg2 = NITRFS_PERM_READ | NITRFS_PERM_WRITE;
+                    msg.arg2 = NOSFS_PERM_READ | NOSFS_PERM_WRITE;
                     size_t len = strlen(name);
                     if (len > IPC_MSG_DATA_MAX - 1) len = IPC_MSG_DATA_MAX - 1;
                     strncpy((char *)msg.data, name, len);
@@ -130,7 +130,7 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
                     }
                     h = reply.arg1;
                 }
-                msg.type = NITRFS_MSG_WRITE;
+                msg.type = NOSFS_MSG_WRITE;
                 msg.arg1 = h;
                 size_t len = strlen(data);
                 if (len > IPC_MSG_DATA_MAX) len = IPC_MSG_DATA_MAX;
