@@ -2,40 +2,32 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// --- Minimal ELF64 structures for loader ---
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef struct {
-    unsigned char e_ident[16];
-    uint16_t e_type;
-    uint16_t e_machine;
-    uint32_t e_version;
-    uint64_t e_entry;
-    uint64_t e_phoff;
-    uint64_t e_shoff;
-    uint32_t e_flags;
-    uint16_t e_ehsize;
-    uint16_t e_phentsize;
-    uint16_t e_phnum;
-    uint16_t e_shentsize;
-    uint16_t e_shnum;
-    uint16_t e_shstrndx;
-} Elf64_Ehdr;
+enum syscall_num {
+    SYS_YIELD         = 0,
+    SYS_WRITE_VGA     = 1,
+    SYS_FORK          = 2,
+    SYS_EXEC          = 3,
+    SYS_SBRK          = 4,
+    SYS_CLOCK_GETTIME = 5,
+    SYS_VM_ALLOCATE   = 6,
+    // Add more as needed
+};
 
-typedef struct {
-    uint32_t p_type;
-    uint32_t p_flags;
-    uint64_t p_offset;
-    uint64_t p_vaddr;
-    uint64_t p_paddr;
-    uint64_t p_filesz;
-    uint64_t p_memsz;
-    uint64_t p_align;
-} Elf64_Phdr;
+// Main syscall dispatcher (in syscall.c)
+uint64_t syscall_handle(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3);
 
-// --- ELF loader API ---
+// Kernel helper APIs
+struct timespec {
+    long tv_sec;
+    long tv_nsec;
+};
+int kernel_clock_gettime(int clk_id, struct timespec *tp);
+void *kernel_vm_allocate(uint64_t size);
 
-// Validate ELF image. Returns 0 on success, -1 on failure.
-int elf_validate(const void *image);
-
-// Load ELF image into memory and return entry point, or NULL on failure.
-void *elf_load(const void *image);
+#ifdef __cplusplus
+}
+#endif
