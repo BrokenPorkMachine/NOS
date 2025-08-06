@@ -13,14 +13,15 @@ typedef struct {
     int count;
 } pthread_mutex_t;
 typedef void* pthread_mutexattr_t;
+#else
+#include <pthread.h>
+#endif
 
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
 int pthread_mutex_lock(pthread_mutex_t *mutex);
 int pthread_mutex_unlock(pthread_mutex_t *mutex);
 int pthread_mutex_destroy(pthread_mutex_t *mutex);
-#else
-#include <pthread.h>
-#endif
+
 
 // ===================
 // FILE API
