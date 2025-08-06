@@ -275,9 +275,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->bootloader_name = "O2 UEFI";
 
     // Load kernel -------------------------------------------------------
-    void *kernel_file;
+    void *kernel;
     UINTN kernel_size;
-    status = load_file(SystemTable, root, L"\\kernel.bin", &kernel_file, &kernel_size);
+    status = load_file(SystemTable, root, L"\\kernel.bin", &kernel, &kernel_size);
     if (EFI_ERROR(status)) return status;
     uint8_t ksig[32];
     if (secure_boot) {
