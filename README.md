@@ -9,7 +9,7 @@
 ## Features
 
 * O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
-* True x86\_64 long mode kernel
+* N2 agent-based kernel running in true x86\_64 long mode
 * Signed, manifest-driven **NOSM** modules with hot reload
 * Transactional **NitrFS** filesystem
 * Four-ring GDT layout (rings 0–3; user/kernel split)
@@ -88,8 +88,7 @@
 
 ```
 boot/                # O2 Boot Agent UEFI bootloader source
-kernel/              # Kernel core and subsystems
-  Kernel/            # Core kernel code
+kernel/              # N2 kernel core and subsystems
   Task/              # Threading and context switching
   IPC/               # IPC primitives
   VM/                # Memory management
