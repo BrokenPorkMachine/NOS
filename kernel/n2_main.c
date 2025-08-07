@@ -38,7 +38,14 @@ void n2_main(bootinfo_t *bootinfo) {
 
     serial_init();
     kprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
-    kprint("[N2] Booted by: "); kprint(bootinfo->bootloader_name); kprint("\r\n");
+    kprint("[N2] Booted by: ");
+    const char *bl = bootinfo->bootloader_name;
+    if (bl && ((uintptr_t)bl < 0x100000000ULL)) {
+        kprint(bl);
+    } else {
+        kprint("unknown");
+    }
+    kprint("\r\n");
 
     // Framebuffer, ACPI, CPU, modules, memory map, etc.
     print_acpi_info(bootinfo);
