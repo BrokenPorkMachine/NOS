@@ -447,8 +447,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     }
 
     // --- Module scan/load ---
-    // Must happen before capturing the final memory map; allocations here
-    // would otherwise invalidate the ExitBootServices map key.
     scan_modules(SystemTable, root, bi);
 
     // --- Memory map ---
