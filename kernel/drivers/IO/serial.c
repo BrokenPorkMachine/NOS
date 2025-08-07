@@ -73,10 +73,7 @@ static void serial_print_uint(uint64_t value, int base, int width, int pad_zero)
         serial_write(buf[j]);
 }
 
-void serial_printf(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-
+void serial_vprintf(const char *fmt, va_list ap) {
     for (const char *p = fmt; *p; ++p) {
         if (*p != '%') {
             if (*p == '\n')
@@ -143,7 +140,12 @@ void serial_printf(const char *fmt, ...) {
             break;
         }
     }
+}
 
+void serial_printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    serial_vprintf(fmt, ap);
     va_end(ap);
 }
 

@@ -38,6 +38,13 @@ static struct {
 static size_t entry_count = 0;
 
 void agent_loader_register_entry(const char *name, agent_entry_t fn) {
+    if (!name || !fn)
+        return;
+
+    for (size_t i = 0; i < entry_count; ++i)
+        if (strcmp(entry_registry[i].name, name) == 0)
+            return; /* already registered */
+
     if (entry_count < MAX_ENTRIES) {
         entry_registry[entry_count].name = name;
         entry_registry[entry_count].fn = fn;

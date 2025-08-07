@@ -11,6 +11,15 @@ void n2_agent_registry_reset(void) {
 int n2_agent_register(const n2_agent_t *agent) {
     if (!agent || registry_count >= N2_MAX_AGENTS)
         return -1;
+
+    /* ensure name is null-terminated within the buffer */
+    if (!memchr(agent->name, '\0', sizeof(agent->name)))
+        return -1;
+
+    /* avoid duplicate registrations */
+    if (n2_agent_get(agent->name))
+        return -1;
+
     registry[registry_count] = *agent;
     registry[registry_count].id = (uint32_t)registry_count;
     registry_count++;
@@ -18,6 +27,9 @@ int n2_agent_register(const n2_agent_t *agent) {
 }
 
 const n2_agent_t *n2_agent_get(const char *name) {
+    if (!name)
+        return NULL;
+
     for (size_t i = 0; i < registry_count; ++i) {
         if (strncmp(registry[i].name, name, sizeof(registry[i].name)) == 0)
             return &registry[i];
