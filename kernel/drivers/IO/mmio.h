@@ -1,51 +1,38 @@
 #ifndef MMIO_H
 #define MMIO_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
-static inline void mmio_write8(uintptr_t addr, uint8_t val) {
-    *(volatile uint8_t *)addr = val;
-    asm volatile("" ::: "memory");
-}
+/*
+ * Minimal memory barrier used for MMIO accesses.  The empty "asm" ensures the
+ * compiler does not reorder accesses around the barrier.  Keeping it in a
+ * macro allows reuse across all helpers below.
+ */
+#define mmio_barrier() asm volatile("" ::: "memory")
 
-static inline uint8_t mmio_read8(uintptr_t addr) {
-    uint8_t ret = *(volatile uint8_t *)addr;
-    asm volatile("" ::: "memory");
-    return ret;
-}
+/*
+ * Generate typed MMIO read/write helpers.  Each helper issues the memory
+ * barrier after the access to prevent the compiler from reordering operations
+ * and to make intent explicit.
+ */
+#define MMIO_RW(width, type)                                                   \
+    static inline void mmio_write##width(uintptr_t addr, type val) {           \
+        *(volatile type *)addr = val;                                          \
+        mmio_barrier();                                                        \
+    }                                                                          \
+    static inline type mmio_read##width(uintptr_t addr) {                      \
+        type ret = *(volatile type *)addr;                                     \
+        mmio_barrier();                                                        \
+        return ret;                                                            \
+    }
 
-static inline void mmio_write16(uintptr_t addr, uint16_t val) {
-    *(volatile uint16_t *)addr = val;
-    asm volatile("" ::: "memory");
-}
+MMIO_RW(8, uint8_t)
+MMIO_RW(16, uint16_t)
+MMIO_RW(32, uint32_t)
+MMIO_RW(64, uint64_t)
 
-static inline uint16_t mmio_read16(uintptr_t addr) {
-    uint16_t ret = *(volatile uint16_t *)addr;
-    asm volatile("" ::: "memory");
-    return ret;
-}
-
-static inline void mmio_write32(uintptr_t addr, uint32_t val) {
-    *(volatile uint32_t *)addr = val;
-    asm volatile("" ::: "memory");
-}
-
-static inline uint32_t mmio_read32(uintptr_t addr) {
-    uint32_t ret = *(volatile uint32_t *)addr;
-    asm volatile("" ::: "memory");
-    return ret;
-}
-
-static inline void mmio_write64(uintptr_t addr, uint64_t val) {
-    *(volatile uint64_t *)addr = val;
-    asm volatile("" ::: "memory");
-}
-
-static inline uint64_t mmio_read64(uintptr_t addr) {
-    uint64_t ret = *(volatile uint64_t *)addr;
-    asm volatile("" ::: "memory");
-    return ret;
-}
+#undef MMIO_RW
+#undef mmio_barrier
 
 #endif // MMIO_H

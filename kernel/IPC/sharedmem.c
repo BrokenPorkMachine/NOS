@@ -8,15 +8,16 @@
  * All pages are zeroed.
  * Reference counts are incremented for all pages.
  */
-int ipc_shared_create(ipc_shared_mem_t *mem, uint32_t size, uint32_t send_mask, uint32_t recv_mask) {
+int ipc_shared_create(ipc_shared_mem_t *mem, size_t size, uint32_t send_mask, uint32_t recv_mask) {
     if (!mem || size == 0) return -1;
-    uint32_t pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    size_t aligned = PAGE_ALIGN_UP(size);
+    uint32_t pages = aligned / PAGE_SIZE;
     void *base = alloc_pages(pages); // must provide this function in VM/cow
     if (!base) return -1;
     memset(base, 0, pages * PAGE_SIZE);
 
     mem->addr = base;
-    mem->size = pages * PAGE_SIZE;
+    mem->size = aligned;
     mem->pages = pages;
     mem->rights_send = send_mask;
     mem->rights_recv = recv_mask;

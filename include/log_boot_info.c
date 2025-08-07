@@ -8,6 +8,28 @@ static void print_hex64(uint64_t val) {
     serial_puts(buf);
 }
 
+// Convert UEFI memory map type to a readable string
+static const char *mmap_type_str(uint32_t type) {
+    switch (type) {
+        case 0: return "Reserved";
+        case 1: return "LoaderCode";
+        case 2: return "LoaderData";
+        case 3: return "BootServicesCode";
+        case 4: return "BootServicesData";
+        case 5: return "RuntimeServicesCode";
+        case 6: return "RuntimeServicesData";
+        case 7: return "ConventionalMemory";
+        case 8: return "UnusableMemory";
+        case 9: return "ACPIReclaim";
+        case 10: return "ACPINVS";
+        case 11: return "MMIO";
+        case 12: return "MMIOPort";
+        case 13: return "PAL";
+        case 14: return "Persistent";
+        default: return "Unknown";
+    }
+}
+
 void log_bootinfo(const bootinfo_t *bootinfo) {
     if (!bootinfo) {
         serial_puts("[bootinfo] NULL pointer passed!\n");
@@ -27,7 +49,7 @@ void log_bootinfo(const bootinfo_t *bootinfo) {
     serial_puts("\n");
 
     for (uint32_t i = 0; i < bootinfo->mmap_entries; ++i) {
-        const mmap_entry_t *entry = &bootinfo->mmap[i];
+        const bootinfo_memory_t *entry = &bootinfo->mmap[i];
         serial_puts("[mmap] Region ");
         print_hex64(i);
         serial_puts(": addr=");
@@ -35,8 +57,10 @@ void log_bootinfo(const bootinfo_t *bootinfo) {
         serial_puts(" len=");
         print_hex64(entry->len);
         serial_puts(" type=");
+        serial_puts(mmap_type_str(entry->type));
+        serial_puts(" (");
         print_hex64(entry->type);
-        serial_puts("\n");
+        serial_puts(")\n");
     }
 
     for (uint32_t i = 0; i < bootinfo->module_count; ++i) {
