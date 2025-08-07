@@ -178,11 +178,13 @@ rm -r testdemo
 
 ## How It Works
 
-1. **O2 Boot Agent** loads the kernel from `/EFI/BOOT/kernel.bin` (and any `.nosm` modules) into RAM and jumps to its entry point in long mode.
-2. **Kernel** sets up the GDT, paging, IDT, and enables timer IRQ.
-3. **Threads** and **user tasks** are created, with kernel-mode and user-mode stacks and code.
-4. **Preemptive scheduling** happens via timer interrupt, with context switching between threads/tasks.
-5. **System calls** and **IPC** are handled via traps (e.g., `int $0x80`), building the foundation for a full Mach-style message-passing environment.
+1. **nboot** UEFI loader locates and launches the **O2 Boot Agent**.
+2. **O2 Boot Agent** loads the **N2 kernel** and any `.nosm` modules into RAM and jumps to its entry point in long mode.
+3. **N2 kernel** initializes hardware and core services, including the thread scheduler.
+4. **RegX** registry service starts so agents can register and discover capabilities.
+5. **Init** agent launches userland tasks and brokers access to other agents.
+
+After these stages the system handles system calls and IPC via traps (e.g., `int $0x80`), building the foundation for a full Mach-style message-passing environment.
 
 ---
 
