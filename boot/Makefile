@@ -12,14 +12,14 @@ LDFLAGS=/entry:efi_main \
         /nodefaultlib \
        /base:0 \
         /filealign:32 \
-        /out:O2.efi
+        /out:n nboot.efi
 
 SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.obj)
 
-all: O2.efi
+all: nboot.efi
 
-O2.efi: $(OBJ)
+nboot.efi: $(OBJ)
 	$(LD) $(LDFLAGS) $(OBJ)
 
 %.obj: %.c
