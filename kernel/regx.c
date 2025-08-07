@@ -34,15 +34,22 @@ const regx_entry_t *regx_query(uint64_t id) {
 
 size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max) {
     size_t n = 0;
+    const char *prefix = NULL;
+    size_t prefix_len = 0;
+
+    if (sel && sel->name_prefix[0]) {
+        prefix = sel->name_prefix;
+        prefix_len = strlen(prefix);
+    }
+
     for (size_t i = 0; i < regx_count && n < max; ++i) {
         if (sel) {
             if (sel->type && regx_registry[i].manifest.type != sel->type)
                 continue;
             if (sel->parent_id && regx_registry[i].parent_id != sel->parent_id)
                 continue;
-            if (sel->name_prefix[0] &&
-                strncmp(regx_registry[i].manifest.name, sel->name_prefix,
-                        strlen(sel->name_prefix)) != 0)
+            if (prefix_len &&
+                strncmp(regx_registry[i].manifest.name, prefix, prefix_len) != 0)
                 continue;
         }
         out[n++] = regx_registry[i];
