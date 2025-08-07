@@ -1,7 +1,7 @@
 # src/agents/regx/Makefile
 
 CC = clang
-CFLAGS = -target x86_64-apple-macos10.7 -O2 -Wall -fno-builtin -nostdlib -fPIC
+CFLAGS = -target x86_64-apple-macos10.7 -O2 -Wall -fno-builtin -nostdlib -fPIC -I ../../include
 
 SRCS = regx.c regx_ipc.c
 OBJS = $(SRCS:.c=.o)

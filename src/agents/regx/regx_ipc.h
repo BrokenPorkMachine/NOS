@@ -1,5 +1,5 @@
 #pragma once
-#include "regx.h"
+#include <regx.h>
 
 enum {
     REGX_IPC_ENUM = 1,     // Enumerate entries

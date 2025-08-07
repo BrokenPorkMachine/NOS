@@ -10,11 +10,15 @@ CFLAGS=--target=x86_64-pc-win32-coff \
 LDFLAGS=/entry:efi_main \
         /subsystem:efi_application \
         /nodefaultlib \
-       /base:0 \
+        /base:0 \
         /filealign:32 \
         /out:n nboot.efi
 
-SRC := $(wildcard src/*.c)
+# Build all C sources in this directory. The original build assumed sources
+# lived under a `src/` subdirectory, but `nboot.c` now resides at the top level
+# of `boot/`. Use a wildcard that matches files in the current directory so the
+# boot agent links correctly.
+SRC := $(wildcard *.c)
 OBJ := $(SRC:.c=.obj)
 
 all: nboot.efi
@@ -26,6 +30,6 @@ nboot.efi: $(OBJ)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f src/*.obj *.efi
+	rm -f *.obj *.efi
 
 .PHONY: all clean

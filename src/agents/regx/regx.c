@@ -1,4 +1,4 @@
-#include "regx.h"
+#include <regx.h>
 #include <string.h>
 #include <stdio.h>
 
