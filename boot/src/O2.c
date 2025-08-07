@@ -59,7 +59,6 @@ static void *find_uefi_config_table(EFI_SYSTEM_TABLE *st, EFI_GUID *guid) {
     return NULL;
 }
 
-// --- Bootinfo logger for diagnostics ---
 static void log_bootinfo(EFI_SYSTEM_TABLE *st, const bootinfo_t *bi) {
     print_ascii(st, "[bootinfo] magic: "); print_hex(st, bi->magic); print_ascii(st, "\r\n");
     print_ascii(st, "[bootinfo] kernel: base="); print_hex(st, bi->kernel_load_base);
@@ -88,7 +87,6 @@ static kernel_type_t detect_kernel_type(const uint8_t *data, size_t size) {
     return KERNEL_TYPE_FLAT;
 }
 
-// --- ELF64 loader (PT_LOAD only, identity map) ---
 static EFI_STATUS load_elf64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
     typedef struct {
         unsigned char e_ident[16];
@@ -131,14 +129,12 @@ static EFI_STATUS load_elf64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size
     return EFI_SUCCESS;
 }
 
-// --- Mach-O 64 (stub; implement as needed) ---
 static EFI_STATUS load_macho64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
     (void)st; (void)image; (void)size; (void)entry;
     print_ascii(st, "Mach-O loader not implemented yet\r\n");
     return EFI_LOAD_ERROR;
 }
 
-// --- Flat loader ---
 static EFI_STATUS load_flat(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
     EFI_PHYSICAL_ADDRESS addr = 0x100000;
     UINTN pages = (size + 0xFFF) / 0x1000;
@@ -293,7 +289,6 @@ static EFI_STATUS find_framebuffer(EFI_SYSTEM_TABLE *st, fbinfo_t *fb) {
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     print_ascii(SystemTable, "\r\n[O2] Universal UEFI bootloader\r\n");
 
-    // --- Filesystem and root directory ---
     EFI_LOADED_IMAGE_PROTOCOL *loaded;
     EFI_STATUS status = SystemTable->BootServices->HandleProtocol(ImageHandle,
         (EFI_GUID*)&gEfiLoadedImageProtocolGuid, (void**)&loaded);
@@ -413,7 +408,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     // --- Module scan/load ---
     scan_modules(SystemTable, root, bi);
 
-    // --- Memory map ---
+    // --- Memory map: DO THIS LAST, IMMEDIATELY BEFORE ExitBootServices! ---
     UINTN mmapSize = 0, mapKey = 0, descSize = 0; UINT32 descVer = 0;
     SystemTable->BootServices->GetMemoryMap(&mmapSize, NULL, &mapKey, &descSize, &descVer);
     mmapSize += descSize * 2;
@@ -425,14 +420,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->mmap_desc_size = descSize;
     bi->mmap_desc_ver  = descVer;
 
-    // --- Boot device info ---
-    bi->boot_device_type = 0;
-    bi->boot_partition = 0;
-
     // --- Log bootinfo before boot ---
     log_bootinfo(SystemTable, bi);
 
-    // --- Exit Boot Services ---
+    // --- Exit Boot Services (with current mapKey) ---
     status = SystemTable->BootServices->ExitBootServices(ImageHandle, mapKey);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "ExitBootServices fail\r\n"); return status; }
 
