@@ -13,10 +13,15 @@ libc:
 
 kernel: libc
 	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
+	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch.o
 	$(CC) $(CFLAGS) -c kernel/n2_main.c -o kernel/n2_main.o
 	$(CC) $(CFLAGS) -c kernel/agent.c -o kernel/agent.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
 	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
+	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
+	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
+	$(CC) $(CFLAGS) -c kernel/arch/CPU/smp.c -o kernel/arch/CPU/smp.o
+	$(CC) $(CFLAGS) -c kernel/arch/CPU/lapic.c -o kernel/arch/CPU/lapic.o
 	$(CC) $(CFLAGS) -c kernel/macho2.c -o kernel/macho2.o
 	$(CC) $(CFLAGS) -c kernel/printf.c -o kernel/printf.o
 	$(CC) $(CFLAGS) -c kernel/nosm.c -o kernel/nosm.o
@@ -36,47 +41,47 @@ kernel: libc
 	$(CC) $(CFLAGS) -c kernel/drivers/Net/netstack.c -o kernel/drivers/Net/netstack.o
 	$(CC) $(CFLAGS) -c kernel/drivers/Net/e1000.c -o kernel/drivers/Net/e1000.o
 	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o \
-	kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
-	kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
-	kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
-	kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
-	kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
-	kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o \
-	kernel/drivers/IO/pit.o \
-	kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
-	user/libc/libc.o -o kernel.bin
+	    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
+	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
+	    kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
+	    kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
+	    kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
+	    kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o \
+	    kernel/drivers/IO/pit.o \
+	    kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
+    user/libc/libc.o -o kernel.bin
 
 boot:
 	make -C boot
 
 disk.img: boot kernel
-		dd if=/dev/zero of=disk.img bs=1M count=64
-		mkfs.vfat -F 32 disk.img
-		mmd -i disk.img ::/EFI
-		mmd -i disk.img ::/EFI/BOOT
-	        mcopy -i disk.img boot/O2.efi ::/EFI/BOOT/BOOTX64.EFI
-		mcopy -i disk.img kernel.bin ::/
+	dd if=/dev/zero of=disk.img bs=1M count=64
+	mkfs.vfat -F 32 disk.img
+	mmd -i disk.img ::/EFI
+	mmd -i disk.img ::/EFI/BOOT
+	mcopy -i disk.img boot/O2.efi ::/EFI/BOOT/BOOTX64.EFI
+	mcopy -i disk.img kernel.bin ::/
 
 clean:
-	        rm -f kernel/n2_entry.o kernel/n2_main.o kernel/agent.o \
-	            kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/macho2.o kernel/printf.o kernel.bin user/libc/libc.o disk.img \
-	            kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
-	            kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
-	            kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
-	            kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
-	                  kernel/drivers/IO/pci.o \
-	            kernel/drivers/IO/pic.o kernel/drivers/IO/pit.o \
-	            kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o
-	        make -C boot clean
+	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/agent.o \
+	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
+	    kernel/macho2.o kernel/printf.o kernel.bin user/libc/libc.o disk.img \
+	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
+	    kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
+	    kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
+	    kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
+	    kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o kernel/drivers/IO/pit.o \
+	    kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o
+	make -C boot clean
 
 run: disk.img
 	qemu-system-x86_64 \
-		-bios OVMF.fd \
-		-drive file=disk.img,format=raw \
-		-m 512M \
-		-netdev user,id=n0 \
- 		-device e1000,netdev=n0 \
-	 	-device i8042 \
-  		-serial stdio -display sdl
+	-bios OVMF.fd \
+	-drive file=disk.img,format=raw \
+	-m 512M \
+	-netdev user,id=n0 \
+	-device e1000,netdev=n0 \
+	-device i8042 \
+	-serial stdio -display sdl
 
 .PHONY: all libc kernel boot clean run
