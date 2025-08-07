@@ -14,6 +14,7 @@ libc:
 kernel: libc
 	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
 	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch.o
+	$(CC) $(CFLAGS) -c kernel/O2.c -o kernel/O2.o
 	$(CC) $(CFLAGS) -c kernel/n2_main.c -o kernel/n2_main.o
 	$(CC) $(CFLAGS) -c kernel/agent.c -o kernel/agent.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
