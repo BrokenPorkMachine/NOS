@@ -40,12 +40,6 @@ static void print_dec(EFI_SYSTEM_TABLE *st, uint64_t v) {
     print_ascii(st, p);
 }
 
-typedef struct {
-    uint64_t vaddr, paddr, filesz, memsz;
-    uint32_t flags;
-    char name[17];
-} kernel_segment_t;
-
 // Update your bootinfo_t in bootinfo.h to include these fields:
 // kernel_segment_t kernel_segments[MAX_KERNEL_SEGMENTS];
 // uint32_t kernel_segment_count;
@@ -203,6 +197,31 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     // --- Log bootinfo before boot ---
     log_bootinfo(SystemTable, bi);
 
-    // --- Exit Boot Services and jump to kernel as before ---
-    // ...
+    // --- Exit Boot Services and jump to kernel ---
+    UINTN mmap_size = 0, map_key, desc_size;
+    UINT32 desc_ver;
+    EFI_MEMORY_DESCRIPTOR *mmap = NULL;
+
+    status = SystemTable->BootServices->GetMemoryMap(&mmap_size, mmap, &map_key, &desc_size, &desc_ver);
+    if (status == EFI_BUFFER_TOO_SMALL) {
+        mmap_size += desc_size * 2;
+        status = SystemTable->BootServices->AllocatePool(EfiLoaderData, mmap_size, (void**)&mmap);
+        if (!EFI_ERROR(status))
+            status = SystemTable->BootServices->GetMemoryMap(&mmap_size, mmap, &map_key, &desc_size, &desc_ver);
+    }
+    if (EFI_ERROR(status)) return status;
+
+    bi->mmap = (bootinfo_memory_t *)mmap;
+    bi->mmap_entries   = mmap_size / desc_size;
+    bi->mmap_desc_size = desc_size;
+    bi->mmap_desc_ver  = desc_ver;
+
+    status = SystemTable->BootServices->ExitBootServices(ImageHandle, map_key);
+    if (EFI_ERROR(status)) return status;
+
+    void (*kentry)(bootinfo_t*) = (void(*)(bootinfo_t*))entry;
+    kentry(bi);
+
+    // If the kernel returns, halt
+    for (;;) { __asm__ __volatile__("hlt"); }
 }
