@@ -10,6 +10,17 @@ typedef struct {
     uint32_t reserved;
 } bootinfo_framebuffer_t;
 
+#define MAX_KERNEL_SEGMENTS 16
+
+typedef struct {
+    uint64_t vaddr;
+    uint64_t paddr;
+    uint64_t filesz;
+    uint64_t memsz;
+    uint32_t flags;
+    char     name[17];
+} kernel_segment_t;
+
 typedef struct {
     uint64_t addr;
     uint64_t len;
@@ -26,6 +37,9 @@ typedef struct {
     uint64_t kernel_load_base;
     uint64_t kernel_load_size;
     const char *cmdline;
+
+    kernel_segment_t kernel_segments[MAX_KERNEL_SEGMENTS];
+    uint32_t         kernel_segment_count;
 
     // ACPI info
     uint64_t acpi_rsdp, acpi_xsdt, acpi_rsdt, acpi_dsdt;
