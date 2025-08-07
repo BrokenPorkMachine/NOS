@@ -6,13 +6,14 @@
 #define KERNEL_NAME L"\\kernel.bin"
 #define MH_MAGIC_64    0xFEEDFACF
 #define FAT_MAGIC      0xCAFEBABE
+#define MAX_KERNEL_SEGMENTS 16
+
 // --- Kernel segment info ---
 typedef struct {
     uint64_t vaddr, paddr, filesz, memsz;
     uint32_t flags;
     char name[17];
 } kernel_segment_t;
-#define MAX_KERNEL_SEGMENTS 16
 
 // --- Kernel type ---
 typedef enum {
