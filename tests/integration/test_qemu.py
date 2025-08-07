@@ -43,7 +43,7 @@ def run_qemu():
 @pytest.mark.skipif(shutil.which("qemu-system-x86_64") is None, reason="qemu-system-x86_64 not installed")
 def test_boot_sequence():
     out = run_qemu()
-    sequence = ["[nboot]", "[O2]", "[N2]", "[regx]", "[init]"]
+    sequence = ["[nboot]", "[O2]", "[N2]", "[regx]", "[init]", "[login]"]
     last = -1
     for marker in sequence:
         idx = out.find(marker)

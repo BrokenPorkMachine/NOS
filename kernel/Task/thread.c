@@ -366,10 +366,22 @@ static void regx_thread_func(void) {
     }
 }
 
-// --- Init server thread (broker for RegX) ---
+// --- Login service thread ---
+static void login_thread_func(void) {
+    serial_puts("[login] service started\n");
+    for (;;) thread_yield();
+}
+
+// --- Init server thread (broker for RegX, launches login) ---
 static void init_thread_func(void) {
     init_tid = thread_self();
     serial_puts("[init] init server started\n");
+
+    // Launch login service after initialization
+    thread_t *login = thread_create_with_priority(login_thread_func, 180);
+    if (!login)
+        serial_puts("[init] WARNING: cannot create login thread\n");
+
     ipc_message_t msg;
     while (1) {
         if (ipc_receive_blocking(&init_queue, init_tid, &msg) == 0) {
@@ -383,20 +395,6 @@ static void init_thread_func(void) {
     }
 }
 
-// --- Demo client to show policy enforcement ---
-static void client_thread_func(void) {
-    ipc_message_t msg = {0};
-    msg.type = 1;
-    serial_puts("[client] attempting direct regx access\n");
-    if (ipc_send(&regx_queue, thread_self(), &msg) != 0)
-        serial_puts("[client] direct access denied\n");
-    serial_puts("[client] sending request via init\n");
-    ipc_send(&init_queue, thread_self(), &msg);
-    if (ipc_receive_blocking(&init_queue, thread_self(), &msg) == 0)
-        serial_puts("[client] got reply from regx via init\n");
-    for (;;) thread_yield();
-}
-
 // Initialize threading system and launch init/regx
 void threads_init(void) {
     ipc_init(&fs_queue);
@@ -407,8 +405,7 @@ void threads_init(void) {
 
     thread_t *regx = thread_create_with_priority(regx_thread_func, 220);
     thread_t *init = thread_create_with_priority(init_thread_func, 200);
-    thread_t *client = thread_create_with_priority(client_thread_func, 180);
-    if (!regx || !init || !client) {
+    if (!regx || !init) {
         serial_puts("[thread] FATAL: cannot create core threads\n");
         for (;;) __asm__ volatile("hlt");
     }
@@ -416,7 +413,6 @@ void threads_init(void) {
     ipc_grant(&regx_queue, regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&regx_queue, init->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&init_queue, init->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&init_queue, client->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
     main_thread.magic = THREAD_MAGIC;
     main_thread.id      = 0;
