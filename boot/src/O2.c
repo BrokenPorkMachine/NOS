@@ -423,6 +423,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         }
     }
 
+    // --- Module scan/load ---
+    scan_modules(SystemTable, root, bi);
+
     // --- Memory map ---
     UINTN mmapSize = 0, mapKey = 0, descSize = 0; UINT32 descVer = 0;
     SystemTable->BootServices->GetMemoryMap(&mmapSize, NULL, &mapKey, &descSize, &descVer);
@@ -434,9 +437,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->mmap_entries = mmapSize / descSize;
     bi->mmap_desc_size = descSize;
     bi->mmap_desc_ver  = descVer;
-
-    // --- Module scan/load ---
-    scan_modules(SystemTable, root, bi);
 
     // --- Boot device info (not implemented here) ---
     bi->boot_device_type = 0;
