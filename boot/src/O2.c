@@ -526,11 +526,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     scan_modules(SystemTable, root, bi);
 
     // --- Memory map: DO THIS LAST, IMMEDIATELY BEFORE ExitBootServices! ---
-    UINTN mmapSize = 0, mapKey = 0, descSize = 0; UINT32 descVer = 0;
+    UINTN mmapSize = 0, mapKey = 0, descSize = 0, mmapBufSize = 0; UINT32 descVer = 0;
     SystemTable->BootServices->GetMemoryMap(&mmapSize, NULL, &mapKey, &descSize, &descVer);
     mmapSize += descSize * 2;
     status = SystemTable->BootServices->AllocatePool(EfiLoaderData, mmapSize, (void**)&bi->mmap);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "MMap alloc fail\r\n"); return status; }
+    mmapBufSize = mmapSize;
     status = SystemTable->BootServices->GetMemoryMap(&mmapSize, bi->mmap, &mapKey, &descSize, &descVer);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "MMap read fail\r\n"); return status; }
     bi->mmap_entries = mmapSize / descSize;
@@ -542,6 +543,16 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // --- Exit Boot Services (with current mapKey) ---
     status = SystemTable->BootServices->ExitBootServices(ImageHandle, mapKey);
+    if (EFI_ERROR(status) && status == EFI_INVALID_PARAMETER) {
+        mmapSize = mmapBufSize;
+        status = SystemTable->BootServices->GetMemoryMap(&mmapSize, bi->mmap, &mapKey, &descSize, &descVer);
+        if (!EFI_ERROR(status)) {
+            bi->mmap_entries = mmapSize / descSize;
+            bi->mmap_desc_size = descSize;
+            bi->mmap_desc_ver  = descVer;
+            status = SystemTable->BootServices->ExitBootServices(ImageHandle, mapKey);
+        }
+    }
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "ExitBootServices fail\r\n"); return status; }
 
     print_ascii(SystemTable, "[O2] Jumping to kernel...\r\n");
