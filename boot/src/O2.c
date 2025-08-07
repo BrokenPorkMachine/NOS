@@ -13,12 +13,6 @@
 #define FBINFO_MAGIC 0xF00DBA66
 #define BOOTINFO_MAGIC_UEFI 0x4F324255
 
-static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s);
-static EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root, const CHAR16 *path, void **buf, UINTN *size);
-
-static uint64_t g_kernel_base = 0;
-static uint64_t g_kernel_size = 0;
-
 // --- Minimal C stdlib ---
 static void *memcpy(void *dst, const void *src, size_t n) { uint8_t *d=dst; const uint8_t *s=src; while (n--) *d++ = *s++; return dst; }
 static void *memset(void *dst, int c, size_t n) { uint8_t *d=dst; while (n--) *d++ = (uint8_t)c; return dst; }
@@ -26,7 +20,15 @@ static int memcmp(const void *a, const void *b, size_t n) { const uint8_t *x=a, 
 static size_t strlen(const char *s) { size_t i=0; while(s[i]) ++i; return i; }
 static void strcpy(char *dst, const char *src) { while((*dst++ = *src++)); }
 
+static uint64_t g_kernel_base = 0, g_kernel_size = 0;
+
 // --- Print hex/dec ---
+static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s) {
+    CHAR16 buf[256]; size_t i=0;
+    while (i < 255 && s[i]) { buf[i] = (CHAR16)s[i]; i++; }
+    buf[i]=0;
+    st->ConOut->OutputString(st->ConOut, buf);
+}
 static void print_hex(EFI_SYSTEM_TABLE *st, uint64_t val) {
     char buf[19] = "0x0000000000000000";
     for (int i = 0; i < 16; ++i)
@@ -38,12 +40,6 @@ static void print_dec(EFI_SYSTEM_TABLE *st, uint64_t v) {
     if (!v) *--p = '0';
     while (v) { *--p = '0'+(v%10); v/=10; }
     print_ascii(st, p);
-}
-static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s) {
-    CHAR16 buf[256]; size_t i=0;
-    while (i < 255 && s[i]) { buf[i] = (CHAR16)s[i]; i++; }
-    buf[i]=0;
-    st->ConOut->OutputString(st->ConOut, buf);
 }
 
 // --- GUIDs for system tables ---
@@ -75,18 +71,26 @@ static void log_bootinfo(EFI_SYSTEM_TABLE *st, const bootinfo_t *bi) {
     print_ascii(st, "[bootinfo] smbios_entry: "); print_hex(st, bi->smbios_entry); print_ascii(st, "\r\n");
 }
 
-// --- Universal kernel type ---
-typedef enum { KERNEL_TYPE_UNKNOWN=0, KERNEL_TYPE_ELF64, KERNEL_TYPE_MACHO64, KERNEL_TYPE_FLAT } kernel_type_t;
+// --- Kernel Type + Detection ---
+typedef enum {
+    KERNEL_TYPE_UNKNOWN=0, KERNEL_TYPE_ELF64,
+    KERNEL_TYPE_MACHO64, KERNEL_TYPE_MACHO_FAT,
+    KERNEL_TYPE_FLAT
+} kernel_type_t;
+
+#define MH_MAGIC_64    0xFEEDFACF
+#define FAT_MAGIC      0xCAFEBABE
 
 static kernel_type_t detect_kernel_type(const uint8_t *data, size_t size) {
     if (size >= 4 && data[0]==0x7F && data[1]=='E' && data[2]=='L' && data[3]=='F' && data[4]==2)
         return KERNEL_TYPE_ELF64;
-    if (size >= 4 && ((data[0]==0xCF && data[1]==0xFA && data[2]==0xED && data[3]==0xFE) ||
-                      (data[0]==0xFE && data[1]==0xED && data[2]==0xFA && data[3]==0xCF)))
-        return KERNEL_TYPE_MACHO64;
+    uint32_t magic = *(const uint32_t*)data;
+    if (magic == MH_MAGIC_64) return KERNEL_TYPE_MACHO64;
+    if (magic == FAT_MAGIC) return KERNEL_TYPE_MACHO_FAT;
     return KERNEL_TYPE_FLAT;
 }
 
+// --- ELF64 loader ---
 static EFI_STATUS load_elf64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
     typedef struct {
         unsigned char e_ident[16];
@@ -129,12 +133,119 @@ static EFI_STATUS load_elf64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size
     return EFI_SUCCESS;
 }
 
+// --- Mach-O/FAT loader ---
+typedef struct {
+    uint32_t magic, cputype, cpusubtype, filetype, ncmds, sizeofcmds, flags, reserved;
+} macho64_hdr_t;
+typedef struct {
+    uint32_t cmd, cmdsize;
+} macho_loadcmd_t;
+typedef struct {
+    uint32_t cmd, cmdsize;
+    char     segname[16];
+    uint64_t vmaddr, vmsize, fileoff, filesize;
+    uint32_t maxprot, initprot, nsects, flags;
+} macho_segment_cmd_64;
+typedef struct {
+    uint32_t magic, nfat_arch;
+} fat_header_t;
+typedef struct {
+    uint32_t cputype, cpusubtype, offset, size, align;
+} fat_arch_t;
+
+#define LC_SEGMENT_64  0x19
+#define LC_MAIN        0x80000028
+#define LC_UNIXTHREAD  0x5
+
 static EFI_STATUS load_macho64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
-    (void)st; (void)image; (void)size; (void)entry;
-    print_ascii(st, "Mach-O loader not implemented yet\r\n");
+    const uint8_t *buf = (const uint8_t*)image;
+    if (size < sizeof(macho64_hdr_t)) return EFI_LOAD_ERROR;
+    const macho64_hdr_t *hdr = (const macho64_hdr_t*)buf;
+    if (hdr->magic != MH_MAGIC_64) return EFI_LOAD_ERROR;
+
+    uint64_t entry_offset = 0;
+    int found_entry = 0;
+
+    const uint8_t *cmdptr = buf + sizeof(macho64_hdr_t);
+    for (uint32_t i = 0; i < hdr->ncmds; ++i) {
+        const macho_loadcmd_t *cmd = (const macho_loadcmd_t *)cmdptr;
+        if (cmd->cmd == LC_MAIN && cmd->cmdsize >= 24) {
+            struct { uint32_t cmd, cmdsize; uint64_t entryoff, stacksize; } *main = (void*)cmdptr;
+            entry_offset = main->entryoff;
+            found_entry = 1;
+        }
+        cmdptr += cmd->cmdsize;
+    }
+
+    cmdptr = buf + sizeof(macho64_hdr_t);
+    uint64_t first = (UINT64)-1, last = 0;
+    for (uint32_t i = 0; i < hdr->ncmds; ++i) {
+        const macho_loadcmd_t *cmd = (const macho_loadcmd_t *)cmdptr;
+        if (cmd->cmd == LC_SEGMENT_64 && cmd->cmdsize >= sizeof(macho_segment_cmd_64)) {
+            const macho_segment_cmd_64 *seg = (const macho_segment_cmd_64 *)cmd;
+            if (seg->filesize == 0 && seg->vmsize == 0) { cmdptr += cmd->cmdsize; continue; }
+            EFI_PHYSICAL_ADDRESS seg_addr = seg->vmaddr;
+            UINTN seg_pages = (seg->vmsize + 0xFFF) / 0x1000;
+            EFI_STATUS s = st->BootServices->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, seg_pages, &seg_addr);
+            if (EFI_ERROR(s)) return s;
+            if (seg->filesize > 0)
+                memcpy((void *)(uintptr_t)seg_addr, buf + seg->fileoff, seg->filesize);
+            if (seg->vmsize > seg->filesize)
+                memset((void *)(uintptr_t)(seg_addr + seg->filesize), 0, seg->vmsize - seg->filesize);
+            if (seg_addr < first) first = seg_addr;
+            if (seg_addr + seg->vmsize > last) last = seg_addr + seg->vmsize;
+        }
+        cmdptr += cmd->cmdsize;
+    }
+
+    // Fallback for entry (LC_UNIXTHREAD) if LC_MAIN not found
+    if (!found_entry) {
+        cmdptr = buf + sizeof(macho64_hdr_t);
+        for (uint32_t i = 0; i < hdr->ncmds; ++i) {
+            const macho_loadcmd_t *cmd = (const macho_loadcmd_t *)cmdptr;
+            if (cmd->cmd == LC_UNIXTHREAD && cmd->cmdsize >= 80) {
+                entry_offset = *(uint64_t *)(cmdptr + 56);
+                found_entry = 1;
+                break;
+            }
+            cmdptr += cmd->cmdsize;
+        }
+    }
+
+    g_kernel_base = first;
+    g_kernel_size = last - first;
+    *entry = (void *)(uintptr_t)entry_offset;
+    return EFI_SUCCESS;
+}
+
+static EFI_STATUS load_macho_fat(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
+    if (size < sizeof(fat_header_t)) return EFI_LOAD_ERROR;
+    const fat_header_t *fat = (const fat_header_t*)image;
+    if (fat->magic != FAT_MAGIC) return EFI_LOAD_ERROR;
+    const fat_arch_t *archs = (const fat_arch_t *)(fat + 1);
+
+    for (uint32_t i = 0; i < fat->nfat_arch; ++i) {
+        // x86_64: cputype = 0x01000007, aarch64: 0x0100000C
+        if (archs[i].cputype == 0x01000007 || archs[i].cputype == 0x0100000C) {
+            const uint8_t *thin = (const uint8_t *)image + archs[i].offset;
+            UINTN thin_size = archs[i].size;
+            return load_macho64(st, thin, thin_size, entry);
+        }
+    }
     return EFI_LOAD_ERROR;
 }
 
+// Unified Mach-O dispatcher
+static EFI_STATUS load_macho(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
+    uint32_t magic = *(const uint32_t*)image;
+    if (magic == MH_MAGIC_64)
+        return load_macho64(st, image, size, entry);
+    if (magic == FAT_MAGIC)
+        return load_macho_fat(st, image, size, entry);
+    return EFI_LOAD_ERROR;
+}
+
+// --- Flat loader ---
 static EFI_STATUS load_flat(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
     EFI_PHYSICAL_ADDRESS addr = 0x100000;
     UINTN pages = (size + 0xFFF) / 0x1000;
@@ -309,12 +420,19 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     print_ascii(SystemTable, "[O2] Kernel type: ");
     if (ktype == KERNEL_TYPE_ELF64) print_ascii(SystemTable, "ELF64\r\n");
     else if (ktype == KERNEL_TYPE_MACHO64) print_ascii(SystemTable, "Mach-O 64\r\n");
+    else if (ktype == KERNEL_TYPE_MACHO_FAT) print_ascii(SystemTable, "FAT Mach-O\r\n");
     else if (ktype == KERNEL_TYPE_FLAT) print_ascii(SystemTable, "Flat bin\r\n");
     else { print_ascii(SystemTable, "Unknown format!\r\n"); return EFI_LOAD_ERROR; }
+
     void *entry = NULL;
-    if (ktype == KERNEL_TYPE_ELF64) status = load_elf64(SystemTable, kernel_file, kernel_size, &entry);
-    else if (ktype == KERNEL_TYPE_MACHO64) status = load_macho64(SystemTable, kernel_file, kernel_size, &entry);
-    else if (ktype == KERNEL_TYPE_FLAT) status = load_flat(SystemTable, kernel_file, kernel_size, &entry);
+    if (ktype == KERNEL_TYPE_ELF64)
+        status = load_elf64(SystemTable, kernel_file, kernel_size, &entry);
+    else if (ktype == KERNEL_TYPE_MACHO64)
+        status = load_macho64(SystemTable, kernel_file, kernel_size, &entry);
+    else if (ktype == KERNEL_TYPE_MACHO_FAT)
+        status = load_macho_fat(SystemTable, kernel_file, kernel_size, &entry);
+    else if (ktype == KERNEL_TYPE_FLAT)
+        status = load_flat(SystemTable, kernel_file, kernel_size, &entry);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "Kernel load error\r\n"); return status; }
     print_ascii(SystemTable, "[O2] Kernel entry: "); print_hex(SystemTable, (uint64_t)(uintptr_t)entry); print_ascii(SystemTable, "\r\n");
     SystemTable->BootServices->FreePool(kernel_file);
@@ -352,7 +470,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
         rsdt = *(uint32_t *)((uint8_t*)rsdp + 16); bi->acpi_rsdt = rsdt;
         bi->acpi_dsdt = find_acpi_dsdt((uint64_t)(uintptr_t)rsdp);
 
-        // --- Find MADT for LAPIC/cpu/ioapic ---
         uint64_t madt = 0;
         if (xsdt) {
             uint64_t *entries = (uint64_t *)((char *)(uintptr_t)xsdt + 36);
