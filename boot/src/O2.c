@@ -173,7 +173,10 @@ EFI_STATUS load_elf64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void 
     for (UINT16 i = 0; i < eh->e_phnum; ++i, ++ph) {
         if (ph->p_type != 1) continue;
         UINTN pages = (ph->p_memsz + 0xFFF) / 0x1000;
+        if (!pages) continue;
         EFI_PHYSICAL_ADDRESS seg = ph->p_paddr;
+        if (!seg)
+            seg = ph->p_vaddr;
         EFI_STATUS s = st->BootServices->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, pages, &seg);
         if (EFI_ERROR(s)) return s;
         memcpy((void *)(uintptr_t)seg, (const UINT8 *)image + ph->p_offset, ph->p_filesz);
