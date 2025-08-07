@@ -7,7 +7,7 @@
 #define MH_MAGIC_64    0xFEEDFACF
 #define FAT_MAGIC      0xCAFEBABE
 #define MAX_KERNEL_SEGMENTS 16
-
+/*
 // --- Kernel segment info ---
 typedef struct {
     uint64_t vaddr, paddr, filesz, memsz;
@@ -21,7 +21,7 @@ typedef enum {
     KERNEL_TYPE_MACHO64, KERNEL_TYPE_MACHO_FAT,
     KERNEL_TYPE_PECOFF, KERNEL_TYPE_FLAT
 } kernel_type_t;
-
+*/
 // --- Loader function prototypes ---
 kernel_type_t detect_kernel_type(const uint8_t *data, size_t size);
 
