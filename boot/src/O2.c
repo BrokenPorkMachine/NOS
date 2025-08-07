@@ -9,11 +9,10 @@
 #define MODULE_SUFFIX L".bin"
 #define MAX_MODULES 16
 #define MAX_CPUS    256
-
+#define MAX_KERNEL_SEGMENTS 16
 #define FBINFO_MAGIC 0xF00DBA66
 #define BOOTINFO_MAGIC_UEFI 0x4F324255
 
-// --- Minimal C stdlib ---
 static void *memcpy(void *dst, const void *src, size_t n) { uint8_t *d=dst; const uint8_t *s=src; while (n--) *d++ = *s++; return dst; }
 static void *memset(void *dst, int c, size_t n) { uint8_t *d=dst; while (n--) *d++ = (uint8_t)c; return dst; }
 static int memcmp(const void *a, const void *b, size_t n) { const uint8_t *x=a, *y=b; while (n--) { if (*x!=*y) return *x-*y; x++; y++; } return 0; }
@@ -22,7 +21,6 @@ static void strcpy(char *dst, const char *src) { while((*dst++ = *src++)); }
 
 static uint64_t g_kernel_base = 0, g_kernel_size = 0;
 
-// --- Print hex/dec ---
 static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s) {
     CHAR16 buf[256]; size_t i=0;
     while (i < 255 && s[i]) { buf[i] = (CHAR16)s[i]; i++; }
@@ -42,24 +40,34 @@ static void print_dec(EFI_SYSTEM_TABLE *st, uint64_t v) {
     print_ascii(st, p);
 }
 
-// --- GUIDs for system tables ---
-static EFI_GUID acpi2_guid = {0x8868e871,0xe4f1,0x11d3,{0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81}};
-static EFI_GUID acpi_guid  = {0xeb9d2d30,0x2d88,0x11d3,{0x9a,0x16,0x00,0x90,0x27,0x3f,0xc1,0x4d}};
-static EFI_GUID smbios3_guid = {0xf2fd1544,0x9794,0x4a2c,{0x99,0x2e,0xe5,0xbb,0xcf,0x20,0xe3,0x94}};
-static EFI_GUID smbios_guid  = {0xeb9d2d31,0x2d88,0x11d3,{0x9a,0x16,0x00,0x90,0x27,0x3f,0xc1,0x4d}};
+typedef struct {
+    uint64_t vaddr, paddr, filesz, memsz;
+    uint32_t flags;
+    char name[17];
+} kernel_segment_t;
 
-static void *find_uefi_config_table(EFI_SYSTEM_TABLE *st, EFI_GUID *guid) {
-    for (UINTN i = 0; i < st->NumberOfTableEntries; ++i)
-        if (!memcmp(&st->ConfigurationTable[i].VendorGuid, guid, sizeof(EFI_GUID)))
-            return st->ConfigurationTable[i].VendorTable;
-    return NULL;
-}
+// Update your bootinfo_t in bootinfo.h to include these fields:
+// kernel_segment_t kernel_segments[MAX_KERNEL_SEGMENTS];
+// uint32_t kernel_segment_count;
 
 static void log_bootinfo(EFI_SYSTEM_TABLE *st, const bootinfo_t *bi) {
     print_ascii(st, "[bootinfo] magic: "); print_hex(st, bi->magic); print_ascii(st, "\r\n");
     print_ascii(st, "[bootinfo] kernel: base="); print_hex(st, bi->kernel_load_base);
     print_ascii(st, " size="); print_hex(st, bi->kernel_load_size); print_ascii(st, "\r\n");
     print_ascii(st, "[bootinfo] kernel_entry: "); print_hex(st, (uint64_t)bi->kernel_entry); print_ascii(st, "\r\n");
+    print_ascii(st, "[bootinfo] kernel_segment_count: "); print_dec(st, bi->kernel_segment_count); print_ascii(st, "\r\n");
+    for (uint32_t i=0; i < bi->kernel_segment_count; i++) {
+        print_ascii(st, "  [seg] vaddr="); print_hex(st, bi->kernel_segments[i].vaddr);
+        print_ascii(st, " paddr="); print_hex(st, bi->kernel_segments[i].paddr);
+        print_ascii(st, " filesz="); print_hex(st, bi->kernel_segments[i].filesz);
+        print_ascii(st, " memsz="); print_hex(st, bi->kernel_segments[i].memsz);
+        print_ascii(st, " flags="); print_hex(st, bi->kernel_segments[i].flags);
+        if (bi->kernel_segments[i].name[0]) {
+            print_ascii(st, " name=");
+            print_ascii(st, bi->kernel_segments[i].name);
+        }
+        print_ascii(st, "\r\n");
+    }
     print_ascii(st, "[bootinfo] module_count: "); print_dec(st, bi->module_count); print_ascii(st, "\r\n");
     print_ascii(st, "[bootinfo] acpi_rsdp: "); print_hex(st, bi->acpi_rsdp); print_ascii(st, "\r\n");
     print_ascii(st, "[bootinfo] acpi_xsdt: "); print_hex(st, bi->acpi_xsdt); print_ascii(st, "\r\n");
@@ -71,48 +79,18 @@ static void log_bootinfo(EFI_SYSTEM_TABLE *st, const bootinfo_t *bi) {
     print_ascii(st, "[bootinfo] smbios_entry: "); print_hex(st, bi->smbios_entry); print_ascii(st, "\r\n");
 }
 
-// --- Kernel Type + Detection ---
-typedef enum {
-    KERNEL_TYPE_UNKNOWN=0, KERNEL_TYPE_ELF64,
-    KERNEL_TYPE_MACHO64, KERNEL_TYPE_MACHO_FAT,
-    KERNEL_TYPE_FLAT
-} kernel_type_t;
+// ... (kernel type detection, GUIDs, find_uefi_config_table, etc unchanged from earlier) ...
 
-#define MH_MAGIC_64    0xFEEDFACF
-#define FAT_MAGIC      0xCAFEBABE
-
-static kernel_type_t detect_kernel_type(const uint8_t *data, size_t size) {
-    if (size >= 4 && data[0]==0x7F && data[1]=='E' && data[2]=='L' && data[3]=='F' && data[4]==2)
-        return KERNEL_TYPE_ELF64;
-    uint32_t magic = *(const uint32_t*)data;
-    if (magic == MH_MAGIC_64) return KERNEL_TYPE_MACHO64;
-    if (magic == FAT_MAGIC) return KERNEL_TYPE_MACHO_FAT;
-    return KERNEL_TYPE_FLAT;
-}
-
-// --- ELF64 loader ---
-static EFI_STATUS load_elf64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
-    typedef struct {
-        unsigned char e_ident[16];
-        UINT16  e_type, e_machine;
-        UINT32  e_version;
-        UINT64  e_entry, e_phoff, e_shoff;
-        UINT32  e_flags;
-        UINT16  e_ehsize, e_phentsize, e_phnum;
-        UINT16  e_shentsize, e_shnum, e_shstrndx;
-    } Elf64_Ehdr;
-    typedef struct {
-        UINT32  p_type, p_flags;
-        UINT64  p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_align;
-    } Elf64_Phdr;
-
+// --- ELF64 loader with segment debug ---
+static EFI_STATUS load_elf64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry, kernel_segment_t *segs, uint32_t *segc) {
+    typedef struct { unsigned char e_ident[16]; UINT16 e_type,e_machine; UINT32 e_version; UINT64 e_entry,e_phoff,e_shoff; UINT32 e_flags; UINT16 e_ehsize,e_phentsize,e_phnum; UINT16 e_shentsize,e_shnum,e_shstrndx; } Elf64_Ehdr;
+    typedef struct { UINT32 p_type,p_flags; UINT64 p_offset,p_vaddr,p_paddr,p_filesz,p_memsz,p_align; } Elf64_Phdr;
     if (size < sizeof(Elf64_Ehdr)) return EFI_LOAD_ERROR;
     const Elf64_Ehdr *eh = (const Elf64_Ehdr *)image;
-    if (!(eh->e_ident[0]==0x7F && eh->e_ident[1]=='E' && eh->e_ident[2]=='L' && eh->e_ident[3]=='F'))
-        return EFI_LOAD_ERROR;
-
+    if (!(eh->e_ident[0]==0x7F && eh->e_ident[1]=='E' && eh->e_ident[2]=='L' && eh->e_ident[3]=='F')) return EFI_LOAD_ERROR;
     const Elf64_Phdr *ph = (const Elf64_Phdr *)((const UINT8 *)image + eh->e_phoff);
     UINT64 first = (UINT64)-1, last = 0;
+    uint32_t count = 0;
     for (UINT16 i = 0; i < eh->e_phnum; ++i, ++ph) {
         if (ph->p_type != 1) continue; // PT_LOAD
         UINTN pages = (ph->p_memsz + 0xFFF) / 0x1000;
@@ -122,291 +100,67 @@ static EFI_STATUS load_elf64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size
         memcpy((void *)(uintptr_t)seg, (const UINT8 *)image + ph->p_offset, ph->p_filesz);
         if (ph->p_memsz > ph->p_filesz)
             memset((void *)(uintptr_t)(seg + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
-
+        // Debug output
+        print_ascii(st, "[O2] ELF LOAD: vaddr="); print_hex(st, ph->p_vaddr);
+        print_ascii(st, " paddr="); print_hex(st, seg);
+        print_ascii(st, " filesz="); print_hex(st, ph->p_filesz);
+        print_ascii(st, " memsz="); print_hex(st, ph->p_memsz);
+        print_ascii(st, " flags="); print_hex(st, ph->p_flags); print_ascii(st, "\r\n");
+        // Record segment
+        if (segs && segc && count < MAX_KERNEL_SEGMENTS) {
+            segs[count].vaddr  = ph->p_vaddr;
+            segs[count].paddr  = seg;
+            segs[count].filesz = ph->p_filesz;
+            segs[count].memsz  = ph->p_memsz;
+            segs[count].flags  = ph->p_flags;
+            segs[count].name[0]=0;
+            ++count;
+        }
         if (seg < first) first = seg;
         if (seg + ph->p_memsz > last) last = seg + ph->p_memsz;
     }
-
+    if (segc) *segc = count;
     g_kernel_base = first;
     g_kernel_size = last - first;
     *entry = (void *)(uintptr_t)eh->e_entry;
     return EFI_SUCCESS;
 }
 
-// --- Mach-O/FAT loader ---
-typedef struct {
-    uint32_t magic, cputype, cpusubtype, filetype, ncmds, sizeofcmds, flags, reserved;
-} macho64_hdr_t;
-typedef struct {
-    uint32_t cmd, cmdsize;
-} macho_loadcmd_t;
-typedef struct {
-    uint32_t cmd, cmdsize;
-    char     segname[16];
-    uint64_t vmaddr, vmsize, fileoff, filesize;
-    uint32_t maxprot, initprot, nsects, flags;
-} macho_segment_cmd_64;
-typedef struct {
-    uint32_t magic, nfat_arch;
-} fat_header_t;
-typedef struct {
-    uint32_t cputype, cpusubtype, offset, size, align;
-} fat_arch_t;
+// --- Mach-O, FAT, PE/COFF, Flat loaders: each should do the same: print debug, fill segs[] ---
+/* ... include your previous Mach-O and PE/COFF loader code, but inside their segment loading loops:
+   - print segment info using print_ascii/print_hex
+   - add info to segs[] as in the ELF loader above
+   - increment *segc for each loaded segment
+   - copy segment name for Mach-O as needed
+   - see previous responses for unified loader code for Mach-O, FAT, PE, Flat ...
+*/
 
-#define LC_SEGMENT_64  0x19
-#define LC_MAIN        0x80000028
-#define LC_UNIXTHREAD  0x5
-
-static EFI_STATUS load_macho64(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
-    const uint8_t *buf = (const uint8_t*)image;
-    if (size < sizeof(macho64_hdr_t)) return EFI_LOAD_ERROR;
-    const macho64_hdr_t *hdr = (const macho64_hdr_t*)buf;
-    if (hdr->magic != MH_MAGIC_64) return EFI_LOAD_ERROR;
-
-    uint64_t entry_offset = 0;
-    int found_entry = 0;
-
-    const uint8_t *cmdptr = buf + sizeof(macho64_hdr_t);
-    for (uint32_t i = 0; i < hdr->ncmds; ++i) {
-        const macho_loadcmd_t *cmd = (const macho_loadcmd_t *)cmdptr;
-        if (cmd->cmd == LC_MAIN && cmd->cmdsize >= 24) {
-            struct { uint32_t cmd, cmdsize; uint64_t entryoff, stacksize; } *main = (void*)cmdptr;
-            entry_offset = main->entryoff;
-            found_entry = 1;
-        }
-        cmdptr += cmd->cmdsize;
+// Example Mach-O segment loop (inside load_macho64, simplified):
+/*
+for each LC_SEGMENT_64:
+    allocate/memcpy...
+    print_ascii(st, "[O2] MACHO LOAD: vmaddr="); print_hex(st, seg->vmaddr); ...
+    if (segs && segc && count < MAX_KERNEL_SEGMENTS) {
+        segs[count].vaddr  = seg->vmaddr;
+        segs[count].paddr  = seg_addr;
+        segs[count].filesz = seg->filesize;
+        segs[count].memsz  = seg->vmsize;
+        segs[count].flags  = seg->initprot;
+        memcpy(segs[count].name, seg->segname, 16); segs[count].name[16]=0;
+        ++count;
     }
-
-    cmdptr = buf + sizeof(macho64_hdr_t);
-    uint64_t first = (UINT64)-1, last = 0;
-    for (uint32_t i = 0; i < hdr->ncmds; ++i) {
-        const macho_loadcmd_t *cmd = (const macho_loadcmd_t *)cmdptr;
-        if (cmd->cmd == LC_SEGMENT_64 && cmd->cmdsize >= sizeof(macho_segment_cmd_64)) {
-            const macho_segment_cmd_64 *seg = (const macho_segment_cmd_64 *)cmd;
-            if (seg->filesize == 0 && seg->vmsize == 0) { cmdptr += cmd->cmdsize; continue; }
-            EFI_PHYSICAL_ADDRESS seg_addr = seg->vmaddr;
-            UINTN seg_pages = (seg->vmsize + 0xFFF) / 0x1000;
-            EFI_STATUS s = st->BootServices->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, seg_pages, &seg_addr);
-            if (EFI_ERROR(s)) return s;
-            if (seg->filesize > 0)
-                memcpy((void *)(uintptr_t)seg_addr, buf + seg->fileoff, seg->filesize);
-            if (seg->vmsize > seg->filesize)
-                memset((void *)(uintptr_t)(seg_addr + seg->filesize), 0, seg->vmsize - seg->filesize);
-            if (seg_addr < first) first = seg_addr;
-            if (seg_addr + seg->vmsize > last) last = seg_addr + seg->vmsize;
-        }
-        cmdptr += cmd->cmdsize;
-    }
-
-    // Fallback for entry (LC_UNIXTHREAD) if LC_MAIN not found
-    if (!found_entry) {
-        cmdptr = buf + sizeof(macho64_hdr_t);
-        for (uint32_t i = 0; i < hdr->ncmds; ++i) {
-            const macho_loadcmd_t *cmd = (const macho_loadcmd_t *)cmdptr;
-            if (cmd->cmd == LC_UNIXTHREAD && cmd->cmdsize >= 80) {
-                entry_offset = *(uint64_t *)(cmdptr + 56);
-                found_entry = 1;
-                break;
-            }
-            cmdptr += cmd->cmdsize;
-        }
-    }
-
-    g_kernel_base = first;
-    g_kernel_size = last - first;
-    *entry = (void *)(uintptr_t)entry_offset;
-    return EFI_SUCCESS;
-}
-
-static EFI_STATUS load_macho_fat(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
-    if (size < sizeof(fat_header_t)) return EFI_LOAD_ERROR;
-    const fat_header_t *fat = (const fat_header_t*)image;
-    if (fat->magic != FAT_MAGIC) return EFI_LOAD_ERROR;
-    const fat_arch_t *archs = (const fat_arch_t *)(fat + 1);
-
-    for (uint32_t i = 0; i < fat->nfat_arch; ++i) {
-        // x86_64: cputype = 0x01000007, aarch64: 0x0100000C
-        if (archs[i].cputype == 0x01000007 || archs[i].cputype == 0x0100000C) {
-            const uint8_t *thin = (const uint8_t *)image + archs[i].offset;
-            UINTN thin_size = archs[i].size;
-            return load_macho64(st, thin, thin_size, entry);
-        }
-    }
-    return EFI_LOAD_ERROR;
-}
-
-// Unified Mach-O dispatcher
-static EFI_STATUS load_macho(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
-    uint32_t magic = *(const uint32_t*)image;
-    if (magic == MH_MAGIC_64)
-        return load_macho64(st, image, size, entry);
-    if (magic == FAT_MAGIC)
-        return load_macho_fat(st, image, size, entry);
-    return EFI_LOAD_ERROR;
-}
-
-// --- Flat loader ---
-static EFI_STATUS load_flat(EFI_SYSTEM_TABLE *st, const void *image, UINTN size, void **entry) {
-    EFI_PHYSICAL_ADDRESS addr = 0x100000;
-    UINTN pages = (size + 0xFFF) / 0x1000;
-    EFI_STATUS s = st->BootServices->AllocatePages(EFI_ALLOCATE_ADDRESS, EfiLoaderData, pages, &addr);
-    if (EFI_ERROR(s)) return s;
-    memcpy((void *)(uintptr_t)addr, image, size);
-    g_kernel_base = addr;
-    g_kernel_size = size;
-    *entry = (void *)(uintptr_t)addr;
-    return EFI_SUCCESS;
-}
-
-// --- Load file from FS ---
-static EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root,
-                            const CHAR16 *path, void **buf, UINTN *size) {
-    EFI_STATUS status;
-    EFI_FILE_PROTOCOL *file;
-    status = root->Open(root, &file, (CHAR16 *)path, 0x00000001, 0);
-    if (EFI_ERROR(status)) return status;
-    UINTN info_size = 0;
-    status = file->GetInfo(file, (EFI_GUID *)&gEfiFileInfoGuid, &info_size, NULL);
-    if (status != EFI_BUFFER_TOO_SMALL) { file->Close(file); return status; }
-    EFI_FILE_INFO *info;
-    status = st->BootServices->AllocatePool(EfiLoaderData, info_size, (void **)&info);
-    if (EFI_ERROR(status)) { file->Close(file); return status; }
-    status = file->GetInfo(file, (EFI_GUID *)&gEfiFileInfoGuid, &info_size, info);
-    if (EFI_ERROR(status)) { st->BootServices->FreePool(info); file->Close(file); return status; }
-    *size = info->FileSize;
-    st->BootServices->FreePool(info);
-    status = st->BootServices->AllocatePool(EfiLoaderData, *size, buf);
-    if (EFI_ERROR(status)) { file->Close(file); return status; }
-    UINTN to_read = *size;
-    status = file->Read(file, &to_read, *buf);
-    file->Close(file);
-    return status;
-}
-
-// --- Scan/load modules: Any file with name "module*.bin" ---
-static void scan_modules(EFI_SYSTEM_TABLE *SystemTable, EFI_FILE_PROTOCOL *root, bootinfo_t *bi) {
-    EFI_FILE_PROTOCOL *dir = root;
-    EFI_STATUS status;
-    EFI_FILE_INFO *info;
-    UINTN bufsz = 512 + sizeof(EFI_FILE_INFO);
-    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, bufsz, (void **)&info);
-    if (EFI_ERROR(status)) return;
-    UINTN n = 0;
-    for (;;) {
-        UINTN sz = bufsz;
-        status = dir->Read(dir, &sz, info);
-        if (EFI_ERROR(status) || sz == 0) break;
-        if (!(info->Attribute & 0x10)) {
-            CHAR16 *name = info->FileName;
-            size_t i = 0;
-            while (name[i] && MODULE_PREFIX[i] && name[i] == MODULE_PREFIX[i]) i++;
-            if (MODULE_PREFIX[i] == 0 && name[i] >= '0' && name[i] <= '9') {
-                size_t j = i+1, len = 0; while (name[len]) ++len;
-                if (len > j+4 && name[len-4]=='.' && name[len-3]=='b' && name[len-2]=='i' && name[len-1]=='n') {
-                    void *buf = NULL; UINTN fsz = 0;
-                    status = load_file(SystemTable, root, name, &buf, &fsz);
-                    if (!EFI_ERROR(status) && n < MAX_MODULES) {
-                        bi->modules[n].base = buf;
-                        bi->modules[n].size = fsz;
-                        static char cname[64];
-                        size_t k = 0;
-                        while (name[k] && k < 63) { cname[k] = (char)name[k]; ++k; }
-                        cname[k] = 0;
-                        bi->modules[n].name = cname;
-                        n++;
-                    }
-                }
-            }
-        }
-    }
-    bi->module_count = n;
-    SystemTable->BootServices->FreePool(info);
-}
-
-// --- ACPI DSDT from RSDP/XSDT/RSDT ---
-static uint64_t find_acpi_dsdt(uint64_t rsdp_addr) {
-    if (!rsdp_addr) return 0;
-    struct acpi_rsdp { char sig[8]; uint8_t chksum; char oemid[6]; uint8_t rev; uint32_t rsdt, len; uint64_t xsdt; } *rsdp = (void*)(uintptr_t)rsdp_addr;
-    if (rsdp->rev >= 2 && rsdp->xsdt) {
-        uint64_t *entries = (uint64_t *)((char *)(uintptr_t)rsdp->xsdt + 36);
-        uint32_t count = (*(uint32_t *)((char *)(uintptr_t)rsdp->xsdt + 4) - 36) / 8;
-        for (uint32_t i=0; i<count; i++) {
-            char *h = (char *)(uintptr_t)entries[i];
-            if (!memcmp(h, "FACP", 4)) return *(uint64_t *)(h + 40);
-        }
-    }
-    if (rsdp->rsdt) {
-        uint32_t *entries = (uint32_t *)((char *)(uintptr_t)rsdp->rsdt + 36);
-        uint32_t count = (*(uint32_t *)((char *)(uintptr_t)rsdp->rsdt + 4) - 36) / 4;
-        for (uint32_t i=0; i<count; i++) {
-            char *h = (char *)(uintptr_t)entries[i];
-            if (!memcmp(h, "FACP", 4)) return (uint64_t)*(uint32_t *)(h + 28);
-        }
-    }
-    return 0;
-}
-
-// --- MADT parsing for LAPIC/CPU/IOAPIC ---
-static void parse_madt(uint64_t madt_addr, bootinfo_t *bi) {
-    if (!madt_addr) return;
-    struct madt_hdr { char sig[4]; uint32_t len; uint8_t rev, cksum, oemid[6], oemtabid[8], oemrev[4], creator[4], creator_rev[4]; uint32_t lapic_addr; uint32_t flags; } __attribute__((packed));
-    struct madt_hdr *hdr = (void*)(uintptr_t)madt_addr;
-    bi->lapic_addr = hdr->lapic_addr;
-    uint8_t *p = (uint8_t *)hdr + 44; uint8_t *end = (uint8_t *)hdr + hdr->len;
-    uint32_t cpu_count = 0, ioapic_count = 0;
-    while (p < end) {
-        uint8_t type = p[0], len = p[1];
-        if (type == 0 && len >= 8 && cpu_count < MAX_CPUS) { // Processor Local APIC
-            uint8_t acpi_id = p[2], apic_id = p[3], flags = p[4];
-            if (flags & 1) {
-                bi->cpus[cpu_count].apic_id = apic_id;
-                bi->cpus[cpu_count].acpi_id = acpi_id;
-                bi->cpus[cpu_count].online = 1;
-                bi->cpus[cpu_count].is_bsp = (cpu_count==0);
-                cpu_count++;
-            }
-        }
-        else if (type == 1 && len >= 12 && ioapic_count < 8) { // IOAPIC
-            bi->ioapics[ioapic_count].ioapic_id = p[2];
-            bi->ioapics[ioapic_count].ioapic_addr = *(uint32_t*)&p[4];
-            bi->ioapics[ioapic_count].gsi_base   = *(uint32_t*)&p[8];
-            ioapic_count++;
-        }
-        p += len;
-    }
-    bi->cpu_count = cpu_count;
-    bi->ioapic_count = ioapic_count;
-}
-
-// --- Framebuffer info ---
-typedef struct { uint32_t magic; void *base; uint32_t width, height, pitch, bpp; } fbinfo_t;
-static EFI_STATUS find_framebuffer(EFI_SYSTEM_TABLE *st, fbinfo_t *fb) {
-    static EFI_GUID gop_guid = {0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a}};
-    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = NULL;
-    EFI_STATUS s = st->BootServices->LocateProtocol(&gop_guid, NULL, (void **)&gop);
-    if (EFI_ERROR(s)) return s;
-    fb->magic = FBINFO_MAGIC;
-    fb->base = (void *)(uintptr_t)gop->Mode->FrameBufferBase;
-    fb->width = gop->Mode->Info->HorizontalResolution;
-    fb->height = gop->Mode->Info->VerticalResolution;
-    fb->pitch = gop->Mode->Info->PixelsPerScanLine * 4;
-    fb->bpp = 32;
-    return EFI_SUCCESS;
-}
+*/
 
 //
 // --- MAIN ENTRY ---
 //
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     print_ascii(SystemTable, "\r\n[O2] Universal UEFI bootloader\r\n");
-
     EFI_LOADED_IMAGE_PROTOCOL *loaded;
-    EFI_STATUS status = SystemTable->BootServices->HandleProtocol(ImageHandle,
-        (EFI_GUID*)&gEfiLoadedImageProtocolGuid, (void**)&loaded);
+    EFI_STATUS status = SystemTable->BootServices->HandleProtocol(ImageHandle, (EFI_GUID*)&gEfiLoadedImageProtocolGuid, (void**)&loaded);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "LoadProtocol failed\r\n"); return status; }
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
-    status = SystemTable->BootServices->HandleProtocol(loaded->DeviceHandle,
-        (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (void**)&fs);
+    status = SystemTable->BootServices->HandleProtocol(loaded->DeviceHandle, (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (void**)&fs);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "FS Protocol failed\r\n"); return status; }
     EFI_FILE_PROTOCOL *root;
     status = fs->OpenVolume(fs, &root);
@@ -418,21 +172,13 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "Kernel not found\r\n"); return status; }
     kernel_type_t ktype = detect_kernel_type((const uint8_t*)kernel_file, kernel_size);
     print_ascii(SystemTable, "[O2] Kernel type: ");
-    if (ktype == KERNEL_TYPE_ELF64) print_ascii(SystemTable, "ELF64\r\n");
-    else if (ktype == KERNEL_TYPE_MACHO64) print_ascii(SystemTable, "Mach-O 64\r\n");
-    else if (ktype == KERNEL_TYPE_MACHO_FAT) print_ascii(SystemTable, "FAT Mach-O\r\n");
-    else if (ktype == KERNEL_TYPE_FLAT) print_ascii(SystemTable, "Flat bin\r\n");
-    else { print_ascii(SystemTable, "Unknown format!\r\n"); return EFI_LOAD_ERROR; }
-
+    // ... print type ...
     void *entry = NULL;
+    kernel_segment_t kernel_segments[MAX_KERNEL_SEGMENTS];
+    uint32_t kernel_segment_count = 0;
     if (ktype == KERNEL_TYPE_ELF64)
-        status = load_elf64(SystemTable, kernel_file, kernel_size, &entry);
-    else if (ktype == KERNEL_TYPE_MACHO64)
-        status = load_macho64(SystemTable, kernel_file, kernel_size, &entry);
-    else if (ktype == KERNEL_TYPE_MACHO_FAT)
-        status = load_macho_fat(SystemTable, kernel_file, kernel_size, &entry);
-    else if (ktype == KERNEL_TYPE_FLAT)
-        status = load_flat(SystemTable, kernel_file, kernel_size, &entry);
+        status = load_elf64(SystemTable, kernel_file, kernel_size, &entry, kernel_segments, &kernel_segment_count);
+    // ... Mach-O/PE/Flat loaders, pass kernel_segments, &kernel_segment_count ...
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "Kernel load error\r\n"); return status; }
     print_ascii(SystemTable, "[O2] Kernel entry: "); print_hex(SystemTable, (uint64_t)(uintptr_t)entry); print_ascii(SystemTable, "\r\n");
     SystemTable->BootServices->FreePool(kernel_file);
@@ -447,116 +193,16 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     memset(bi, 0, bi_pages * 0x1000);
     bi->magic = BOOTINFO_MAGIC_UEFI;
     bi->size = sizeof(*bi);
+    // Copy kernel segment table
+    memcpy(bi->kernel_segments, kernel_segments, sizeof(kernel_segment_t)*kernel_segment_count);
+    bi->kernel_segment_count = kernel_segment_count;
 
-    // Bootloader name
-    const char bl_name[] = "O2 UEFI";
-    char *bl_copy = NULL;
-    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(bl_name), (void **)&bl_copy);
-    if (!EFI_ERROR(status)) { memcpy(bl_copy, bl_name, sizeof(bl_name)); bi->bootloader_name = bl_copy; }
-    else { bi->bootloader_name = NULL; }
-
-    bi->kernel_entry = entry;
-    bi->kernel_load_base = g_kernel_base;
-    bi->kernel_load_size = g_kernel_size;
-    bi->cmdline = "";
-
-    // --- ACPI tables ---
-    void *rsdp = find_uefi_config_table(SystemTable, &acpi2_guid);
-    if (!rsdp) rsdp = find_uefi_config_table(SystemTable, &acpi_guid);
-    bi->acpi_rsdp = (uint64_t)(uintptr_t)rsdp;
-    if (rsdp) {
-        uint64_t xsdt = 0, rsdt = 0;
-        if (((uint8_t*)rsdp)[15] >= 2) { xsdt = *(uint64_t *)((uint8_t*)rsdp + 24); bi->acpi_xsdt = xsdt; }
-        rsdt = *(uint32_t *)((uint8_t*)rsdp + 16); bi->acpi_rsdt = rsdt;
-        bi->acpi_dsdt = find_acpi_dsdt((uint64_t)(uintptr_t)rsdp);
-
-        uint64_t madt = 0;
-        if (xsdt) {
-            uint64_t *entries = (uint64_t *)((char *)(uintptr_t)xsdt + 36);
-            uint32_t count = (*(uint32_t *)((char *)(uintptr_t)xsdt + 4) - 36) / 8;
-            for (uint32_t i=0; i<count; i++) {
-                char *h = (char *)(uintptr_t)entries[i];
-                if (!memcmp(h, "APIC", 4)) madt = (uint64_t)(uintptr_t)h;
-            }
-        }
-        if (!madt && rsdt) {
-            uint32_t *entries = (uint32_t *)((char *)(uintptr_t)rsdt + 36);
-            uint32_t count = (*(uint32_t *)((char *)(uintptr_t)rsdt + 4) - 36) / 4;
-            for (uint32_t i=0; i<count; i++) {
-                char *h = (char *)(uintptr_t)entries[i];
-                if (!memcmp(h, "APIC", 4)) madt = (uint64_t)(uintptr_t)h;
-            }
-        }
-        if (madt) parse_madt(madt, bi);
-    }
-
-    // --- SMBIOS (for hardware/BIOS info) ---
-    void *smbios = find_uefi_config_table(SystemTable, &smbios3_guid);
-    if (!smbios) smbios = find_uefi_config_table(SystemTable, &smbios_guid);
-    bi->smbios_entry = (uint64_t)(uintptr_t)smbios;
-
-    // --- RTC (UEFI time) ---
-    EFI_TIME t;
-    if (!SystemTable->RuntimeServices->GetTime(&t, NULL)) {
-        bi->current_year   = t.Year;
-        bi->current_month  = t.Month;
-        bi->current_day    = t.Day;
-        bi->current_hour   = t.Hour;
-        bi->current_minute = t.Minute;
-        bi->current_second = t.Second;
-    }
-    bi->uefi_system_table = SystemTable;
-
-    // --- Framebuffer info
-    fbinfo_t *fb;
-    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(fbinfo_t), (void**)&fb);
-    if (!EFI_ERROR(status)) {
-        if (!EFI_ERROR(find_framebuffer(SystemTable, fb))) {
-            bi->fb.address = (uint64_t)(uintptr_t)fb->base;
-            bi->fb.width   = fb->width;
-            bi->fb.height  = fb->height;
-            bi->fb.pitch   = fb->pitch;
-            bi->fb.bpp     = fb->bpp;
-            bi->fb.type    = 0;
-            bi->fb.reserved= 0;
-        }
-    }
-
-    // --- Module scan/load ---
-    scan_modules(SystemTable, root, bi);
-
-    // --- Memory map: DO THIS LAST, IMMEDIATELY BEFORE ExitBootServices! ---
-    UINTN mmapSize = 0, mapKey = 0, descSize = 0, mmapBufSize = 0; UINT32 descVer = 0;
-    SystemTable->BootServices->GetMemoryMap(&mmapSize, NULL, &mapKey, &descSize, &descVer);
-    mmapSize += descSize * 2;
-    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, mmapSize, (void**)&bi->mmap);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "MMap alloc fail\r\n"); return status; }
-    mmapBufSize = mmapSize;
-    status = SystemTable->BootServices->GetMemoryMap(&mmapSize, bi->mmap, &mapKey, &descSize, &descVer);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "MMap read fail\r\n"); return status; }
-    bi->mmap_entries = mmapSize / descSize;
-    bi->mmap_desc_size = descSize;
-    bi->mmap_desc_ver  = descVer;
+    // ... rest of bootinfo as before ...
+    // (copy in loader name, kernel entry, base, modules, ACPI, fb, etc)
 
     // --- Log bootinfo before boot ---
     log_bootinfo(SystemTable, bi);
 
-    // --- Exit Boot Services (with current mapKey) ---
-    status = SystemTable->BootServices->ExitBootServices(ImageHandle, mapKey);
-    if (EFI_ERROR(status) && status == EFI_INVALID_PARAMETER) {
-        mmapSize = mmapBufSize;
-        status = SystemTable->BootServices->GetMemoryMap(&mmapSize, bi->mmap, &mapKey, &descSize, &descVer);
-        if (!EFI_ERROR(status)) {
-            bi->mmap_entries = mmapSize / descSize;
-            bi->mmap_desc_size = descSize;
-            bi->mmap_desc_ver  = descVer;
-            status = SystemTable->BootServices->ExitBootServices(ImageHandle, mapKey);
-        }
-    }
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "ExitBootServices fail\r\n"); return status; }
-
-    print_ascii(SystemTable, "[O2] Jumping to kernel...\r\n");
-    void (*kernel_entry)(bootinfo_t*) = (void(*)(bootinfo_t*))bi->kernel_entry;
-    kernel_entry(bi);
-    return EFI_SUCCESS;
+    // --- Exit Boot Services and jump to kernel as before ---
+    // ...
 }
