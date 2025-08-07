@@ -345,12 +345,35 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // --- Build bootinfo ---
     bootinfo_t *bi;
-    status = SystemTable->BootServices->AllocatePool(EfiLoaderData, sizeof(bootinfo_t), (void**)&bi);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "bootinfo alloc fail\r\n"); return status; }
-    memset(bi, 0, sizeof(*bi));
+    EFI_PHYSICAL_ADDRESS bi_phys = 0;
+    UINTN bi_pages = (sizeof(bootinfo_t) + 0xFFF) / 0x1000;
+    status = SystemTable->BootServices->AllocatePages(EFI_ALLOCATE_ANY_PAGES,
+                                                      EfiLoaderData,
+                                                      bi_pages,
+                                                      &bi_phys);
+    if (EFI_ERROR(status)) {
+        print_ascii(SystemTable, "bootinfo alloc fail\r\n");
+        return status;
+    }
+    bi = (bootinfo_t *)(uintptr_t)bi_phys;
+    memset(bi, 0, bi_pages * 0x1000);
     bi->magic = BOOTINFO_MAGIC_UEFI;
     bi->size = sizeof(*bi);
-    bi->bootloader_name = "O2 UEFI";
+
+    // Copy bootloader name into loader-allocated memory so the kernel can
+    // safely access it after ExitBootServices reclaims the loader image.
+    const char bl_name[] = "O2 UEFI";
+    char *bl_copy = NULL;
+    status = SystemTable->BootServices->AllocatePool(EfiLoaderData,
+                                                     sizeof(bl_name),
+                                                     (void **)&bl_copy);
+    if (!EFI_ERROR(status)) {
+        memcpy(bl_copy, bl_name, sizeof(bl_name));
+        bi->bootloader_name = bl_copy;
+    } else {
+        bi->bootloader_name = NULL;
+    }
+
     bi->kernel_entry = entry;
     bi->kernel_load_base = g_kernel_base;
     bi->kernel_load_size = g_kernel_size;
