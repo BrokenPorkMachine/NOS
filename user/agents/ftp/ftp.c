@@ -33,6 +33,10 @@ static int find_handle(ipc_queue_t *q, uint32_t id, const char *name) {
 void ftp_server(ipc_queue_t *q, uint32_t self_id) {
     serial_puts("[ftp] FTP server starting\n");
     int sock = net_socket_open(FTP_PORT, NET_SOCK_STREAM);
+    if (sock < 0) {
+        serial_puts("[ftp] failed to open socket\n");
+        return;
+    }
     const char hello[] = "220 NOS FTP\r\n";
     net_socket_send(sock, hello, strlen(hello));
     /* Yield once after initialisation so other threads can run even if
@@ -153,4 +157,5 @@ void ftp_server(ipc_queue_t *q, uint32_t self_id) {
         thread_yield();
     }
     serial_puts("[ftp] server exiting\n");
+    net_socket_close(sock);
 }
