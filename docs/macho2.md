@@ -76,7 +76,7 @@ additional fields inside `macho2_info_command`.
 
 ## Example Loader
 
-See `boot/macho2_loader_example.c` for a minimal loader that locates the
-manifest, extracts the entry symbol, and would transfer control to the
+The O2 bootloader implementation in `boot/src/O2.c` demonstrates loading
+Mach-O images, locating the manifest, and transferring control to the
 agent.
 
