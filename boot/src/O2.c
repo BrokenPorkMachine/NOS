@@ -465,11 +465,13 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->boot_device_type = 0;
     bi->boot_partition = 0;
 
+    // Inform the user before we leave boot services. Once ExitBootServices
+    // succeeds, calling OutputString via print_ascii is no longer valid.
+    print_ascii(SystemTable, "[O2] Jumping to kernel...\r\n");
+
     // --- Exit Boot Services ---
     status = SystemTable->BootServices->ExitBootServices(ImageHandle, mapKey);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "ExitBootServices fail\r\n"); return status; }
-
-    print_ascii(SystemTable, "[O2] Jumping to kernel...\r\n");
 
     // --- Jump to kernel entry ---
     void (*kernel_entry)(bootinfo_t*) = (void(*)(bootinfo_t*))bi->kernel_entry;
