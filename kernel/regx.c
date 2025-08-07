@@ -1,4 +1,4 @@
-#include "../src/agents/regx/regx.h"
+#include <regx.h>
 #include <string.h>
 
 static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
