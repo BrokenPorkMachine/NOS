@@ -1,6 +1,6 @@
-# O2 Boot Agent (NitrOS)
+# nboot Agent (NitrOS)
 
-**O2** is the UEFI bootloader for the NitrOS operating system.  
+**=nboot** is the UEFI bootloader for the NitrOS operating system.  
 It loads the Nitrous kernel and NOSM modules, validates signatures, and passes a manifest-rich bootinfo to the kernel at startup.
 
 ## Features
