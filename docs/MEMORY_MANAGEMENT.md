@@ -45,6 +45,9 @@ This document outlines a proposed secure and optimized memory mapping and manage
    - Copy-on-write tracking with a simple page fault handler
    - Experimental NUMA region discovery from the boot memory map
    - IPC shared memory buffers protected by rights masks
+   - Human-readable boot memory map logging for easier debugging
+   - Refactored MMIO helpers with explicit memory barriers
+   - Shared memory creation now enforces page alignment and exposes rights checks
 
 ## Boot Sequence Overview
 
