@@ -3,7 +3,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-
+#define KERNEL_NAME L"\\kernel.bin"
+#define MH_MAGIC_64    0xFEEDFACF
+#define FAT_MAGIC      0xCAFEBABE
 // --- Kernel segment info ---
 typedef struct {
     uint64_t vaddr, paddr, filesz, memsz;
@@ -91,8 +93,6 @@ static void log_bootinfo(EFI_SYSTEM_TABLE *st, const bootinfo_t *bi) {
 }
 
 // --- Kernel type detection ---
-#define MH_MAGIC_64    0xFEEDFACF
-#define FAT_MAGIC      0xCAFEBABE
 static kernel_type_t detect_kernel_type(const uint8_t *data, size_t size) {
     if (size >= 4 && data[0]==0x7F && data[1]=='E' && data[2]=='L' && data[3]=='F' && data[4]==2)
         return KERNEL_TYPE_ELF64;
