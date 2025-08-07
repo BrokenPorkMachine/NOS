@@ -15,6 +15,7 @@
 #include "drivers/Net/netstack.h"
 #include "drivers/IO/usb.h"
 #include "drivers/IO/usbkbd.h"
+#include "Task/thread.h"
 
 extern const uint8_t nosfs_image[] __attribute__((weak));
 extern size_t nosfs_size __attribute__((weak));
@@ -30,7 +31,7 @@ static void print_modules(const bootinfo_t *b) { (void)b; }
 static void print_framebuffer(const bootinfo_t *b) { (void)b; }
 static void print_mmap(const bootinfo_t *b) { (void)b; }
 static void load_module(const void *m) { (void)m; }
-static void scheduler_loop(void) { for (;;) { } }
+static void scheduler_loop(void) { while (1) schedule(); }
 
 void n2_main(bootinfo_t *bootinfo) {
     if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI)
@@ -99,5 +100,6 @@ void n2_main(bootinfo_t *bootinfo) {
         kprint("\r\n");
     }
 
+    threads_init();
     scheduler_loop();
 }

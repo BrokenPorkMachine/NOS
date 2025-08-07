@@ -28,6 +28,8 @@ static thread_t main_thread;
 ipc_queue_t fs_queue;
 ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
+ipc_queue_t init_queue;
+ipc_queue_t regx_queue;
 
 // Utility: Convert unsigned int to decimal string (for logging)
 static void utoa_dec(uint32_t val, char *buf) {
@@ -347,31 +349,75 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
     return next->rsp;
 }
 
-// System thread startup: create and start init server
-static void thread_init_func(void) {
-    serial_puts("[init] init server not included\n");
-    for (;;) thread_yield(); // Should never return
+static uint32_t init_tid = 0;
+
+// --- RegX service thread ---
+static void regx_thread_func(void) {
+    serial_puts("[regx] service started\n");
+    ipc_message_t msg;
+    while (1) {
+        if (ipc_receive_blocking(&regx_queue, thread_self(), &msg) == 0) {
+            serial_puts("[regx] request received\n");
+            ipc_message_t reply = {0};
+            reply.type = msg.type;
+            ipc_send(&regx_queue, thread_self(), &reply);
+        }
+        thread_yield();
+    }
 }
 
-// Initialize threading system
+// --- Init server thread (broker for RegX) ---
+static void init_thread_func(void) {
+    init_tid = thread_self();
+    serial_puts("[init] init server started\n");
+    ipc_message_t msg;
+    while (1) {
+        if (ipc_receive_blocking(&init_queue, init_tid, &msg) == 0) {
+            serial_puts("[init] forwarding to regx\n");
+            ipc_send(&regx_queue, init_tid, &msg);
+            ipc_message_t reply;
+            if (ipc_receive_blocking(&regx_queue, init_tid, &reply) == 0)
+                ipc_send(&init_queue, init_tid, &reply);
+        }
+        thread_yield();
+    }
+}
+
+// --- Demo client to show policy enforcement ---
+static void client_thread_func(void) {
+    ipc_message_t msg = {0};
+    msg.type = 1;
+    serial_puts("[client] attempting direct regx access\n");
+    if (ipc_send(&regx_queue, thread_self(), &msg) != 0)
+        serial_puts("[client] direct access denied\n");
+    serial_puts("[client] sending request via init\n");
+    ipc_send(&init_queue, thread_self(), &msg);
+    if (ipc_receive_blocking(&init_queue, thread_self(), &msg) == 0)
+        serial_puts("[client] got reply from regx via init\n");
+    for (;;) thread_yield();
+}
+
+// Initialize threading system and launch init/regx
 void threads_init(void) {
     ipc_init(&fs_queue);
     ipc_init(&pkg_queue);
     ipc_init(&upd_queue);
+    ipc_init(&init_queue);
+    ipc_init(&regx_queue);
 
-    // Create init server (userland server thread)
-    thread_t *t = thread_create_with_priority(thread_init_func, 200);
-    if (!t) {
-        serial_puts("[thread] FATAL: cannot create init server\n");
+    thread_t *regx = thread_create_with_priority(regx_thread_func, 220);
+    thread_t *init = thread_create_with_priority(init_thread_func, 200);
+    thread_t *client = thread_create_with_priority(client_thread_func, 180);
+    if (!regx || !init || !client) {
+        serial_puts("[thread] FATAL: cannot create core threads\n");
         for (;;) __asm__ volatile("hlt");
     }
 
-    // Grant all capabilities to init
-    ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&regx_queue, regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&regx_queue, init->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&init_queue, init->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&init_queue, client->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
-    // Set up main kernel thread so it can yield safely
     main_thread.magic = THREAD_MAGIC;
     main_thread.id      = 0;
     main_thread.func    = NULL;
