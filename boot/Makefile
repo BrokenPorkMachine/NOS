@@ -12,7 +12,7 @@ LDFLAGS=/entry:efi_main \
         /nodefaultlib \
         /base:0 \
         /filealign:32 \
-        /out:n nboot.efi
+        /out:nboot.efi
 
 # Build all C sources in this directory. The original build assumed sources
 # lived under a `src/` subdirectory, but `nboot.c` now resides at the top level
