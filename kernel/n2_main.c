@@ -81,6 +81,8 @@ void n2_main(bootinfo_t *bootinfo) {
 
     // --- Agent system startup ---
     n2_agent_registry_reset();
+    // Launch core service threads (e.g., RegX) early
+    threads_init();
 
     // Load built-in agents if present
     if (nosfs_image && nosfs_size)
@@ -113,6 +115,5 @@ void n2_main(bootinfo_t *bootinfo) {
         vprint("\r\n");
     }
 
-    threads_init();
     scheduler_loop();
 }

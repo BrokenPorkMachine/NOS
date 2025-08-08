@@ -1,4 +1,5 @@
 #include "agent_loader.h"
+#include "agent.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -135,10 +136,19 @@ static int register_from_manifest(const char *json) {
     json_extract_string(json, "entry", entry, sizeof(entry));
     // register with RegX, parent_id = 0 for root
     uint64_t id = regx_register(&m, 0);
-    // find entry function and call it
+    // find entry function and register agent with N2
     agent_entry_t fn = find_entry_fn(entry);
-    if (fn) fn();
-    else printf("[loader] entry symbol \"%s\" not found\n", entry);
+    if (fn) {
+        n2_agent_t agent = {0};
+        strncpy(agent.name, m.name, sizeof(agent.name) - 1);
+        strncpy(agent.version, m.version, sizeof(agent.version) - 1);
+        agent.entry = fn;
+        agent.manifest = json;
+        n2_agent_register(&agent);
+        fn();
+    } else {
+        printf("[loader] entry symbol \"%s\" not found\n", entry);
+    }
     return id ? 0 : -1;
 }
 
