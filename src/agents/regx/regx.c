@@ -43,9 +43,13 @@ size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max)
                 continue;
             if (sel->parent_id && regx_registry[i].parent_id != sel->parent_id)
                 continue;
-            if (sel->name_prefix[0] &&
-                strncmp(regx_registry[i].manifest.name, sel->name_prefix, strlen(sel->name_prefix)) != 0)
-                continue;
+            if (sel->name_prefix[0]) {
+                size_t prefix_len = 0;
+                while (prefix_len < sizeof(sel->name_prefix) && sel->name_prefix[prefix_len])
+                    prefix_len++;
+                if (strncmp(regx_registry[i].manifest.name, sel->name_prefix, prefix_len) != 0)
+                    continue;
+            }
         }
         out[n++] = regx_registry[i];
     }
