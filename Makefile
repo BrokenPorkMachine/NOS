@@ -99,6 +99,6 @@ runmac: disk.img
 	-netdev user,id=n0 \
 	-device e1000,netdev=n0 \
 	-device i8042 \
-	-serial stdio -display sdl
+	-serial stdio -display cocoa
 
 .PHONY: all libc kernel boot clean run
