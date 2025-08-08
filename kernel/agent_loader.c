@@ -3,6 +3,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Provide a simple implementation of memmem for environments where it is
+// unavailable. This performs a byte-wise search of `needle` within `haystack`.
+static const void *memmem_local(const void *haystack, size_t haystacklen,
+                                const void *needle, size_t needlelen) {
+    const unsigned char *h = (const unsigned char *)haystack;
+    const unsigned char *n = (const unsigned char *)needle;
+    if (needlelen == 0)
+        return haystack;
+    for (size_t i = 0; i + needlelen <= haystacklen; ++i)
+        if (memcmp(h + i, n, needlelen) == 0)
+            return h + i;
+    return NULL;
+}
+
 // ---- Minimal JSON parser ----------------------------------------------------
 // extracts a string associated with a key in a flat JSON object
 static int json_extract_string(const char *json, const char *key,
@@ -69,7 +83,7 @@ agent_format_t detect_agent_format(const void *image, size_t size) {
         ((d[0]==0xCF && d[1]==0xFA && d[2]==0xED && d[3]==0xFE) ||
          (d[0]==0xFE && d[1]==0xED && d[2]==0xFA && d[3]==0xCF))) {
         // detect Mach‑O2 if it contains the __O2INFO section label in plain text
-        if (memmem(d, size, "__O2INFO", 8)) return AGENT_FORMAT_MACHO2;
+        if (memmem_local(d, size, "__O2INFO", 8)) return AGENT_FORMAT_MACHO2;
         return AGENT_FORMAT_MACHO;
     }
     // NOSM: starts with “NOSM”
@@ -87,8 +101,8 @@ int extract_manifest_macho2(const void *image, size_t size,
                             char *out_json, size_t out_sz) {
     // very simple parser: search for “__O2INFO” followed by a JSON string
     const unsigned char *d = (const unsigned char *)image;
-    const char *start = memmem(d, size, "{", 1);
-    const char *end   = memmem(d, size, "}", 1);
+    const char *start = memmem_local(d, size, "{", 1);
+    const char *end   = memmem_local(d, size, "}", 1);
     if (!start || !end || end <= start || (size_t)(end-start+2) > out_sz)
         return -1;
     memcpy(out_json, start, end-start+2);
@@ -143,12 +157,15 @@ int load_agent_elf(const void *image, size_t size) {
 }
 
 int load_agent_macho(const void *image, size_t size) {
+    (void)image;
+    (void)size;
     // treat like Mach‑O2 but don’t expect manifest
     printf("[loader] Mach‑O loader not fully implemented\n");
     return 0;
 }
 
 int load_agent_flat(const void *image, size_t size) {
+    (void)image;
     // flat: register with generic manifest and call first byte as entry
     regx_manifest_t m = {"flat", 0, "1.0", "flat", ""};
     regx_register(&m, 0);
@@ -158,6 +175,7 @@ int load_agent_flat(const void *image, size_t size) {
 }
 
 int load_agent_nosm(const void *image, size_t size) {
+    (void)image;
     // stub loader for NOSM agent format (e.g., no manifest)
     printf("[loader] NOSM agent loaded (size=%zu)\n", size);
     return 0;
