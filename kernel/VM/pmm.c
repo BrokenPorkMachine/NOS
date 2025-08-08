@@ -8,7 +8,10 @@
 // heap. We currently only support low memory, so ignore anything above this
 // threshold.
 #define PMM_MAX_ADDR (1ULL << 32)
+#define MAX_FRAMES (PMM_MAX_ADDR / PAGE_SIZE)
+#define MAX_BITMAP_BYTES (MAX_FRAMES / 8)
 
+static uint8_t static_bitmap[MAX_BITMAP_BYTES];
 static uint8_t *bitmap = NULL;
 static uint64_t total_frames = 0;
 static uint64_t next_free = 0; // next frame index to start searching from
@@ -54,9 +57,9 @@ void pmm_init(const bootinfo_t *bootinfo) {
     }
     total_frames = (max_addr + PAGE_SIZE - 1) / PAGE_SIZE;
     uint64_t bitmap_bytes = (total_frames + 7) / 8;
-    bitmap = malloc(bitmap_bytes);
-    if (!bitmap)
-        return;
+    if (bitmap_bytes > MAX_BITMAP_BYTES)
+        bitmap_bytes = MAX_BITMAP_BYTES;
+    bitmap = static_bitmap;
     memset(bitmap, 0xFF, bitmap_bytes);
 
     free_frames = 0;
