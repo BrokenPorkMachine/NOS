@@ -6,9 +6,8 @@ extern n2_main
 
 _start:
     cld
-    ; Bootloader passes bootinfo via RCX (Microsoft x64 ABI).
-    ; Move it to RDI for System V calling convention expected by n2_main.
-    mov rdi, rcx
+    ; Bootloader passes bootinfo in RDI (SysV x86_64 ABI),
+    ; so it's already in the correct register for n2_main.
     xor rbp, rbp
     call n2_main
 
