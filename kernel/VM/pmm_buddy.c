@@ -231,6 +231,7 @@ void buddy_debug_print(void) {
 
 // ========== Initialization ==========
 void buddy_init(const bootinfo_t *bootinfo) {
+    (void)bootinfo;
     zone_count = numa_node_count();
     for (int n=0; n<zone_count; n++) {
         const numa_region_t *r = numa_node_region(n);

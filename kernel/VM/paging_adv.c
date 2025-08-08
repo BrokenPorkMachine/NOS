@@ -12,8 +12,8 @@ static volatile int page_lock = 0;
 
 // Static page tables (identity map first 4GB as in legacy paging)
 static uint64_t __attribute__((aligned(PAGE_SIZE))) pml4[512];
-static uint64_t __attribute__((aligned(PAGE_SIZE))) pdpt[512];
-static uint64_t __attribute__((aligned(PAGE_SIZE))) pd[4][512];
+static uint64_t __attribute__((aligned(PAGE_SIZE), unused)) pdpt[512];
+static uint64_t __attribute__((aligned(PAGE_SIZE), unused)) pd[4][512];
 
 static uint64_t *alloc_table(void) {
     void *page = buddy_alloc(0, current_cpu_node(), 0);

@@ -15,6 +15,7 @@ void *kalloc(size_t sz) {
     return buddy_alloc(order, 0, 0);
 }
 void kfree(void *ptr) {
+    (void)ptr;
     // This requires tracking the order for each allocation (can use shadow table)
     // For simplicity, not shown here
 }
