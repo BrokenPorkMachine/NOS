@@ -1,5 +1,11 @@
 #pragma once
 #include <regx.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum {
     REGX_IPC_ENUM = 1,     // Enumerate entries
@@ -25,3 +31,7 @@ typedef struct {
 
 // Message handler:
 void regx_ipc_handle(const regx_ipc_req_t *req, regx_ipc_resp_t *resp);
+
+#ifdef __cplusplus
+}
+#endif
