@@ -5,6 +5,11 @@
 #define MIN_PRIORITY   0   // Lowest priority
 #define MAX_PRIORITY 255   // Highest priority
 
+// Maximum number of kernel threads that can exist simultaneously.
+// Threads are allocated from a static pool to avoid malloc during
+// early boot before the heap is fully initialized.
+#define MAX_KERNEL_THREADS 64
+
 typedef enum {
     THREAD_READY = 0,
     THREAD_RUNNING,

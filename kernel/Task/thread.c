@@ -14,6 +14,11 @@
 // Zombie list to track exited threads for reaping
 static thread_t *zombie_list = NULL;
 
+// Static pools for thread descriptors and their stacks. Using a fixed pool
+// avoids calling malloc() during early boot before the heap is available.
+static thread_t thread_pool[MAX_KERNEL_THREADS];
+static char     stack_pool[MAX_KERNEL_THREADS][STACK_SIZE];
+
 // Per-CPU run queue pointers
 thread_t *current_cpu[MAX_CPUS] = {0};
 static thread_t *tail_cpu[MAX_CPUS] = {0};
@@ -104,15 +109,20 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
     if (priority < MIN_PRIORITY) priority = MIN_PRIORITY;
     if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
 
-    thread_t *t = malloc(sizeof(thread_t));
-    if (!t) return NULL;
-
-    t->magic = THREAD_MAGIC;
-    t->stack = malloc(STACK_SIZE);
-    if (!t->stack) {
-        free(t);
-        return NULL;
+    thread_t *t = NULL;
+    int index = -1;
+    for (int i = 0; i < (int)MAX_KERNEL_THREADS; i++) {
+        if (thread_pool[i].magic == 0) {
+            t = &thread_pool[i];
+            index = i;
+            break;
+        }
     }
+    if (!t) return NULL;   // no free slots
+
+    memset(t, 0, sizeof(thread_t));
+    t->magic = THREAD_MAGIC;
+    t->stack = stack_pool[index];
 
     uint64_t *sp = (uint64_t *)(t->stack + STACK_SIZE);
 
@@ -241,9 +251,7 @@ static void thread_reap(void) {
         char buf[20];
         serial_puts("[thread] free id=");
         utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
-        if (t->stack) free(t->stack);
-        t->magic = 0;
-        free(t);
+        t->magic = 0;        // mark slot free
         t = next;
     }
 }
