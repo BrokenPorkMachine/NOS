@@ -2,7 +2,6 @@
 #include "agent.h"
 #include <string.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 // Provide a simple implementation of memmem for environments where it is
 // unavailable. This performs a byte-wise search of `needle` within `haystack`.
@@ -42,15 +41,6 @@ static int json_extract_int(const char *json, const char *key) {
     if (!p) return -1;
     p += strlen(pattern);
     return (int)strtol(p, NULL, 10);
-}
-
-// strdup is not provided by our minimal libc, so implement a local helper.
-static char *strdup_local(const char *s) {
-    size_t len = strlen(s) + 1;
-    char *d = (char *)malloc(len);
-    if (d)
-        memcpy(d, s, len);
-    return d;
 }
 
 // ---- Internal entry registry ------------------------------------------------
@@ -154,9 +144,8 @@ static int register_from_manifest(const char *json) {
         snprintf(agent.name, sizeof(agent.name), "%s", m.name);
         snprintf(agent.version, sizeof(agent.version), "%s", m.version);
         agent.entry = fn;
-        const char *caps = m.capabilities[0] ? m.capabilities : "";
-        char *cap_copy = caps[0] ? strdup_local(caps) : NULL;
-        agent.manifest = cap_copy ? (const void *)cap_copy : (const void *)caps;
+        snprintf(agent.capabilities, sizeof(agent.capabilities), "%s", m.capabilities);
+        agent.manifest = NULL;
         n2_agent_register(&agent);
         fn();
     } else {
