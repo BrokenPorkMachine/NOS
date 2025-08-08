@@ -54,14 +54,15 @@
    ```
 3. **Prepare boot image:**
 
-* Create a FAT-formatted image and copy `BOOTX64.EFI` (O2 Boot Agent) and `kernel.bin`:
+* Create a FAT-formatted image and copy `BOOTX64.EFI` (nboot) along with the `O2.bin` stage0 loader and `n2.bin` kernel:
 
   ```sh
   mkfs.vfat -C disk.img 4096
   mmd -i disk.img ::/EFI
   mmd -i disk.img ::/EFI/BOOT
   mcopy -i disk.img bootx64.efi ::/EFI/BOOT/BOOTX64.EFI
-  mcopy -i disk.img kernel.bin ::/EFI/BOOT/kernel.bin
+  mcopy -i disk.img O2.bin ::/
+  mcopy -i disk.img n2.bin ::/
   ```
 
 4. **Run in QEMU:**
