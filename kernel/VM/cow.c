@@ -147,6 +147,6 @@ void handle_page_fault(uint64_t err, uint64_t addr) {
     }
 
     serial_puts("[cow] unhandled pfault: addr=0x");
-    // Optional: print the address as hex
+    serial_printf("%016lx\n", (uint64_t)addr);
     for(;;) __asm__("hlt");
 }
