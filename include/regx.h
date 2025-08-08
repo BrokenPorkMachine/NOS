@@ -10,8 +10,9 @@ typedef enum {
     REGX_TYPE_DEVICE = 1,
     REGX_TYPE_DRIVER = 2,
     REGX_TYPE_AGENT  = 3,
-    REGX_TYPE_FILESYSTEM = 4,  // add this
-    /* other types … */
+    REGX_TYPE_SERVICE = 4,
+    REGX_TYPE_BUS = 5,
+    REGX_TYPE_FILESYSTEM = 6,
 } regx_type_t;
 
 /* Registry entry types */
