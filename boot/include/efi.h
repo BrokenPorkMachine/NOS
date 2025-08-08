@@ -277,6 +277,7 @@ struct EFI_BOOT_SERVICES {
 #define AllocateMaxAddress        1
 #define AllocateAddress           2
 
+#define EfiLoaderCode             3
 #define EfiLoaderData             4
 
 // ====================
