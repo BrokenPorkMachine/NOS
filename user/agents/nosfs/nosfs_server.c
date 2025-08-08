@@ -32,67 +32,67 @@ static void register_agent(void) {
 
 void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     nosfs_fs_t fs;
-    nosfs_init(&fs);
-    ipc_message_t msg, reply;
-    int handle, ret;
+    if (nosfs_init(&fs) != 0) {
+        // Log failure to init, abort server
+        ipc_message_t fail;
+        memset(&fail, 0, sizeof(fail));
+        fail.type = IPC_HEALTH_PONG;
+        fail.arg1 = -1;
+        ipc_send(q, self_id, &fail);
+        return;
+    }
 
+    ipc_message_t msg, reply;
     while (1) {
         if (ipc_receive_blocking(q, self_id, &msg) != 0)
             continue;
-        if (msg.len > IPC_MSG_DATA_MAX)
+        if (msg.len > IPC_MSG_DATA_MAX) {
+            // Optionally send error/reject message here
             continue;
-
+        }
         memset(&reply, 0, sizeof(reply));
         reply.type = msg.type;
 
-        if (msg.type == IPC_HEALTH_PING) {
+        switch (msg.type) {
+        case IPC_HEALTH_PING:
             reply.type = IPC_HEALTH_PONG;
             ipc_send(q, self_id, &reply);
             continue;
-        }
-
-        switch (msg.type) {
         case NOSFS_MSG_CREATE:
-            ret = nosfs_create(&fs, (const char*)msg.data, msg.arg1, msg.arg2);
-            reply.arg1 = ret;
+            if (!msg.data || msg.len == 0) {
+                reply.arg1 = NOSFS_ERR;
+                break;
+            }
+            reply.arg1 = nosfs_create(&fs, (const char*)msg.data, msg.arg1, msg.arg2);
             break;
         case NOSFS_MSG_WRITE:
-            handle = msg.arg1;
-            ret = nosfs_write(&fs, handle, msg.arg2, msg.data, msg.len);
-            reply.arg1 = ret;
+            reply.arg1 = nosfs_write(&fs, msg.arg1, msg.arg2, msg.data, msg.len);
             break;
         case NOSFS_MSG_READ:
-            handle = msg.arg1;
-            ret = nosfs_read(&fs, handle, msg.arg2, reply.data, msg.len);
-            reply.arg1 = ret;
-            reply.len  = (ret == 0) ? msg.len : 0;
+            reply.arg1 = nosfs_read(&fs, msg.arg1, msg.arg2, reply.data, msg.len);
+            reply.len  = (reply.arg1 == 0) ? msg.len : 0;
             break;
         case NOSFS_MSG_DELETE:
-            handle = msg.arg1;
-            ret = nosfs_delete(&fs, handle);
-            reply.arg1 = ret;
+            reply.arg1 = nosfs_delete(&fs, msg.arg1);
             break;
         case NOSFS_MSG_RENAME:
-            handle = msg.arg1;
-            ret = nosfs_rename(&fs, handle, (const char*)msg.data);
-            reply.arg1 = ret;
+            if (!msg.data || msg.len == 0) {
+                reply.arg1 = NOSFS_ERR;
+                break;
+            }
+            reply.arg1 = nosfs_rename(&fs, msg.arg1, (const char*)msg.data);
             break;
         case NOSFS_MSG_LIST:
-            reply.arg1 = nosfs_list(&fs, (char (*)[NOSFS_NAME_LEN])reply.data,
-                                     IPC_MSG_DATA_MAX / NOSFS_NAME_LEN);
+            reply.arg1 = nosfs_list(&fs, (char (*)[NOSFS_NAME_LEN])reply.data, IPC_MSG_DATA_MAX / NOSFS_NAME_LEN);
             reply.len  = reply.arg1 * NOSFS_NAME_LEN;
             break;
         case NOSFS_MSG_CRC:
-            handle = msg.arg1;
-            ret = nosfs_compute_crc(&fs, handle);
-            reply.arg1 = ret;
-            if (ret == 0)
-                reply.arg2 = fs.files[handle].crc32;
+            reply.arg1 = nosfs_compute_crc(&fs, msg.arg1);
+            if (reply.arg1 == 0)
+                reply.arg2 = fs.files[msg.arg1].crc32;
             break;
         case NOSFS_MSG_VERIFY:
-            handle = msg.arg1;
-            ret = nosfs_verify(&fs, handle);
-            reply.arg1 = ret;
+            reply.arg1 = nosfs_verify(&fs, msg.arg1);
             break;
         default:
             reply.arg1 = NOSFS_ERR;
