@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdio.h>
 #include "../boot/include/bootinfo.h"
 #include "agent.h"
 #include <nosm.h>
@@ -92,9 +93,23 @@ void n2_main(bootinfo_t *bootinfo) {
     // --- Agent system startup ---
     n2_agent_registry_reset();
     vprint("[N2] Agent Registry Reset\r\n");
-   // Launch core service threads (e.g., RegX) early
+    // Launch core service threads (e.g., RegX) early
     threads_init();
     vprint("[N2] Launching core service threads\r\n");
+
+    // Register a placeholder filesystem agent so the system can
+    // proceed even if no NOSFS image is embedded.
+    regx_manifest_t fs_manifest = {0};
+    snprintf(fs_manifest.name, sizeof(fs_manifest.name), "NOSFS");
+    fs_manifest.type = REGX_TYPE_FILESYSTEM;
+    snprintf(fs_manifest.version, sizeof(fs_manifest.version), "1.0");
+    regx_register(&fs_manifest, 0);
+
+    n2_agent_t fs_agent = {0};
+    snprintf(fs_agent.name, sizeof(fs_agent.name), "NOSFS");
+    snprintf(fs_agent.version, sizeof(fs_agent.version), "1.0");
+    snprintf(fs_agent.capabilities, sizeof(fs_agent.capabilities), "filesystem");
+    n2_agent_register(&fs_agent);
 
     // Load built-in agents if present.
     // Validate both the image pointers and their associated size symbols
