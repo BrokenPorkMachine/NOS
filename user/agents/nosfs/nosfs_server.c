@@ -1,53 +1,29 @@
-#include "nosfs.h"
-#include "../../../kernel/IPC/ipc.h"
-#include "../../libc/libc.h"
 #include "nosfs_server.h"
-#include "agent.h"
+#include "nosfs.h"
+#include <string.h>
+#include <stdio.h>
 
-enum {
-    NOSFS_OK = 0,
-    NOSFS_ERR = -1
-};
-
-/* Static manifest describing the NOSFS agent.  In a production system this
- * would be a structured JSON/CBOR blob loaded from the module's manifest
- * section. */
-static const char nosfs_manifest_str[] =
-    "{\"name\":\"NOSFS\",\"version\":\"1.0.0\","
-    "\"capabilities\":\"filesystem,snapshot,rollback\"}";
-
-static n2_agent_t nosfs_agent = {
-    .name = "NOSFS",
-    .version = "1.0.0",
-    .entry = nosfs_server,
-    .manifest = nosfs_manifest_str,
-    .capabilities = "filesystem,snapshot,rollback"
-};
-
-/* Register with the kernel agent registry at module load time. */
-__attribute__((constructor))
-static void register_agent(void) {
-    n2_agent_register(&nosfs_agent);
-}
+// Optionally add: #include <unistd.h> for file/manifest validation
 
 void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     nosfs_fs_t fs;
     if (nosfs_init(&fs) != 0) {
-        // Log failure to init, abort server
-        ipc_message_t fail;
-        memset(&fail, 0, sizeof(fail));
+        ipc_message_t fail = {0};
         fail.type = IPC_HEALTH_PONG;
         fail.arg1 = -1;
         ipc_send(q, self_id, &fail);
         return;
     }
 
+    // Optional: Manifest validation (suggested for integrity)
+    // if (!nosfs_validate_manifest()) { ... }
+
     ipc_message_t msg, reply;
     while (1) {
         if (ipc_receive_blocking(q, self_id, &msg) != 0)
             continue;
         if (msg.len > IPC_MSG_DATA_MAX) {
-            // Optionally send error/reject message here
+            // Optionally send error/reject message
             continue;
         }
         memset(&reply, 0, sizeof(reply));
@@ -94,6 +70,7 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
         case NOSFS_MSG_VERIFY:
             reply.arg1 = nosfs_verify(&fs, msg.arg1);
             break;
+        // Feature extension: Quota management, journaling ops, snapshots
         default:
             reply.arg1 = NOSFS_ERR;
             break;
