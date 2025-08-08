@@ -355,6 +355,15 @@ void schedule(void) {
 uint64_t schedule_from_isr(uint64_t *old_rsp) {
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
+    // During early boot an interrupt may arrive before `threads_init` has
+    // installed the initial "main" thread.  In that case there is no
+    // currently active thread to switch from, so just preserve the incoming
+    // stack pointer and return immediately.  Without this guard a spurious
+    // interrupt would dereference a NULL `current_cpu` entry and trigger a
+    // General Protection fault.
+    if (!prev)
+        return (uint64_t)old_rsp;
+
     prev->rsp = (uint64_t)old_rsp;
     if (prev->state == THREAD_RUNNING)
         prev->state = THREAD_READY;
