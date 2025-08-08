@@ -80,10 +80,347 @@ static int tokenize(char *line, char *argv[], int max) {
 }
 
 // --- Filesystem IPC helpers and commands ---
-// [Insert your cmd_ls, cmd_cat, cmd_create, cmd_write, cmd_rm, cmd_mv, cmd_crc, cmd_verify, cmd_cd, cmd_mkdir,
-//  cmd_install_pkg, cmd_uninstall_pkg, cmd_pkg_list, cmd_update, cmd_help functions here, unchanged from codex branch]
 
-// Example: (shortened for brevity)
+static int fs_find_handle(ipc_queue_t *fs_q, uint32_t self_id, const char *path) {
+    if (!fs_q)
+        return -1;
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_LIST;
+    if (ipc_send(fs_q, self_id, &msg) != 0)
+        return -1;
+    if (ipc_receive(fs_q, self_id, &reply) != 0)
+        return -1;
+    for (uint32_t i = 0; i < reply.arg1; ++i) {
+        char *name = (char *)reply.data + i * NOSFS_NAME_LEN;
+        if (strncmp(name, path, NOSFS_NAME_LEN) == 0)
+            return (int)i;
+    }
+    return -1;
+}
+
+static void cmd_ls(ipc_queue_t *fs_q, uint32_t self_id) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_LIST;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0) {
+        puts_out("ls error\n");
+        return;
+    }
+    for (uint32_t i = 0; i < reply.arg1; ++i) {
+        char *name = (char *)reply.data + i * NOSFS_NAME_LEN;
+        puts_out(name);
+        putc_out('\n');
+    }
+}
+
+static void cmd_cat(ipc_queue_t *fs_q, uint32_t self_id, const char *name) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    char path[NOSFS_NAME_LEN];
+    build_path(name, path);
+    int h = fs_find_handle(fs_q, self_id, path);
+    if (h < 0) {
+        puts_out("not found\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_READ;
+    msg.arg1 = h;
+    msg.arg2 = 0;
+    msg.len = IPC_MSG_DATA_MAX;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0 || reply.arg1 != 0) {
+        puts_out("read error\n");
+        return;
+    }
+    for (uint32_t i = 0; i < reply.len; ++i)
+        putc_out((char)reply.data[i]);
+    putc_out('\n');
+}
+
+static void cmd_create(ipc_queue_t *fs_q, uint32_t self_id, const char *name) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    char path[NOSFS_NAME_LEN];
+    build_path(name, path);
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_CREATE;
+    msg.arg1 = IPC_MSG_DATA_MAX;
+    msg.arg2 = NOSFS_PERM_READ | NOSFS_PERM_WRITE;
+    size_t len = strlen(path);
+    if (len > IPC_MSG_DATA_MAX - 1)
+        len = IPC_MSG_DATA_MAX - 1;
+    memcpy(msg.data, path, len);
+    msg.data[len] = '\0';
+    msg.len = (uint32_t)len;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0 || (int32_t)reply.arg1 < 0)
+        puts_out("create failed\n");
+}
+
+static void cmd_write(ipc_queue_t *fs_q, uint32_t self_id,
+                      const char *name, const char *data) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    char path[NOSFS_NAME_LEN];
+    build_path(name, path);
+    int h = fs_find_handle(fs_q, self_id, path);
+    if (h < 0) {
+        puts_out("not found\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_WRITE;
+    msg.arg1 = h;
+    msg.arg2 = 0;
+    size_t len = strlen(data);
+    if (len > IPC_MSG_DATA_MAX)
+        len = IPC_MSG_DATA_MAX;
+    memcpy(msg.data, data, len);
+    msg.len = (uint32_t)len;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0 || reply.arg1 != 0)
+        puts_out("write failed\n");
+}
+
+static void cmd_rm(ipc_queue_t *fs_q, uint32_t self_id, const char *name) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    char path[NOSFS_NAME_LEN];
+    build_path(name, path);
+    int h = fs_find_handle(fs_q, self_id, path);
+    if (h < 0) {
+        puts_out("not found\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_DELETE;
+    msg.arg1 = h;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0 || reply.arg1 != 0)
+        puts_out("rm failed\n");
+}
+
+static void cmd_mv(ipc_queue_t *fs_q, uint32_t self_id,
+                   const char *oldn, const char *newn) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    char path_old[NOSFS_NAME_LEN], path_new[NOSFS_NAME_LEN];
+    build_path(oldn, path_old);
+    build_path(newn, path_new);
+    int h = fs_find_handle(fs_q, self_id, path_old);
+    if (h < 0) {
+        puts_out("not found\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_RENAME;
+    msg.arg1 = h;
+    size_t len = strlen(path_new);
+    if (len > IPC_MSG_DATA_MAX - 1)
+        len = IPC_MSG_DATA_MAX - 1;
+    memcpy(msg.data, path_new, len);
+    msg.data[len] = '\0';
+    msg.len = (uint32_t)len;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0 || reply.arg1 != 0)
+        puts_out("mv failed\n");
+}
+
+static void cmd_crc(ipc_queue_t *fs_q, uint32_t self_id, const char *name) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    char path[NOSFS_NAME_LEN];
+    build_path(name, path);
+    int h = fs_find_handle(fs_q, self_id, path);
+    if (h < 0) {
+        puts_out("not found\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_CRC;
+    msg.arg1 = h;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0 || (int32_t)reply.arg1 < 0) {
+        puts_out("crc failed\n");
+        return;
+    }
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%08x", reply.arg1);
+    puts_out(buf);
+    putc_out('\n');
+}
+
+static void cmd_verify(ipc_queue_t *fs_q, uint32_t self_id, const char *name) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    char path[NOSFS_NAME_LEN];
+    build_path(name, path);
+    int h = fs_find_handle(fs_q, self_id, path);
+    if (h < 0) {
+        puts_out("not found\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_VERIFY;
+    msg.arg1 = h;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0) {
+        puts_out("verify failed\n");
+        return;
+    }
+    puts_out(reply.arg1 == 0 ? "OK\n" : "BAD\n");
+}
+
+static void cmd_cd(ipc_queue_t *fs_q, uint32_t self_id, const char *name) {
+    (void)fs_q;
+    (void)self_id;
+    if (!strcmp(name, "/")) {
+        strcpy(cwd, "/");
+        return;
+    }
+    if (!strcmp(name, "..")) {
+        char *p = strrchr(cwd, '/');
+        if (p && p != cwd)
+            *p = '\0';
+        else
+            strcpy(cwd, "/");
+        return;
+    }
+    char path[NOSFS_NAME_LEN];
+    build_path(name, path);
+    if (path[0] == '\0') {
+        strcpy(cwd, "/");
+    } else {
+        cwd[0] = '/';
+        strncpy(cwd + 1, path, NOSFS_NAME_LEN - 2);
+        cwd[NOSFS_NAME_LEN - 1] = '\0';
+    }
+}
+
+static void cmd_mkdir(ipc_queue_t *fs_q, uint32_t self_id, const char *name) {
+    if (!fs_q) {
+        puts_out("filesystem unavailable\n");
+        return;
+    }
+    char path[NOSFS_NAME_LEN];
+    build_path(name, path);
+    size_t len = strlen(path);
+    if (len + 1 < sizeof(path) && path[len - 1] != '/') {
+        path[len] = '/';
+        path[len + 1] = '\0';
+        len++;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = NOSFS_MSG_CREATE;
+    msg.arg1 = 0;
+    msg.arg2 = NOSFS_PERM_READ | NOSFS_PERM_WRITE;
+    if (len > IPC_MSG_DATA_MAX - 1)
+        len = IPC_MSG_DATA_MAX - 1;
+    memcpy(msg.data, path, len);
+    msg.data[len] = '\0';
+    msg.len = (uint32_t)len;
+    if (ipc_send(fs_q, self_id, &msg) != 0 ||
+        ipc_receive(fs_q, self_id, &reply) != 0 || (int32_t)reply.arg1 < 0)
+        puts_out("mkdir failed\n");
+}
+
+static void cmd_install_pkg(ipc_queue_t *pkg_q, uint32_t self_id,
+                            const char *name) {
+    if (!pkg_q) {
+        puts_out("pkg unavailable\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = PKG_MSG_INSTALL;
+    size_t len = strlen(name);
+    if (len > IPC_MSG_DATA_MAX - 1)
+        len = IPC_MSG_DATA_MAX - 1;
+    memcpy(msg.data, name, len);
+    msg.data[len] = '\0';
+    msg.len = (uint32_t)len;
+    if (ipc_send(pkg_q, self_id, &msg) != 0 ||
+        ipc_receive(pkg_q, self_id, &reply) != 0 || reply.arg1 != 0)
+        puts_out("install failed\n");
+}
+
+static void cmd_uninstall_pkg(ipc_queue_t *pkg_q, uint32_t self_id,
+                              const char *name) {
+    if (!pkg_q) {
+        puts_out("pkg unavailable\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = PKG_MSG_UNINSTALL;
+    size_t len = strlen(name);
+    if (len > IPC_MSG_DATA_MAX - 1)
+        len = IPC_MSG_DATA_MAX - 1;
+    memcpy(msg.data, name, len);
+    msg.data[len] = '\0';
+    msg.len = (uint32_t)len;
+    if (ipc_send(pkg_q, self_id, &msg) != 0 ||
+        ipc_receive(pkg_q, self_id, &reply) != 0 || reply.arg1 != 0)
+        puts_out("uninstall failed\n");
+}
+
+static void cmd_pkg_list(ipc_queue_t *pkg_q, uint32_t self_id) {
+    if (!pkg_q) {
+        puts_out("pkg unavailable\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = PKG_MSG_LIST;
+    if (ipc_send(pkg_q, self_id, &msg) != 0 ||
+        ipc_receive(pkg_q, self_id, &reply) != 0) {
+        puts_out("pkglist failed\n");
+        return;
+    }
+    for (uint32_t i = 0; i < reply.arg1; ++i) {
+        char *name = (char *)reply.data + i * PKG_NAME_MAX;
+        puts_out(name);
+        putc_out('\n');
+    }
+}
+
+static void cmd_update(ipc_queue_t *upd_q, uint32_t self_id, const char *target) {
+    if (!upd_q) {
+        puts_out("update unavailable\n");
+        return;
+    }
+    uint32_t type = 0;
+    if (!strcmp(target, "kernel"))
+        type = UPDATE_MSG_KERNEL;
+    else if (!strcmp(target, "userland"))
+        type = UPDATE_MSG_USERLAND;
+    else {
+        puts_out("unknown target\n");
+        return;
+    }
+    ipc_message_t msg = {0}, reply = {0};
+    msg.type = type;
+    if (ipc_send(upd_q, self_id, &msg) != 0 ||
+        ipc_receive(upd_q, self_id, &reply) != 0 || reply.arg1 != 0)
+        puts_out("update failed\n");
+}
+
 static void cmd_help(void) {
     puts_out("Available commands:\n");
     puts_out("  ls        - list files\n");
