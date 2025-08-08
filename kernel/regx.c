@@ -33,6 +33,9 @@ const regx_entry_t *regx_query(uint64_t id) {
 }
 
 size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max) {
+    if (!out || max == 0)
+        return 0;
+
     size_t n = 0;
     const char *prefix = NULL;
     size_t prefix_len = 0;
