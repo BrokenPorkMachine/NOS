@@ -16,6 +16,16 @@ static uint32_t login_tid = 0;
 // Weak fallback so unit tests can link without the full netstack.
 __attribute__((weak)) uint32_t net_get_ip(void) { return 0x0A00020F; }
 
+// Minimal stub so the kernel can link without the full NitroShell agent.
+__attribute__((weak)) void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q,
+                                   ipc_queue_t *upd_q, uint32_t self_id) {
+    (void)fs_q; (void)pkg_q; (void)upd_q; (void)self_id;
+    tty_write("[nsh] stub not implemented\n");
+    for (;;) {
+        thread_yield();
+    }
+}
+
 
 typedef struct {
     const char *user;

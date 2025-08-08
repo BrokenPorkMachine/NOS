@@ -4,6 +4,7 @@
 #include "../drivers/IO/serial.h"
 #include <stdint.h>
 #include "../arch/CPU/smp.h"
+#include "../../user/agents/login/login.h"
 
 #ifndef STACK_SIZE
 #define STACK_SIZE 8192
@@ -349,7 +350,7 @@ static void regx_thread_func(void) {
 }
 static void login_thread_func(void) {
     serial_puts("[login] service started\n");
-    for (;;) thread_yield();
+    login_server(&fs_queue, thread_self());
 }
 static void init_thread_func(void) {
     static uint32_t init_tid = 0;

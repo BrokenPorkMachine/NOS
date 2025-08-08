@@ -23,6 +23,7 @@ kernel: libc
 	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
 	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
+	$(CC) $(CFLAGS) -c user/agents/login/login.c -o user/agents/login/login.o
 	$(CC) $(CFLAGS) -c kernel/arch/CPU/smp.c -o kernel/arch/CPU/smp.o
 	$(CC) $(CFLAGS) -c kernel/arch/CPU/lapic.c -o kernel/arch/CPU/lapic.o
 	$(CC) $(CFLAGS) -c kernel/macho2.c -o kernel/macho2.o
@@ -58,7 +59,7 @@ kernel: libc
             kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
-    user/libc/libc.o -o kernel.bin
+    user/agents/login/login.o user/libc/libc.o -o kernel.bin
 	cp kernel.bin n2.bin
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.o -o O2.elf
 	# Strip ELF note sections so O2.bin begins with executable code
@@ -82,7 +83,7 @@ disk.img: boot kernel
 clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/agent.o \
 	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
-	    kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
+            kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o user/agents/login/login.o disk.img \
 	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
 	    kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
 	    kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
