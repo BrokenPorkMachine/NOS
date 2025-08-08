@@ -5,13 +5,6 @@
 // ========== Settings ==========
 
 #define STAGE1_MODULE_NAME "n2.bin"
-#define MAX_KERNEL_SEGMENTS 16
-
-typedef struct {
-    uint64_t vaddr, paddr, filesz, memsz;
-    uint32_t flags;
-    char name[17];
-} kernel_segment_t;
 
 // ========== Minimal stdlib ==========
 
