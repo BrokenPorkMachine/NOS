@@ -9,6 +9,20 @@
 #define FBINFO_MAGIC 0xF00DBA66
 #define BOOTINFO_MAGIC_UEFI 0x4F324255
 
+#ifndef VERBOSE
+#define VERBOSE 1
+#endif
+
+#if VERBOSE
+#define vprint_ascii(st, s) print_ascii((st), (s))
+#define vprint_hex(st, v)   print_hex((st), (v))
+#define vprint_dec(st, v)   print_dec((st), (v))
+#else
+#define vprint_ascii(st, s) (void)0
+#define vprint_hex(st, v)   (void)0
+#define vprint_dec(st, v)   (void)0
+#endif
+
 // --- Mini stdlib ---
 static void *memcpy(void *dst, const void *src, size_t n) { uint8_t *d=dst; const uint8_t *s=src; while (n--) *d++ = *s++; return dst; }
 static void *memset(void *dst, int c, size_t n) { uint8_t *d=dst; while (n--) *d++ = (uint8_t)c; return dst; }
@@ -83,27 +97,27 @@ static EFI_STATUS find_framebuffer(EFI_SYSTEM_TABLE *st, fbinfo_t *fb) {
 
 // --- MAIN ENTRY ---
 EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
-    print_ascii(SystemTable, "\r\n[nboot] UEFI multi-stage loader\r\n");
+    vprint_ascii(SystemTable, "\r\n[nboot] UEFI multi-stage loader\r\n");
 
     // --- Find FS root ---
     EFI_LOADED_IMAGE_PROTOCOL *loaded;
     EFI_STATUS status = SystemTable->BootServices->HandleProtocol(ImageHandle,
         (EFI_GUID*)&gEfiLoadedImageProtocolGuid, (void**)&loaded);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "LoadProtocol failed\r\n"); return status; }
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "LoadProtocol failed\r\n"); return status; }
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
     status = SystemTable->BootServices->HandleProtocol(loaded->DeviceHandle,
         (EFI_GUID*)&gEfiSimpleFileSystemProtocolGuid, (void**)&fs);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "FS Protocol failed\r\n"); return status; }
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "FS Protocol failed\r\n"); return status; }
     EFI_FILE_PROTOCOL *root;
     status = fs->OpenVolume(fs, &root);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "OpenVolume failed\r\n"); return status; }
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "OpenVolume failed\r\n"); return status; }
 
     // --- Allocate bootinfo struct ---
     bootinfo_t *bi;
     EFI_PHYSICAL_ADDRESS bi_phys = 0;
     UINTN bi_pages = (sizeof(bootinfo_t) + 0xFFF) / 0x1000;
     status = SystemTable->BootServices->AllocatePages(EFI_ALLOCATE_ANY_PAGES, EfiLoaderData, bi_pages, &bi_phys);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "bootinfo alloc fail\r\n"); return status; }
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "bootinfo alloc fail\r\n"); return status; }
     bi = (bootinfo_t *)(uintptr_t)bi_phys;
     memset(bi, 0, bi_pages * 0x1000);
     bi->magic = BOOTINFO_MAGIC_UEFI;
@@ -112,21 +126,24 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     // --- Load O2.bin as "kernel" ---
     void *o2_buf = NULL; UINTN o2_size = 0;
     status = load_file(SystemTable, root, O2_NAME, EfiLoaderCode, &o2_buf, &o2_size);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "O2.bin not found\r\n"); return status; }
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "O2.bin not found\r\n"); return status; }
 
     // --- Load n2.bin as module ---
     void *n2_buf = NULL; UINTN n2_size = 0;
     status = load_file(SystemTable, root, N2_NAME, EfiLoaderData, &n2_buf, &n2_size);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "n2.bin not found\r\n"); return status; }
-    print_ascii(SystemTable, "[nboot] Loaded n2.bin: ");
-    print_hex(SystemTable, (uint64_t)(uintptr_t)n2_buf); print_ascii(SystemTable, " sz=");
-    print_hex(SystemTable, n2_size); print_ascii(SystemTable, "\r\n");
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "n2.bin not found\r\n"); return status; }
+    vprint_ascii(SystemTable, "[nboot] Loaded n2.bin: ");
+    vprint_hex(SystemTable, (uint64_t)(uintptr_t)n2_buf); vprint_ascii(SystemTable, " sz=");
+    vprint_hex(SystemTable, n2_size); vprint_ascii(SystemTable, "\r\n");
 
     // --- Fill in module slot ---
     bi->modules[0].name = "n2.bin";
     bi->modules[0].base = n2_buf;
     bi->modules[0].size = n2_size;
     bi->module_count = 1;
+    vprint_ascii(SystemTable, "[nboot] Module count: ");
+    vprint_dec(SystemTable, bi->module_count);
+    vprint_ascii(SystemTable, "\r\n");
 
     // --- Framebuffer info ---
     fbinfo_t fb = {0};
@@ -145,19 +162,22 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     SystemTable->BootServices->GetMemoryMap(&mmapSize, NULL, &mapKey, &descSize, &descVer);
     mmapSize += descSize * 2;
     status = SystemTable->BootServices->AllocatePool(EfiLoaderData, mmapSize, (void**)&bi->mmap);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "MMap alloc fail\r\n"); return status; }
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "MMap alloc fail\r\n"); return status; }
     status = SystemTable->BootServices->GetMemoryMap(&mmapSize, bi->mmap, &mapKey, &descSize, &descVer);
-    if (EFI_ERROR(status)) { print_ascii(SystemTable, "MMap read fail\r\n"); return status; }
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "MMap read fail\r\n"); return status; }
     bi->mmap_entries = mmapSize / descSize;
     bi->mmap_desc_size = descSize;
     bi->mmap_desc_ver  = descVer;
+    vprint_ascii(SystemTable, "[nboot] MMap entries: ");
+    vprint_dec(SystemTable, bi->mmap_entries);
+    vprint_ascii(SystemTable, "\r\n");
 
     // --- ACPI, SMBIOS, etc can be added here if desired ---
 
     // --- Print status ---
-    print_ascii(SystemTable, "[nboot] Bootinfo at ");
-    print_hex(SystemTable, (uint64_t)(uintptr_t)bi); print_ascii(SystemTable, "\r\n");
-    print_ascii(SystemTable, "[nboot] Jumping to O2.bin...\r\n");
+    vprint_ascii(SystemTable, "[nboot] Bootinfo at ");
+    vprint_hex(SystemTable, (uint64_t)(uintptr_t)bi); vprint_ascii(SystemTable, "\r\n");
+    vprint_ascii(SystemTable, "[nboot] Jumping to O2.bin...\r\n");
 
     // --- Call O2.bin's entry (SysV ABI) ---
     typedef void (__attribute__((sysv_abi)) *o2_entry_t)(bootinfo_t *);

@@ -24,7 +24,17 @@ extern size_t my_mach_agent_size __attribute__((weak));
 
 // ... (previous kprint, strcspn_local, syscall infrastructure, sandboxing, module loading helpers, hardware/system query helpers, scheduler_loop, etc unchanged) ...
 
+#ifndef VERBOSE
+#define VERBOSE 1
+#endif
+
 static void kprint(const char *s) { serial_puts(s); }
+
+#if VERBOSE
+#define vprint(s) kprint(s)
+#else
+#define vprint(s) (void)0
+#endif
 static void print_acpi_info(const bootinfo_t *b) { (void)b; }
 static void print_cpu_topology(const bootinfo_t *b) { (void)b; }
 static void print_modules(const bootinfo_t *b) { (void)b; }
@@ -38,15 +48,15 @@ void n2_main(bootinfo_t *bootinfo) {
         return;
 
     serial_init();
-    kprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
-    kprint("[N2] Booted by: ");
+    vprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
+    vprint("[N2] Booted by: ");
     const char *bl = bootinfo->bootloader_name;
     if (bl && ((uintptr_t)bl < 0x100000000ULL)) {
-        kprint(bl);
+        vprint(bl);
     } else {
-        kprint("unknown");
+        vprint("unknown");
     }
-    kprint("\r\n");
+    vprint("\r\n");
 
     // Framebuffer, ACPI, CPU, modules, memory map, etc.
     print_acpi_info(bootinfo);
@@ -56,7 +66,7 @@ void n2_main(bootinfo_t *bootinfo) {
     print_mmap(bootinfo);
 
     // --- USB support (early, before TTY) ---
-    kprint("[N2] Initializing USB stack...\r\n");
+    vprint("[N2] Initializing USB stack...\r\n");
     usb_init();       // Initialize USB controller(s)
     usb_kbd_init();   // Set up USB keyboard detection
 
@@ -84,9 +94,9 @@ void n2_main(bootinfo_t *bootinfo) {
     // Query for the default filesystem agent.
     const n2_agent_t *fs = n2_agent_find_capability("filesystem");
     if (fs) {
-        kprint("[N2] Filesystem agent active: "); kprint(fs->name); kprint("\r\n");
+        vprint("[N2] Filesystem agent active: "); vprint(fs->name); vprint("\r\n");
     } else {
-        kprint("[N2] No filesystem agent found!\r\n");
+        vprint("[N2] No filesystem agent found!\r\n");
     }
 
     // Enumerate registered filesystem agents via RegX
@@ -95,9 +105,9 @@ void n2_main(bootinfo_t *bootinfo) {
     regx_entry_t agents[4];
     size_t n = regx_enumerate(&sel, agents, 4);
     for (size_t i = 0; i < n; ++i) {
-        kprint("[N2] Found filesystem agent: ");
-        kprint(agents[i].manifest.name);
-        kprint("\r\n");
+        vprint("[N2] Found filesystem agent: ");
+        vprint(agents[i].manifest.name);
+        vprint("\r\n");
     }
 
     threads_init();
