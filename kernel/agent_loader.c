@@ -140,8 +140,10 @@ static int register_from_manifest(const char *json) {
     agent_entry_t fn = find_entry_fn(entry);
     if (fn) {
         n2_agent_t agent = {0};
-        strncpy(agent.name, m.name, sizeof(agent.name) - 1);
-        strncpy(agent.version, m.version, sizeof(agent.version) - 1);
+        // Use snprintf to ensure strings are always null-terminated without
+        // triggering truncation warnings from strncpy.
+        snprintf(agent.name, sizeof(agent.name), "%s", m.name);
+        snprintf(agent.version, sizeof(agent.version), "%s", m.version);
         agent.entry = fn;
         agent.manifest = json;
         n2_agent_register(&agent);
