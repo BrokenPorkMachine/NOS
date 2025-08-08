@@ -37,7 +37,8 @@ static void print_dec(EFI_SYSTEM_TABLE *st, uint64_t v) {
 
 // --- EFI File read helper ---
 EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root,
-                     const CHAR16 *path, void **buf, UINTN *size) {
+                     const CHAR16 *path, UINTN mem_type,
+                     void **buf, UINTN *size) {
     EFI_STATUS status;
     EFI_FILE_PROTOCOL *file;
     status = root->Open(root, &file, (CHAR16 *)path, 0x00000001, 0);
@@ -52,7 +53,7 @@ EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root,
     if (EFI_ERROR(status)) { st->BootServices->FreePool(info); file->Close(file); return status; }
     *size = info->FileSize;
     st->BootServices->FreePool(info);
-    status = st->BootServices->AllocatePool(EfiLoaderData, *size, buf);
+    status = st->BootServices->AllocatePool(mem_type, *size, buf);
     if (EFI_ERROR(status)) { file->Close(file); return status; }
     UINTN to_read = *size;
     status = file->Read(file, &to_read, *buf);
@@ -110,12 +111,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // --- Load O2.bin as "kernel" ---
     void *o2_buf = NULL; UINTN o2_size = 0;
-    status = load_file(SystemTable, root, O2_NAME, &o2_buf, &o2_size);
+    status = load_file(SystemTable, root, O2_NAME, EfiLoaderCode, &o2_buf, &o2_size);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "O2.bin not found\r\n"); return status; }
 
     // --- Load n2.bin as module ---
     void *n2_buf = NULL; UINTN n2_size = 0;
-    status = load_file(SystemTable, root, N2_NAME, &n2_buf, &n2_size);
+    status = load_file(SystemTable, root, N2_NAME, EfiLoaderData, &n2_buf, &n2_size);
     if (EFI_ERROR(status)) { print_ascii(SystemTable, "n2.bin not found\r\n"); return status; }
     print_ascii(SystemTable, "[nboot] Loaded n2.bin: ");
     print_hex(SystemTable, (uint64_t)(uintptr_t)n2_buf); print_ascii(SystemTable, " sz=");
