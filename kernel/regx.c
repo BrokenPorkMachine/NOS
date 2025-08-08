@@ -39,7 +39,8 @@ size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max)
 
     if (sel && sel->name_prefix[0]) {
         prefix = sel->name_prefix;
-        prefix_len = strlen(prefix);
+        while (prefix_len < sizeof(sel->name_prefix) && prefix[prefix_len])
+            prefix_len++;
     }
 
     for (size_t i = 0; i < regx_count && n < max; ++i) {
