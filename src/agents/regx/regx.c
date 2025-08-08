@@ -1,6 +1,7 @@
 #include <regx.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 __attribute__((section("__O2INFO,__manifest")))
 const char mo2_manifest[] =
@@ -12,12 +13,23 @@ const char mo2_manifest[] =
 "  \"entry\": \"regx_main\"\n"
 "}\n";
 
+// --- Registry State ---
 static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
 static size_t regx_count = 0;
 static uint64_t regx_next_id = 1;
 
+// --- Registration/Unregistration ---
 uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id) {
-    if (regx_count >= REGX_MAX_ENTRIES) return 0;
+    if (!m || regx_count >= REGX_MAX_ENTRIES)
+        return 0;
+
+    // Prevent duplicate name under same parent
+    for (size_t i = 0; i < regx_count; ++i) {
+        if (regx_registry[i].parent_id == parent_id &&
+            strncmp(regx_registry[i].manifest.name, m->name, sizeof(m->name)) == 0)
+            return 0; // Already registered
+    }
+
     regx_entry_t *e = &regx_registry[regx_count++];
     e->id = regx_next_id++;
     e->parent_id = parent_id;
@@ -28,6 +40,15 @@ uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id) {
 int regx_unregister(uint64_t id) {
     for (size_t i=0; i<regx_count; ++i) {
         if (regx_registry[i].id == id) {
+            // Remove children recursively (optional: cascade delete)
+            for (size_t j=0; j<regx_count; ) {
+                if (regx_registry[j].parent_id == id) {
+                    regx_unregister(regx_registry[j].id);
+                    continue; // Do not increment
+                }
+                ++j;
+            }
+            // Overwrite with last and reduce count
             regx_registry[i] = regx_registry[--regx_count];
             return 0;
         }
@@ -35,7 +56,9 @@ int regx_unregister(uint64_t id) {
     return -1;
 }
 
+// --- Enumeration with strong bounds and prefix support ---
 size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max) {
+    if (!out || max == 0) return 0;
     size_t n=0;
     for (size_t i=0; i<regx_count && n<max; ++i) {
         if (sel) {
@@ -44,9 +67,7 @@ size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max)
             if (sel->parent_id && regx_registry[i].parent_id != sel->parent_id)
                 continue;
             if (sel->name_prefix[0]) {
-                size_t prefix_len = 0;
-                while (prefix_len < sizeof(sel->name_prefix) && sel->name_prefix[prefix_len])
-                    prefix_len++;
+                size_t prefix_len = strnlen(sel->name_prefix, sizeof(sel->name_prefix));
                 if (strncmp(regx_registry[i].manifest.name, sel->name_prefix, prefix_len) != 0)
                     continue;
             }
@@ -63,7 +84,7 @@ const regx_entry_t *regx_query(uint64_t id) {
     return NULL;
 }
 
-// Device/agent tree output (for tools or diagnostics)
+// --- Tree Dump (for tools/diagnostics) ---
 void regx_tree(uint64_t parent, int level, FILE *outf) {
     for (size_t i = 0; i < regx_count; ++i) {
         if (regx_registry[i].parent_id == parent) {
@@ -74,7 +95,7 @@ void regx_tree(uint64_t parent, int level, FILE *outf) {
     }
 }
 
-// Export/serialize the full registry to manifest (JSON)
+// --- JSON Export of Registry ---
 void regx_export_json(FILE *outf) {
     fprintf(outf, "[\n");
     for (size_t i=0; i<regx_count; ++i) {
