@@ -244,7 +244,13 @@ static void thread_reap(void) {
 // chosen again if no other thread is ready.
 static thread_t *pick_next(int cpu) {
     thread_t *start = current_cpu[cpu];
+    if (!start)
+        return NULL;
+
     thread_t *t = start->next; // begin search at the next thread
+    if (!t)
+        return NULL;
+
     thread_t *best = NULL;
     char buf[32];
 
@@ -261,6 +267,8 @@ static thread_t *pick_next(int cpu) {
             if (!best || t->priority > best->priority)
                 best = t;
         }
+        if (!t->next)
+            break; // prevent null pointer traversal
         t = t->next;
     }
 
@@ -275,6 +283,10 @@ void schedule(void) {
 
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
+    if (!prev) {
+        __asm__ volatile("push %0; popfq; hlt" :: "r"(rflags) : "memory");
+        return;
+    }
 
     // Mark current as ready if it was running
     if (prev->state == THREAD_RUNNING)
