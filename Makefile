@@ -1,6 +1,7 @@
 CROSS_COMPILE ?= x86_64-linux-gnu-
 CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
+OBJCOPY := $(CROSS_COMPILE)objcopy
 NASM := nasm
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
 	-fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
@@ -51,6 +52,9 @@ kernel: libc
 	    kernel/drivers/IO/pit.o \
 	    kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
     user/libc/libc.o -o kernel.bin
+	cp kernel.bin n2.bin
+	$(LD) -Ttext=0x0 kernel/O2.o -o O2.elf
+	$(OBJCOPY) -O binary O2.elf O2.bin
 
 boot:
 	make -C boot
@@ -61,12 +65,13 @@ disk.img: boot kernel
 	mmd -i disk.img ::/EFI
 	mmd -i disk.img ::/EFI/BOOT
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI
-	mcopy -i disk.img kernel.bin ::/
+	mcopy -i disk.img O2.bin ::/
+	mcopy -i disk.img n2.bin ::/
 
 clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/agent.o \
 	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
-	    kernel/macho2.o kernel/printf.o kernel.bin user/libc/libc.o disk.img \
+	    kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
 	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
 	    kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
 	    kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
