@@ -31,6 +31,20 @@ ipc_queue_t upd_queue;
 ipc_queue_t init_queue;
 ipc_queue_t regx_queue;
 
+// Ensure scheduler state is in a known reset state before any interrupts run.
+// Some early boot paths may trigger timer interrupts before `threads_init()`
+// executes which previously left these globals holding garbage and led to
+// crashes when the scheduler tried to traverse bogus run queues.  This helper
+// explicitly zeros all bookkeeping so spurious interrupts are harmless.
+void threads_early_init(void) {
+    zombie_list = NULL;
+    next_id = 1;
+    for (int i = 0; i < MAX_CPUS; ++i) {
+        current_cpu[i] = NULL;
+        tail_cpu[i] = NULL;
+    }
+}
+
 // Utility: Convert unsigned int to decimal string (for logging)
 static void utoa_dec(uint32_t val, char *buf) {
     char tmp[20];

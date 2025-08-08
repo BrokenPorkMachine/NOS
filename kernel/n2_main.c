@@ -47,6 +47,7 @@ void n2_main(bootinfo_t *bootinfo) {
     if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI)
         return;
 
+    threads_early_init();
     serial_init();
     vprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
     vprint("[N2] Booted by: ");

@@ -30,6 +30,11 @@ typedef struct thread {
 extern thread_t *current_cpu[MAX_CPUS];
 
 /**
+ * Reset scheduler bookkeeping before interrupts might fire.
+ */
+void threads_early_init(void);
+
+/**
  * Retrieve pointer to currently running thread on this CPU.
  */
 thread_t *thread_current(void);
