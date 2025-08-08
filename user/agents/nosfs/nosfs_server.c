@@ -20,7 +20,8 @@ static n2_agent_t nosfs_agent = {
     .name = "NOSFS",
     .version = "1.0.0",
     .entry = nosfs_server,
-    .manifest = nosfs_manifest_str
+    .manifest = nosfs_manifest_str,
+    .capabilities = "filesystem,snapshot,rollback"
 };
 
 /* Register with the kernel agent registry at module load time. */

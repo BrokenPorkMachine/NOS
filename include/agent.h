@@ -12,6 +12,7 @@ typedef struct {
     char version[16];
     void *entry;
     const void *manifest;
+    char capabilities[64];  // safe capabilities string
 } n2_agent_t;
 
 int n2_agent_register(const n2_agent_t *agent);
