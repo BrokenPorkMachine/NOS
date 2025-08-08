@@ -64,7 +64,8 @@ void *nosm_load(const void *image, size_t size)
     memcpy(agent.name, manifest->name, sizeof(agent.name));
     memcpy(agent.version, manifest->version, sizeof(agent.version));
     agent.entry = entry;
-    agent.manifest = manifest;
+    /* NOSM modules have no capabilities; use an empty string for manifest. */
+    agent.manifest = "";
     n2_agent_register(&agent);
 
     entry();

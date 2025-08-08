@@ -64,7 +64,12 @@ const n2_agent_t *n2_agent_find_capability(const char *cap) {
         return NULL;
     for (size_t i = 0; i < registry_count; ++i) {
         const char *man = (const char *)registry[i].manifest;
-        if (man && strstr(man, cap))
+        if (!man)
+            continue;
+        /* Only treat manifest as a string if a NUL appears within 256 bytes. */
+        if (!memchr(man, '\0', 256))
+            continue;
+        if (strstr(man, cap))
             return &registry[i];
     }
     return NULL;
