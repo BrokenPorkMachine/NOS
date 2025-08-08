@@ -97,8 +97,11 @@ void n2_main(bootinfo_t *bootinfo) {
     } else {
         vprint("[N2] Builtin NOSFS image missing or invalid\r\n");
     }
-    if ((uintptr_t)my_mach_agent_image > 0x1000 && my_mach_agent_size > 0) {
+    if ((uintptr_t)my_mach_agent_image > 0x1000 && my_mach_agent_size > 0 &&
+        (uintptr_t)my_mach_agent_image < 0x100000000ULL) {
         load_agent(my_mach_agent_image, my_mach_agent_size, AGENT_FORMAT_MACHO2);
+    } else if ((uintptr_t)my_mach_agent_image || my_mach_agent_size) {
+        vprint("[N2] Builtin Mach agent image missing or invalid\r\n");
     }
 
     for (uint32_t i = 0; i < bootinfo->module_count; ++i)
