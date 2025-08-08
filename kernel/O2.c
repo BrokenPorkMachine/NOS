@@ -10,6 +10,18 @@ __asm__(".global o2_entry_stub\n o2_entry_stub: jmp _start\n");
 
 #define STAGE1_MODULE_NAME "n2.bin"
 
+#ifndef VERBOSE
+#define VERBOSE 1
+#endif
+
+#if VERBOSE
+#define vprint(s) serial_print(s)
+#define vhex(v)   print_hex(v)
+#else
+#define vprint(s) (void)0
+#define vhex(v)   (void)0
+#endif
+
 // Forward declarations so `_start` can appear before helper routines. Placing
 // the entrypoint first ensures the raw binary begins with `_start`, allowing
 // nboot to jump directly to the start of `O2.bin` without needing an offset.
@@ -24,8 +36,8 @@ static int  load_elf64(const void *image, size_t size, void **entry,
 
 void _start(bootinfo_t *bi) {
     serial_init();
-    serial_print("\r\n[O2/stage0] handoff from nboot\r\n");
-    if (!bi) { serial_print("[O2/stage0] ERROR: no bootinfo\r\n"); while(1){} }
+    vprint("\r\n[O2/stage0] handoff from nboot\r\n");
+    if (!bi) { vprint("[O2/stage0] ERROR: no bootinfo\r\n"); while(1){} }
 
     // Find n2.bin module
     void *n2_img = 0;
@@ -36,14 +48,14 @@ void _start(bootinfo_t *bi) {
         if (streq(mname, STAGE1_MODULE_NAME)) {
             n2_img = bi->modules[i].base;
             n2_size = bi->modules[i].size;
-            serial_print("[O2/stage0] found n2.bin @");
-            print_hex((uint64_t)(uintptr_t)n2_img);
-            serial_print(" sz="); print_hex(n2_size); serial_print("\r\n");
+            vprint("[O2/stage0] found n2.bin @");
+            vhex((uint64_t)(uintptr_t)n2_img);
+            vprint(" sz="); vhex(n2_size); vprint("\r\n");
             break;
         }
     }
     if (!n2_img) {
-        serial_print("[O2/stage0] ERROR: no n2.bin found in modules\r\n");
+        vprint("[O2/stage0] ERROR: no n2.bin found in modules\r\n");
         while(1){}
     }
 
@@ -52,7 +64,7 @@ void _start(bootinfo_t *bi) {
     uint32_t n2_segment_count = 0;
     void (*n2_entry)(bootinfo_t *) = 0;
     if (load_elf64(n2_img, n2_size, (void**)&n2_entry, n2_segments, &n2_segment_count) < 0) {
-        serial_print("[O2/stage0] ERROR: ELF64 load failed\r\n");
+        vprint("[O2/stage0] ERROR: ELF64 load failed\r\n");
         while(1){}
     }
 
@@ -60,7 +72,7 @@ void _start(bootinfo_t *bi) {
     // memcpy(bi->kernel_segments, n2_segments, sizeof(kernel_segment_t)*n2_segment_count);
     // bi->kernel_segment_count = n2_segment_count;
 
-    serial_print("[O2/stage0] Jumping to stage1 (n2)...\r\n");
+    vprint("[O2/stage0] Jumping to stage1 (n2)...\r\n");
     n2_entry(bi);
 
     while(1){}
@@ -115,11 +127,11 @@ static int load_elf64(const void *image, size_t size, void **entry,
             memset((void *)(uintptr_t)(ph->p_paddr + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
 
         // Print info over serial
-        serial_print("[O2] n2.seg: vaddr="); print_hex(ph->p_vaddr);
-        serial_print(" paddr="); print_hex(ph->p_paddr);
-        serial_print(" filesz="); print_hex(ph->p_filesz);
-        serial_print(" memsz="); print_hex(ph->p_memsz);
-        serial_print(" flags="); print_hex(ph->p_flags); serial_print("\r\n");
+        vprint("[O2] n2.seg: vaddr="); vhex(ph->p_vaddr);
+        vprint(" paddr="); vhex(ph->p_paddr);
+        vprint(" filesz="); vhex(ph->p_filesz);
+        vprint(" memsz="); vhex(ph->p_memsz);
+        vprint(" flags="); vhex(ph->p_flags); vprint("\r\n");
 
         if (segs && segc && count < MAX_KERNEL_SEGMENTS) {
             segs[count].vaddr = ph->p_vaddr;
