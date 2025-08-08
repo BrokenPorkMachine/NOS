@@ -122,7 +122,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     print_hex(SystemTable, n2_size); print_ascii(SystemTable, "\r\n");
 
     // --- Fill in module slot ---
-    strcpy(bi->modules[0].name, "n2.bin");
+    bi->modules[0].name = "n2.bin";
     bi->modules[0].base = n2_buf;
     bi->modules[0].size = n2_size;
     bi->module_count = 1;
