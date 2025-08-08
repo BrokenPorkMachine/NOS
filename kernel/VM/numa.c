@@ -1,5 +1,6 @@
 #include "numa.h"
 #include "../../user/libc/libc.h"
+#include "../arch/CPU/smp.h"
 
 static numa_region_t nodes[MAX_NUMA_NODES];
 static int node_cnt = 0;
@@ -28,4 +29,14 @@ const numa_region_t *numa_node_region(int node) {
     if (node < 0 || node >= node_cnt)
         return NULL;
     return &nodes[node];
+}
+
+// Return the NUMA node for the current CPU.  For now we assume a single
+// node system and always return 0.  This can be extended to consult ACPI or
+// other topology information to map CPU IDs to NUMA nodes.
+int current_cpu_node(void) {
+    (void)nodes;
+    (void)node_cnt;
+    (void)smp_cpu_id; // suppress unused warning if SMP not used
+    return 0;
 }

@@ -1,7 +1,8 @@
 #include "isr.h"
 #include "../../drivers/IO/serial.h"
-#include "../../VM/cow.h"
+#include "../../VM/paging_adv.h"
 #include "../CPU/lapic.h"
+#include "../CPU/smp.h"
 
 void isr_default_handler(struct isr_context *ctx) {
     serial_printf("\n[FAULT] Unhandled interrupt: %lu\n", ctx->int_no);
@@ -62,7 +63,7 @@ void isr_timer_handler(struct isr_context *ctx) {
 
 void isr_page_fault_handler(struct isr_context *ctx) {
     serial_printf("[FAULT] Page fault at 0x%lx, error=0x%lx\n", ctx->cr2, ctx->error_code);
-    handle_page_fault(ctx->error_code, ctx->cr2);
+    paging_handle_fault(ctx->error_code, ctx->cr2, smp_cpu_id());
 }
 
 void isr_ipi_handler(struct isr_context *ctx) {

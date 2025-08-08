@@ -53,7 +53,6 @@ int cow_free_frame(uint64_t phys);
 
 /**
  * Handle a page fault with the given error code and faulting address.
- * Handles both demand-zero and COW faults.
- * Panics (halts) on unrecoverable errors.
+ * Uses the advanced paging subsystem to allocate or copy pages as needed.
  */
-void handle_page_fault(uint64_t err, uint64_t addr);
+void paging_handle_fault(uint64_t err, uint64_t addr, int cpu_id);

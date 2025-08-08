@@ -1,7 +1,8 @@
 #include <stdint.h>
 #include "../../Task/thread.h"
 #include "../CPU/lapic.h"
-#include "../../VM/cow.h"
+#include "../CPU/smp.h"
+#include "../../VM/paging_adv.h"
 #include "../../drivers/IO/serial.h"
 void isr_default_handler(uint64_t *rsp) {
     (void)rsp; // unused in default handler
@@ -25,7 +26,7 @@ void isr_timer_handler(void) {
 
 void isr_page_fault_handler(uint64_t error_code, uint64_t addr) {
     serial_puts("[fault] page fault\n");
-    handle_page_fault(error_code, addr);
+    paging_handle_fault(error_code, addr, smp_cpu_id());
 }
 
 void isr_ipi_handler(void) {

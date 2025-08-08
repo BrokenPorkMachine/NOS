@@ -28,10 +28,11 @@ kernel: libc
 	$(CC) $(CFLAGS) -c kernel/macho2.c -o kernel/macho2.o
 	$(CC) $(CFLAGS) -c kernel/printf.c -o kernel/printf.o
 	$(CC) $(CFLAGS) -c kernel/nosm.c -o kernel/nosm.o
-	$(CC) $(CFLAGS) -c kernel/VM/pmm.c -o kernel/VM/pmm.o
-	$(CC) $(CFLAGS) -c kernel/VM/paging.c -o kernel/VM/paging.o
+	$(CC) $(CFLAGS) -c kernel/VM/pmm_buddy.c -o kernel/VM/pmm_buddy.o
+	$(CC) $(CFLAGS) -c kernel/VM/paging_adv.c -o kernel/VM/paging_adv.o
 	$(CC) $(CFLAGS) -c kernel/VM/cow.c -o kernel/VM/cow.o
 	$(CC) $(CFLAGS) -c kernel/VM/numa.c -o kernel/VM/numa.o
+	$(CC) $(CFLAGS) -c kernel/VM/kheap.c -o kernel/VM/kheap.o
 	$(CC) $(CFLAGS) -c kernel/drivers/IO/ps2.c -o kernel/drivers/IO/ps2.o
 	$(CC) $(CFLAGS) -c kernel/drivers/IO/keyboard.c -o kernel/drivers/IO/keyboard.o
 	$(CC) $(CFLAGS) -c kernel/drivers/IO/mouse.c -o kernel/drivers/IO/mouse.o
@@ -55,7 +56,7 @@ kernel: libc
 	    kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
 	    kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o \
             kernel/drivers/IO/pit.o \
-            kernel/VM/pmm.o kernel/VM/paging.o kernel/VM/cow.o kernel/VM/numa.o \
+            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
     user/libc/libc.o -o kernel.bin
 	cp kernel.bin n2.bin
@@ -83,7 +84,7 @@ clean:
 	    kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
             kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
             kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o kernel/drivers/IO/pit.o \
-            kernel/VM/pmm.o kernel/VM/paging.o kernel/VM/cow.o kernel/VM/numa.o \
+            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o
 	make -C boot clean
 
