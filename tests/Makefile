@@ -5,7 +5,7 @@ CFLAGS=-Wall -Wextra -std=gnu11 \
     -I../user/libc -I../kernel/drivers/IO -I../kernel/drivers/Audio \
     -I../kernel/drivers/Net -I../kernel/arch/GDT
 LIBC_SRC=../user/libc/libc.c thread_stub.c
-UNIT_TESTS=test_ipc test_pmm test_login test_ftp test_login_keyboard test_net test_gdt test_nosm test_nosfs
+UNIT_TESTS=test_ipc test_pmm test_login test_ftp test_login_keyboard test_net test_gdt test_nosm test_nosfs test_regx
 
 all: $(UNIT_TESTS)
 	for t in $(UNIT_TESTS); do ./$$t; done
@@ -37,6 +37,9 @@ test_nosfs: unit/test_nosfs.c ../user/agents/nosfs/nosfs.c \
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_nosm: unit/test_nosm.c ../kernel/nosm.c ../kernel/agent.c $(LIBC_SRC)
+	$(CC) $(CFLAGS) $^ -o $@
+
+test_regx: unit/test_regx.c ../kernel/regx.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
