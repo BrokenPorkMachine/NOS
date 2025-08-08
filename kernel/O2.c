@@ -10,8 +10,6 @@
 
 static void *memcpy(void *dst, const void *src, size_t n) { uint8_t *d=dst; const uint8_t *s=src; while (n--) *d++ = *s++; return dst; }
 static void *memset(void *dst, int c, size_t n) { uint8_t *d=dst; while (n--) *d++ = (uint8_t)c; return dst; }
-static int memcmp(const void *a, const void *b, size_t n) { const uint8_t *x=a,*y=b; while (n--) { if (*x!=*y) return *x-*y; x++; y++; } return 0; }
-static size_t strlen(const char *s) { size_t i=0; while(s[i]) ++i; return i; }
 static int streq(const char *a, const char *b) { while(*a && *b && *a==*b) a++,b++; return *a==*b; }
 static void itoahex(uint64_t v, char *buf) {
     for (int i=15; i>=0; --i) { buf[2+i] = "0123456789ABCDEF"[(v>>(i*4))&0xF]; }
@@ -25,7 +23,6 @@ static inline void outb(uint16_t port, uint8_t val) { asm volatile ("outb %0,%1"
 static void serial_putc(char c) { outb(COM1_PORT, c); }
 static void serial_print(const char *s) { while (*s) serial_putc(*s++); }
 static void print_hex(uint64_t v) { char b[20]; itoahex(v, b); serial_print(b); }
-static void print_dec(uint64_t v) { char buf[22], *p = buf+21; *p = 0; if (!v) *--p = '0'; while (v) { *--p = '0'+(v%10); v/=10; } serial_print(p); }
 
 // ========== ELF64 Loader ==========
 
