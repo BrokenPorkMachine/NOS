@@ -4,7 +4,7 @@
 #include "../../user/libc/libc.h"
 #include "cow.h"
 
-// Static state for all frames in the system
+// ----------- Static State -----------
 static uint16_t *refcounts = NULL;
 static uint8_t  *cow_flags = NULL;
 static uint64_t frames = 0;
@@ -46,6 +46,7 @@ uint16_t cow_refcount(uint64_t phys) {
     return 0;
 }
 
+// Robust contiguous allocator, handles non-contiguous fallback.
 void *alloc_pages(uint32_t pages) {
     if (pages == 0)
         return NULL;
@@ -72,6 +73,8 @@ void free_pages(void *addr, uint32_t pages) {
     for (uint32_t i = 0; i < pages; ++i)
         free_page((void*)(base + i * PAGE_SIZE));
 }
+
+// --- COW marking/flag helpers ---
 
 // Get the frame index for a VA, or -1 if not mapped
 static int cow_flag_index(uint64_t virt) {
@@ -106,6 +109,7 @@ int cow_is_marked(uint64_t virt) {
     return cow_flags[idx] ? 1 : 0;
 }
 
+// Free frame only if refcount is zero.
 int cow_free_frame(uint64_t phys) {
     uint64_t frame = phys / PAGE_SIZE;
     if (frame < frames && refcounts[frame] == 0) {
@@ -115,6 +119,7 @@ int cow_free_frame(uint64_t phys) {
     return 0;
 }
 
+// ----------- Page Fault Handler (COW + Demand Paging) -----------
 void handle_page_fault(uint64_t err, uint64_t addr) {
     uint64_t virt = addr & ~(PAGE_SIZE - 1);
     uint64_t phys = paging_virt_to_phys(virt);
@@ -147,6 +152,6 @@ void handle_page_fault(uint64_t err, uint64_t addr) {
     }
 
     serial_puts("[cow] unhandled pfault: addr=0x");
-    serial_printf("%016lx\n", (uint64_t)addr);
+    // TODO: Optional: print the address as hex
     for(;;) __asm__("hlt");
 }
