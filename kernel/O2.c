@@ -84,8 +84,12 @@ static void *memcpy(void *dst, const void *src, size_t n) { uint8_t *d=dst; cons
 static void *memset(void *dst, int c, size_t n) { uint8_t *d=dst; while (n--) *d++ = (uint8_t)c; return dst; }
 static int streq(const char *a, const char *b) { while(*a && *b && *a==*b) a++,b++; return *a==*b; }
 static void itoahex(uint64_t v, char *buf) {
-    for (int i=15; i>=0; --i) { buf[2+i] = "0123456789ABCDEF"[(v>>(i*4))&0xF]; }
-    buf[0]='0'; buf[1]='x'; buf[18]=0;
+    static const char *hex = "0123456789ABCDEF";
+    buf[0] = '0';
+    buf[1] = 'x';
+    for (int i = 0; i < 16; ++i)
+        buf[2 + i] = hex[(v >> ((15 - i) * 4)) & 0xF];
+    buf[18] = '\0';
 }
 
 // ========== Serial output (optional, for qemu/bochs debugging) ==========
