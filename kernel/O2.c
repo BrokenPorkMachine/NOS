@@ -36,8 +36,8 @@ static int  load_elf64(const void *image, size_t size, void **entry,
 
 void _start(bootinfo_t *bi) {
     serial_init();
-    vprint("\r\n[O2/stage0] handoff from nboot\r\n");
-    if (!bi) { vprint("[O2/stage0] ERROR: no bootinfo\r\n"); while(1){} }
+    vprint("\r\n[O2] stage0 handoff from nboot\r\n");
+    if (!bi) { vprint("[O2] stage0 ERROR: no bootinfo\r\n"); while(1){} }
 
     // Find n2.bin module
     void *n2_img = 0;
@@ -48,14 +48,14 @@ void _start(bootinfo_t *bi) {
         if (streq(mname, STAGE1_MODULE_NAME)) {
             n2_img = bi->modules[i].base;
             n2_size = bi->modules[i].size;
-            vprint("[O2/stage0] found n2.bin @");
+            vprint("[O2] stage0 found n2.bin @");
             vhex((uint64_t)(uintptr_t)n2_img);
             vprint(" sz="); vhex(n2_size); vprint("\r\n");
             break;
         }
     }
     if (!n2_img) {
-        vprint("[O2/stage0] ERROR: no n2.bin found in modules\r\n");
+        vprint("[O2] stage0 ERROR: no n2.bin found in modules\r\n");
         while(1){}
     }
 
@@ -64,7 +64,7 @@ void _start(bootinfo_t *bi) {
     uint32_t n2_segment_count = 0;
     void (*n2_entry)(bootinfo_t *) = 0;
     if (load_elf64(n2_img, n2_size, (void**)&n2_entry, n2_segments, &n2_segment_count) < 0) {
-        vprint("[O2/stage0] ERROR: ELF64 load failed\r\n");
+        vprint("[O2] stage0 ERROR: ELF64 load failed\r\n");
         while(1){}
     }
 
@@ -72,7 +72,7 @@ void _start(bootinfo_t *bi) {
     // memcpy(bi->kernel_segments, n2_segments, sizeof(kernel_segment_t)*n2_segment_count);
     // bi->kernel_segment_count = n2_segment_count;
 
-    vprint("[O2/stage0] Jumping to stage1 (n2)...\r\n");
+    vprint("[O2] stage0 Jumping to stage1 (n2)...\r\n");
     n2_entry(bi);
 
     while(1){}

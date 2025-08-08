@@ -4,8 +4,9 @@ LD := $(CROSS_COMPILE)ld
 OBJCOPY := $(CROSS_COMPILE)objcopy
 NASM := nasm
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
-	-fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-	-I include -I boot/include -no-pie
+        -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+        -I include -I boot/include -no-pie
+O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
 all: libc kernel boot disk.img
 
@@ -15,7 +16,7 @@ libc:
 kernel: libc
 	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
 	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch.o
-	$(CC) $(CFLAGS) -c kernel/O2.c -o kernel/O2.o
+	$(CC) $(O2_CFLAGS) -c kernel/O2.c -o kernel/O2.o
 	$(CC) $(CFLAGS) -c kernel/n2_main.c -o kernel/n2_main.o
 	$(CC) $(CFLAGS) -c kernel/agent.c -o kernel/agent.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
@@ -53,7 +54,7 @@ kernel: libc
 	    kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
     user/libc/libc.o -o kernel.bin
 	cp kernel.bin n2.bin
-	$(LD) -Ttext=0x0 kernel/O2.o -o O2.elf
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.o -o O2.elf
 	$(OBJCOPY) -O binary O2.elf O2.bin
 
 boot:
