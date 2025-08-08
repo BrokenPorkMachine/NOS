@@ -159,8 +159,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     print_hex(SystemTable, (uint64_t)(uintptr_t)bi); print_ascii(SystemTable, "\r\n");
     print_ascii(SystemTable, "[nboot] Jumping to O2.bin...\r\n");
 
-    // --- Call O2.bin's entry (must be a valid entry point!) ---
-    void (*o2_entry)(bootinfo_t *) = (void (*)(bootinfo_t *))o2_buf;
+    // --- Call O2.bin's entry (SysV ABI) ---
+    typedef void (__attribute__((sysv_abi)) *o2_entry_t)(bootinfo_t *);
+    o2_entry_t o2_entry = (o2_entry_t)o2_buf;
     o2_entry(bi);
 
     return EFI_SUCCESS;
