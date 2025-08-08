@@ -231,25 +231,7 @@ static thread_t *pick_next(int cpu) {
 
     thread_t *best = NULL;
     char buf[32];
-
-    while (t != start) {
-        serial_puts("[sched] consider id=");
-        utoa_dec(t->id, buf); serial_puts(buf);
-        serial_puts(" state=");
-        utoa_dec(t->state, buf); serial_puts(buf);
-        serial_puts(" prio=");
-        utoa_dec(t->priority, buf); serial_puts(buf);
-        serial_puts("\n");
-
-        if (t->state == THREAD_READY) {
-            if (!best || t->priority > best->priority)
-                best = t;
-        }
-        if (!t->next)
-            break;
-        t = t->next;
-    }
-
+    
     return best;
 }
 
