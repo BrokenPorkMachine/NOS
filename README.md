@@ -214,6 +214,7 @@ Further details on the agent-based platform are available in:
 - [docs/NOSM.md](docs/NOSM.md) – NOSM module format and lifecycle
 - [docs/NOSFS.md](docs/NOSFS.md) – transactional filesystem agent
 - [docs/api.md](docs/api.md) – N2 kernel API surface
+- [docs/MODULAR_MEMORY_SYSTEM.md](docs/MODULAR_MEMORY_SYSTEM.md) – integrating the full modular memory system
 
 ---
 
