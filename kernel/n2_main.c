@@ -96,22 +96,29 @@ void n2_main(bootinfo_t *bootinfo) {
     threads_init();
     vprint("[N2] Launching core service threads\r\n");
 
-    // Load built-in agents if present
-    // Validate that the embedded images actually point to a sensible address
-    // before handing them to the loader. During development we observed
-    // spurious small pointer values (e.g. 0x38) which caused #GP faults when
-    // dereferenced by load_agent. Guard against that by insisting the pointer
-    // is non‑NULL and outside the low identity‑mapped area.
-    if ((uintptr_t)nosfs_image > 0x1000 && nosfs_size > 0 &&
-        (uintptr_t)nosfs_image + nosfs_size < 0x100000000ULL) {
-        load_agent(nosfs_image, nosfs_size, AGENT_FORMAT_NOSM);
+    // Load built-in agents if present.
+    // Validate both the image pointers and their associated size symbols
+    // before dereferencing. Undefined weak symbols sometimes resolve to
+    // low addresses (e.g. 0x38) which, if accessed directly, can trigger
+    // #GP faults. First ensure the size symbol itself resides outside the
+    // low identity-mapped area, then copy its value to a local variable.
+    size_t nosfs_sz = 0;
+    if ((uintptr_t)&nosfs_size > 0x1000)
+        nosfs_sz = nosfs_size;
+    if ((uintptr_t)nosfs_image > 0x1000 && nosfs_sz > 0 &&
+        (uintptr_t)nosfs_image + nosfs_sz < 0x100000000ULL) {
+        load_agent(nosfs_image, nosfs_sz, AGENT_FORMAT_NOSM);
     } else {
         vprint("[N2] Builtin NOSFS image missing or invalid\r\n");
     }
-    if ((uintptr_t)my_mach_agent_image > 0x1000 && my_mach_agent_size > 0 &&
-        (uintptr_t)my_mach_agent_image + my_mach_agent_size < 0x100000000ULL) {
-        load_agent(my_mach_agent_image, my_mach_agent_size, AGENT_FORMAT_MACHO2);
-    } else if ((uintptr_t)my_mach_agent_image || my_mach_agent_size) {
+
+    size_t mach_sz = 0;
+    if ((uintptr_t)&my_mach_agent_size > 0x1000)
+        mach_sz = my_mach_agent_size;
+    if ((uintptr_t)my_mach_agent_image > 0x1000 && mach_sz > 0 &&
+        (uintptr_t)my_mach_agent_image + mach_sz < 0x100000000ULL) {
+        load_agent(my_mach_agent_image, mach_sz, AGENT_FORMAT_MACHO2);
+    } else if ((uintptr_t)my_mach_agent_image || mach_sz) {
         vprint("[N2] Builtin Mach agent image missing or invalid\r\n");
     }
 
