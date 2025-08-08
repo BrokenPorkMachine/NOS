@@ -2,44 +2,43 @@
 
 ## Overview
 
-**NitrOS (NOS)** is evolving into a unified, secure platform where every layer is signed, versioned, and hot-swappable. The system is written from scratch for x86\_64 and leans on a microkernel/hybrid design: the kernel enforces isolation while higher-level services and drivers run as sandboxed agents. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full blueprint of the new stack.
+**NitrOS (NOS)** is evolving into a unified, secure platform where every layer is signed, versioned, and hot-swappable. The system is written from scratch for x86_64 and leans on a microkernel/hybrid design: the kernel enforces isolation while higher-level services and drivers run as sandboxed agents. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full blueprint of the new stack.
 
 ---
 
 ## Features
 
-* O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
-* N2 agent-based kernel running in true x86\_64 long mode
-* Signed, manifest-driven **NOSM** modules with hot reload
-* Transactional **NOSFS** filesystem
-* Four-ring GDT layout (rings 0–3; user/kernel split)
-* Full paging and memory protection (NX, SMEP, SMAP)
-* Modular, timer-driven preemptive multitasking
-* Interrupt handling (IDT, PIT, PIC)
-* Early ACPI table parsing for basic hardware enumeration
-* Basic thread and task abstractions
-* Mach-style IPC message passing (prototype queue implementation)
-* Simple secure heap allocator for user-space memory
-* Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode agents
-* Minimal network stack with loopback support, IPv4 addressing and ARP replies
-* Credential-driven login agent that prints the current IP before launching NitroShell (nsh)
-* Stub VNC, SSH(SCP), and FTP agents that ride on the loopback stack and store files in NOSFS (no real networking yet)
-* Experimental copy-on-write paging and basic demand paging
-* Early NUMA node enumeration from bootloader memory map
-* IPC shared memory channels with rights masks
-* Adjustable kernel log verbosity via `loglevel=` and `quiet` boot options
-* Versioned ABI with manifest-based capability declaration
+- O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
+- N2 agent-based kernel running in true x86_64 long mode
+- Signed, manifest-driven **NOSM** modules with hot reload
+- Transactional **NOSFS** filesystem
+- Four-ring GDT layout (rings 0–3; user/kernel split)
+- Full paging and memory protection (NX, SMEP, SMAP)
+- Modular, timer-driven preemptive multitasking
+- Interrupt handling (IDT, PIT, PIC)
+- Early ACPI table parsing for basic hardware enumeration
+- Basic thread and task abstractions
+- Mach-style IPC message passing (prototype queue implementation)
+- Simple secure heap allocator for user-space memory
+- Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode agents
+- Minimal network stack with loopback support, IPv4 addressing and ARP replies
+- Credential-driven login agent that prints the current IP before launching NitroShell (nsh)
+- Stub VNC, SSH(SCP), and FTP agents that ride on the loopback stack and store files in NOSFS (no real networking yet)
+- Experimental copy-on-write paging and basic demand paging
+- Early NUMA node enumeration from bootloader memory map
+- IPC shared memory channels with rights masks
+- Adjustable kernel log verbosity via `loglevel=` and `quiet` boot options
+- Versioned ABI with manifest-based capability declaration
 
 ---
 
 ## Quick Build & Run (QEMU, Linux/WSL recommended)
 
 1. **Dependencies:**
+   - `x86_64-elf-gcc`, `nasm`, `clang`, `lld`, `qemu`, `make`, `mtools`, `dosfstools`
+   - FAT image tools (`mkfs.vfat`, `mcopy`) for creating the boot disk
 
-   * `x86_64-elf-gcc`, `nasm`, `clang`, `lld`, `qemu`, `make`, `mtools`, `dosfstools`
-   * FAT image tools (`mkfs.vfat`, `mcopy`) for creating the boot disk
-
-* Optionally set the `CROSS_COMPILE` environment variable if your
+- Optionally set the `CROSS_COMPILE` environment variable if your
   cross compiler prefix differs from the default `x86_64-linux-gnu-`.
   For example:
 
@@ -52,9 +51,10 @@
    ```sh
    make        # use CROSS_COMPILE if your toolchain uses a different prefix
    ```
+
 3. **Prepare boot image:**
 
-* Create a FAT-formatted image and copy `BOOTX64.EFI` (nboot) along with the `O2.bin` stage0 loader and `n2.bin` kernel:
+- Create a FAT-formatted image and copy `BOOTX64.EFI` (nboot) along with the `O2.bin` stage0 loader and `n2.bin` kernel:
 
   ```sh
   mkfs.vfat -C disk.img 4096
@@ -82,9 +82,9 @@
    VNC (port 5900) when local keyboard input is unavailable. The login prompt
    prints the guest IP (default `10.0.2.15` with user networking) so experimental
    SSH or VNC servers can be reached over QEMU's user networking. See
-   [docs/SERIAL\_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details. Networking
+   [docs/SERIAL_CONSOLE.md](docs/SERIAL_CONSOLE.md) for more details. Networking
    support is under active development. See
-   [docs/NETWORK\_SERVERS.md](docs/NETWORK_SERVERS.md) for current status.
+   [docs/NETWORK_SERVERS.md](docs/NETWORK_SERVERS.md) for current status.
 
 ---
 
@@ -140,17 +140,17 @@ NitroShell understands a handful of simple text commands. Examples:
 
 Available commands include:
 
-* `cd` – change the working directory
-* `ls` or `dir` – list directory contents
-* `mkdir` – create a new directory
-* `mv` – move or rename a file
-* `crc` – compute CRC32 of a file
-* `verify` – verify file integrity using CRC32
-* `rm` – remove a file or directory
-* `cat` – display file contents
-* `create` – create a new empty file
-* `write` – write data to a file
-* `help` – show available commands
+- `cd` – change the working directory
+- `ls` or `dir` – list directory contents
+- `mkdir` – create a new directory
+- `mv` – move or rename a file
+- `crc` – compute CRC32 of a file
+- `verify` – verify file integrity using CRC32
+- `rm` – remove a file or directory
+- `cat` – display file contents
+- `create` – create a new empty file
+- `write` – write data to a file
+- `help` – show available commands
 
 ### File System Navigation
 
@@ -197,13 +197,13 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 
 ## Roadmap
 
-* [x] User/kernel context switching (improved register save/restore)
-* [x] System call interface with dispatcher and validation
-* [x] Interactive user task/server framework
-* [x] Basic IPC primitives (prototype)
-* [x] NOSFS filesystem server (block storage capable)
-* [ ] Window server and networking agents
-* [x] NitroShell and developer tools (prototype)
+- [x] User/kernel context switching (improved register save/restore)
+- [x] System call interface with dispatcher and validation
+- [x] Interactive user task/server framework
+- [x] Basic IPC primitives (prototype)
+- [x] NOSFS filesystem server (block storage capable)
+- [ ] Window server and networking agents
+- [x] NitroShell and developer tools (prototype)
 
 ---
 
@@ -211,9 +211,9 @@ See [AGENTS.md](./AGENTS.md) for a detailed breakdown of all core system agents 
 
 Further details on the agent-based platform are available in:
 
-* [docs/NOSM.md](docs/NOSM.md) – NOSM module format and lifecycle
-* [docs/NOSFS.md](docs/NOSFS.md) – transactional filesystem agent
-* [docs/api.md](docs/api.md) – N2 kernel API surface
+- [docs/NOSM.md](docs/NOSM.md) – NOSM module format and lifecycle
+- [docs/NOSFS.md](docs/NOSFS.md) – transactional filesystem agent
+- [docs/api.md](docs/api.md) – N2 kernel API surface
 
 ---
 

@@ -10,11 +10,11 @@ laying the groundwork for persistent storage.
 
 ## Design Goals
 
-* **Memory safety**: written in C with bounds checks and fixed-size tables.
-* **Integrity**: each file stores a CRC32 checksum. `nosfs_verify()` can be
+- **Memory safety**: written in C with bounds checks and fixed-size tables.
+- **Integrity**: each file stores a CRC32 checksum. `nosfs_verify()` can be
   used to validate data against the stored checksum.
-* **Capabilities**: basic read/write permissions on a per-file basis.
-* **Isolation**: intended to run as a user-mode server communicating over IPC.
+- **Capabilities**: basic read/write permissions on a per-file basis.
+- **Isolation**: intended to run as a user-mode server communicating over IPC.
 
 Future versions may support persistent block devices and a hierarchical
 on-disk layout, but the initial focus is a minimal, auditable core.
@@ -30,13 +30,13 @@ only as a demonstration of how future user-mode services might operate.
 
 The filesystem server understands the following request types:
 
-| Type              | Description                          |
-| ----------------- | ------------------------------------ |
-| `NOSFS_MSG_CREATE` | Create a new file with a given size and permissions |
+| Type               | Description                                                                            |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `NOSFS_MSG_CREATE` | Create a new file with a given size and permissions                                    |
 | `NOSFS_MSG_WRITE`  | Write data to an open file (arg1=handle, arg2=offset, msg.len=bytes, msg.data=payload) |
-| `NOSFS_MSG_READ`   | Read data from an open file  (arg1=handle, arg2=offset, msg.len=bytes) |
-| `NOSFS_MSG_DELETE` | Delete a file by handle              |
-| `NOSFS_MSG_RENAME` | Rename an existing file              |
-| `NOSFS_MSG_LIST`   | List all file names                  |
-| `NOSFS_MSG_CRC`    | Compute CRC32 of a file              |
-| `NOSFS_MSG_VERIFY` | Verify stored CRC against data       |
+| `NOSFS_MSG_READ`   | Read data from an open file (arg1=handle, arg2=offset, msg.len=bytes)                  |
+| `NOSFS_MSG_DELETE` | Delete a file by handle                                                                |
+| `NOSFS_MSG_RENAME` | Rename an existing file                                                                |
+| `NOSFS_MSG_LIST`   | List all file names                                                                    |
+| `NOSFS_MSG_CRC`    | Compute CRC32 of a file                                                                |
+| `NOSFS_MSG_VERIFY` | Verify stored CRC against data                                                         |

@@ -1,14 +1,14 @@
 # RegX: Unified NitrOS Registry
 
 RegX is a real‑time, manifest‑driven registry used by the NitrOS kernel and all
-agents.  It tracks every loaded agent, device, driver, filesystem, userland
-service and hardware resource.  Entries are never stale; all operations are
+agents. It tracks every loaded agent, device, driver, filesystem, userland
+service and hardware resource. Entries are never stale; all operations are
 atomic, versioned and auditable.
 
 ## Data Model
 
 Each entry is described by a [`regx_manifest_t`](../include/regx.h) and stored in
-a [`regx_entry_t`](../include/regx.h).  Devices and buses form a hierarchy via
+a [`regx_entry_t`](../include/regx.h). Devices and buses form a hierarchy via
 `parent_id` while agents and services are flat.
 
 Key manifest fields:
@@ -39,25 +39,26 @@ size_t regx_enumerate(const regx_selector_t *sel,
                       regx_entry_t *out, size_t max);
 ```
 
-All functions acquire a spinlock so updates and queries are atomic.  Updates only
+All functions acquire a spinlock so updates and queries are atomic. Updates only
 modify runtime fields and increment the `generation` counter, ensuring that
 queried data is consistent and that hot‑unplug/upgrade never leaves dangling
-references.  Before insertion the kernel verifies cryptographic signatures and
+references. Before insertion the kernel verifies cryptographic signatures and
 checks access permissions.
 
 ## Kernel and Agent Interaction
 
 1. **Registration** – During startup or load, an agent populates a
-   `regx_entry_t` with its manifest and calls `regx_register`.  The kernel
+   `regx_entry_t` with its manifest and calls `regx_register`. The kernel
    assigns a unique `id` and publishes the entry.
 2. **Discovery** – Agents or user processes query the registry via
    `regx_query` or `regx_enumerate` to locate services by ID, type or
    capability.
 3. **Update/Unregister** – Hot upgrades call `regx_update` with new state or
-   parent information.  When an agent terminates it calls `regx_unregister`.
+   parent information. When an agent terminates it calls `regx_unregister`.
    Updates are auditable via the `generation` counter.
 
 Example (agent registering a filesystem):
+
 ```c
 regx_entry_t fs = {
     .manifest = { .name = "NOSFS", .type = REGX_TYPE_FILESYSTEM,
@@ -69,6 +70,7 @@ regx_register(&fs);
 ```
 
 Another agent can discover it:
+
 ```c
 regx_selector_t sel = { .type = REGX_TYPE_FILESYSTEM,
                          .capability = "snapshot" };
@@ -76,10 +78,9 @@ regx_entry_t out[4];
 size_t n = regx_enumerate(&sel, out, 4);
 ```
 
-
 ## Userland CLI – `regxctl`
 
-`regxctl` exposes registry information to users and scripts.  The CLI obtains
+`regxctl` exposes registry information to users and scripts. The CLI obtains
 its data through system calls mirroring the kernel API.
 
 ### Commands
@@ -90,19 +91,19 @@ its data through system calls mirroring the kernel API.
 - `regxctl tree` – print the device hierarchy using `parent_id` links.
 
 The [`regxctl.c`](../user/agents/regxctl/regxctl.c) skeleton demonstrates the
-basic structure.  Real implementations would handle IPC/syscalls and JSON
+basic structure. Real implementations would handle IPC/syscalls and JSON
 rendering of manifests.
 
 ## Design Notes
 
-* **Atomicity** – All registry mutations occur under a spinlock and update a
-  generation number.  Readers see consistent snapshots and can detect changes.
-* **Security** – Every entry carries a signature and declared permissions.  The
+- **Atomicity** – All registry mutations occur under a spinlock and update a
+  generation number. Readers see consistent snapshots and can detect changes.
+- **Security** – Every entry carries a signature and declared permissions. The
   kernel verifies these fields before allowing registration or updates.
-* **Extensibility** – Manifests are plain structs that can be extended or
-  replaced by CBOR/JSON without altering the runtime API.  `regx_selector_t`
+- **Extensibility** – Manifests are plain structs that can be extended or
+  replaced by CBOR/JSON without altering the runtime API. `regx_selector_t`
   provides flexible filtering for future capabilities.
-* **Auditing** – Because updates increment `generation`, a history of changes can
+- **Auditing** – Because updates increment `generation`, a history of changes can
   be tracked externally to support system auditing and rollback.
 
 RegX turns the entire operating system into a discoverable, self‑describing

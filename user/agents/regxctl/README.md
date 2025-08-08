@@ -1,6 +1,6 @@
 # regxctl
 
-`regxctl` is a userland helper for inspecting the RegX registry.  The skeleton
+`regxctl` is a userland helper for inspecting the RegX registry. The skeleton
 implementation demonstrates how a CLI could expose the registry via system
 calls:
 
