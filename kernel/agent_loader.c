@@ -2,6 +2,7 @@
 #include "agent.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // Provide a simple implementation of memmem for environments where it is
 // unavailable. This performs a byte-wise search of `needle` within `haystack`.
