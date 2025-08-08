@@ -109,45 +109,69 @@ static void serial_putc(char c) { outb(COM1_PORT, c); }
 static void serial_print(const char *s) { while (*s) serial_putc(*s++); }
 static void print_hex(uint64_t v) { char b[20]; itoahex(v, b); serial_print(b); }
 
+// Helpers to read little-endian values into 64-bit integers without sign extension
+static uint64_t rd16(const uint8_t *p) {
+    return (uint64_t)p[0] | ((uint64_t)p[1] << 8);
+}
+static uint64_t rd32(const uint8_t *p) {
+    return (uint64_t)p[0] | ((uint64_t)p[1] << 8) |
+           ((uint64_t)p[2] << 16) | ((uint64_t)p[3] << 24);
+}
+static uint64_t rd64(const uint8_t *p) {
+    return (uint64_t)p[0] | ((uint64_t)p[1] << 8) |
+           ((uint64_t)p[2] << 16) | ((uint64_t)p[3] << 24) |
+           ((uint64_t)p[4] << 32) | ((uint64_t)p[5] << 40) |
+           ((uint64_t)p[6] << 48) | ((uint64_t)p[7] << 56);
+}
+
 // ========== ELF64 Loader ==========
 
 static int load_elf64(const void *image, size_t size, void **entry,
                       kernel_segment_t *segs, uint32_t *segc) {
-    typedef struct { unsigned char e_ident[16]; uint16_t e_type,e_machine; uint32_t e_version;
-        uint64_t e_entry,e_phoff,e_shoff; uint32_t e_flags; uint16_t e_ehsize,e_phentsize,e_phnum;
-        uint16_t e_shentsize,e_shnum,e_shstrndx; } Elf64_Ehdr;
-    typedef struct { uint32_t p_type,p_flags; uint64_t p_offset,p_vaddr,p_paddr,p_filesz,p_memsz,p_align; } Elf64_Phdr;
+    const uint8_t *d = (const uint8_t *)image;
+    if (size < 64) return -1;
+    if (!(d[0]==0x7F && d[1]=='E' && d[2]=='L' && d[3]=='F')) return -2;
 
-    if (size < sizeof(Elf64_Ehdr)) return -1;
-    const Elf64_Ehdr *eh = (const Elf64_Ehdr *)image;
-    if (!(eh->e_ident[0]==0x7F && eh->e_ident[1]=='E' && eh->e_ident[2]=='L' && eh->e_ident[3]=='F')) return -2;
+    uint64_t e_entry     = rd64(d + 24);
+    uint64_t e_phoff     = rd64(d + 32);
+    uint64_t e_phentsize = rd16(d + 54);
+    uint64_t e_phnum     = rd16(d + 56);
 
-    const Elf64_Phdr *ph = (const Elf64_Phdr *)((const uint8_t *)image + eh->e_phoff);
+    const uint8_t *ph = d + e_phoff;
     uint32_t count = 0;
-    for (uint16_t i = 0; i < eh->e_phnum; ++i, ++ph) {
-        if (ph->p_type != 1) continue; // PT_LOAD
-        memcpy((void *)(uintptr_t)ph->p_paddr, (const uint8_t *)image + ph->p_offset, ph->p_filesz);
-        if (ph->p_memsz > ph->p_filesz)
-            memset((void *)(uintptr_t)(ph->p_paddr + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+    for (uint64_t i = 0; i < e_phnum; ++i, ph += e_phentsize) {
+        uint64_t p_type   = rd32(ph + 0);
+        uint64_t p_flags  = rd32(ph + 4);
+        uint64_t p_offset = rd64(ph + 8);
+        uint64_t p_vaddr  = rd64(ph + 16);
+        uint64_t p_paddr  = rd64(ph + 24);
+        uint64_t p_filesz = rd64(ph + 32);
+        uint64_t p_memsz  = rd64(ph + 40);
+        // uint64_t p_align  = rd64(ph + 48); // currently unused
+
+        if (p_type != 1) continue; // PT_LOAD
+        memcpy((void *)(uintptr_t)p_paddr, d + p_offset, (size_t)p_filesz);
+        if (p_memsz > p_filesz)
+            memset((void *)(uintptr_t)(p_paddr + p_filesz), 0, (size_t)(p_memsz - p_filesz));
 
         // Print info over serial
-        vprint("[O2] n2.seg: vaddr="); vhex(ph->p_vaddr);
-        vprint(" paddr="); vhex(ph->p_paddr);
-        vprint(" filesz="); vhex(ph->p_filesz);
-        vprint(" memsz="); vhex(ph->p_memsz);
-        vprint(" flags="); vhex(ph->p_flags); vprint("\r\n");
+        vprint("[O2] n2.seg: vaddr="); vhex(p_vaddr);
+        vprint(" paddr="); vhex(p_paddr);
+        vprint(" filesz="); vhex(p_filesz);
+        vprint(" memsz="); vhex(p_memsz);
+        vprint(" flags="); vhex(p_flags); vprint("\r\n");
 
         if (segs && segc && count < MAX_KERNEL_SEGMENTS) {
-            segs[count].vaddr = ph->p_vaddr;
-            segs[count].paddr = ph->p_paddr;
-            segs[count].filesz = ph->p_filesz;
-            segs[count].memsz = ph->p_memsz;
-            segs[count].flags = ph->p_flags;
+            segs[count].vaddr = p_vaddr;
+            segs[count].paddr = p_paddr;
+            segs[count].filesz = p_filesz;
+            segs[count].memsz = p_memsz;
+            segs[count].flags = (uint32_t)p_flags;
             segs[count].name[0]=0;
             ++count;
         }
     }
     if (segc) *segc = count;
-    *entry = (void *)(uintptr_t)eh->e_entry;
+    *entry = (void *)(uintptr_t)e_entry;
     return 0;
 }
