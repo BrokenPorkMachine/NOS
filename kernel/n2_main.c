@@ -85,10 +85,20 @@ void n2_main(bootinfo_t *bootinfo) {
     threads_init();
 
     // Load built-in agents if present
-    if (nosfs_image && nosfs_size)
+    // Validate that the embedded images actually point to a sensible address
+    // before handing them to the loader. During development we observed
+    // spurious small pointer values (e.g. 0x38) which caused #GP faults when
+    // dereferenced by load_agent. Guard against that by insisting the pointer
+    // is non‑NULL and outside the low identity‑mapped area.
+    if ((uintptr_t)nosfs_image > 0x1000 && nosfs_size > 0 &&
+        (uintptr_t)nosfs_image < 0x100000000ULL) {
         load_agent(nosfs_image, nosfs_size, AGENT_FORMAT_NOSM);
-    if (my_mach_agent_image && my_mach_agent_size)
+    } else {
+        vprint("[N2] Builtin NOSFS image missing or invalid\r\n");
+    }
+    if ((uintptr_t)my_mach_agent_image > 0x1000 && my_mach_agent_size > 0) {
         load_agent(my_mach_agent_image, my_mach_agent_size, AGENT_FORMAT_MACHO2);
+    }
 
     for (uint32_t i = 0; i < bootinfo->module_count; ++i)
         load_module(&bootinfo->modules[i]);
