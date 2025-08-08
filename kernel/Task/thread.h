@@ -34,6 +34,8 @@ typedef struct thread {
 
 extern thread_t *current_cpu[MAX_CPUS];
 
+static void utoa_dec(uint32_t val, char *buf);
+
 /**
  * Reset scheduler bookkeeping before interrupts might fire.
  */
