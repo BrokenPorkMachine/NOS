@@ -97,6 +97,8 @@ void n2_main(bootinfo_t *bootinfo) {
         vprint("[N2] Filesystem agent active: "); vprint(fs->name); vprint("\r\n");
     } else {
         vprint("[N2] No filesystem agent found!\r\n");
+        // Halting to avoid crashes when filesystem agent is missing
+        for (;;) asm volatile("hlt");
     }
 
     // Enumerate registered filesystem agents via RegX
