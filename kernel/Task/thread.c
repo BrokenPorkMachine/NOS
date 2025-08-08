@@ -131,12 +131,7 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
     }
 
     char buf[20];
-    serial_puts("[thread] created id=");
-    utoa_dec(t->id, buf); serial_puts(buf);
-    serial_puts(" prio=");
-    utoa_dec(t->priority, buf); serial_puts(buf);
-    serial_puts("\n");
-
+    
     return t;
 }
 
