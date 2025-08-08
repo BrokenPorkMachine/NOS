@@ -1,5 +1,6 @@
-#include "paging.h"
-#include "pmm.h"
+#include "paging_adv.h"
+#include "pmm_buddy.h"
+#include "numa.h"
 #include "../drivers/IO/serial.h"
 #include "../../user/libc/libc.h"
 #include "cow.h"
@@ -46,39 +47,32 @@ uint16_t cow_refcount(uint64_t phys) {
     return 0;
 }
 
-// Robust contiguous allocator, handles non-contiguous fallback.
+// Contiguous allocator backed by buddy system.
 void *alloc_pages(uint32_t pages) {
     if (pages == 0)
         return NULL;
-    uint64_t base = (uint64_t)alloc_page();
-    if (!base)
-        return NULL;
-    for (uint32_t i = 1; i < pages; ++i) {
-        uint64_t addr = (uint64_t)alloc_page();
-        if (!addr || addr != base + i * PAGE_SIZE) {
-            if (addr)
-                free_page((void*)addr);
-            for (uint32_t j = 0; j < i; ++j)
-                free_page((void*)(base + j * PAGE_SIZE));
-            return NULL;
-        }
-    }
-    return (void*)base;
+    int node = current_cpu_node();
+    uint32_t order = 0;
+    uint32_t count = 1;
+    while (count < pages) { count <<= 1; order++; }
+    return buddy_alloc(order, node, 0);
 }
 
 void free_pages(void *addr, uint32_t pages) {
     if (!addr)
         return;
-    uint64_t base = (uint64_t)addr;
-    for (uint32_t i = 0; i < pages; ++i)
-        free_page((void*)(base + i * PAGE_SIZE));
+    int node = current_cpu_node();
+    uint32_t order = 0;
+    uint32_t count = 1;
+    while (count < pages) { count <<= 1; order++; }
+    buddy_free(addr, order, node);
 }
 
 // --- COW marking/flag helpers ---
 
 // Get the frame index for a VA, or -1 if not mapped
 static int cow_flag_index(uint64_t virt) {
-    uint64_t phys = paging_virt_to_phys(virt);
+    uint64_t phys = paging_virt_to_phys_adv(virt);
     if (!phys) return -1;
     return phys / PAGE_SIZE;
 }
@@ -86,21 +80,21 @@ static int cow_flag_index(uint64_t virt) {
 void cow_mark(uint64_t virt) {
     int idx = cow_flag_index(virt);
     if (idx < 0) return;
-    uint64_t phys = paging_virt_to_phys(virt);
+    uint64_t phys = paging_virt_to_phys_adv(virt);
     if (!phys) return;
     cow_flags[idx] = 1;
-    paging_unmap(virt);
-    paging_map(virt, phys, PAGE_PRESENT | PAGE_USER);
+    paging_unmap_adv(virt);
+    paging_map_adv(virt, phys, PAGE_PRESENT | PAGE_USER, 0, current_cpu_node());
 }
 
 void cow_unmark(uint64_t virt) {
     int idx = cow_flag_index(virt);
     if (idx < 0) return;
-    uint64_t phys = paging_virt_to_phys(virt);
+    uint64_t phys = paging_virt_to_phys_adv(virt);
     if (!phys) return;
     cow_flags[idx] = 0;
-    paging_unmap(virt);
-    paging_map(virt, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    paging_unmap_adv(virt);
+    paging_map_adv(virt, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER, 0, current_cpu_node());
 }
 
 int cow_is_marked(uint64_t virt) {
@@ -113,38 +107,39 @@ int cow_is_marked(uint64_t virt) {
 int cow_free_frame(uint64_t phys) {
     uint64_t frame = phys / PAGE_SIZE;
     if (frame < frames && refcounts[frame] == 0) {
-        free_page((void*)phys);
+        buddy_free((void*)phys, 0, current_cpu_node());
         return 1;
     }
     return 0;
 }
 
 // ----------- Page Fault Handler (COW + Demand Paging) -----------
-void handle_page_fault(uint64_t err, uint64_t addr) {
+void paging_handle_fault(uint64_t err, uint64_t addr, int cpu_id) {
+    (void)cpu_id; // NUMA-aware policies can use this later
     uint64_t virt = addr & ~(PAGE_SIZE - 1);
-    uint64_t phys = paging_virt_to_phys(virt);
+    uint64_t phys = paging_virt_to_phys_adv(virt);
 
     if (!phys) {
         // Demand paging: allocate and map zeroed page
-        void *page = alloc_page();
+        void *page = buddy_alloc(0, current_cpu_node(), 0);
         if (page) {
-            paging_map(virt, (uint64_t)page, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+            paging_map_adv(virt, (uint64_t)page, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER, 0, current_cpu_node());
             memset((void*)virt, 0, PAGE_SIZE);
             cow_inc_ref((uint64_t)page);
             return;
         }
-        serial_puts("[cow] alloc_page failed in pfault\n");
+        serial_puts("[cow] buddy_alloc failed in pfault\n");
     } else if ((err & 2) && cow_is_marked(virt)) { // Write fault, COW page
         if (cow_refcount(phys) > 1) {
-            void *newp = alloc_page();
+            void *newp = buddy_alloc(0, current_cpu_node(), 0);
             if (!newp) {
-                serial_puts("[cow] alloc_page failed in COW\n");
+                serial_puts("[cow] buddy_alloc failed in COW\n");
                 for(;;) __asm__("hlt");
             }
             memcpy(newp, (void*)phys, PAGE_SIZE);
             cow_dec_ref(phys);
             cow_inc_ref((uint64_t)newp);
-            paging_map(virt, (uint64_t)newp, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+            paging_map_adv(virt, (uint64_t)newp, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER, 0, current_cpu_node());
         } else {
             cow_unmark(virt); // Only one ref, just remove COW and restore writable
         }
@@ -152,6 +147,5 @@ void handle_page_fault(uint64_t err, uint64_t addr) {
     }
 
     serial_puts("[cow] unhandled pfault: addr=0x");
-    // TODO: Optional: print the address as hex
     for(;;) __asm__("hlt");
 }

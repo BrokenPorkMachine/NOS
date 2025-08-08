@@ -13,7 +13,7 @@ all: $(UNIT_TESTS)
 test_ipc: unit/test_ipc.c ../kernel/IPC/ipc.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
-test_pmm: unit/test_pmm.c ../kernel/VM/pmm.c $(LIBC_SRC)
+test_pmm: unit/test_pmm.c ../kernel/VM/pmm_buddy.c ../kernel/VM/numa.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_login: unit/test_login.c ../user/agents/login/login.c $(LIBC_SRC) ../kernel/IPC/ipc.c ../kernel/agent.c

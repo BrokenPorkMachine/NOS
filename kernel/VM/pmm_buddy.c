@@ -4,6 +4,13 @@
 #include <stddef.h>
 #include "../../user/libc/libc.h"
 
+#ifndef KERNEL_BUILD
+// In unit tests, serial I/O is unavailable; provide a stub.
+static void serial_puts(const char *s) { (void)s; }
+#else
+#include "../drivers/IO/serial.h"
+#endif
+
 // =====================
 //  SMP SPINLOCK PRIMITIVES
 // =====================

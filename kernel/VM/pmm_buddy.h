@@ -1,6 +1,22 @@
+/*
+ * Buddy Physical Memory Manager
+ * -----------------------------
+ * Provides NUMA-aware, SMP-safe physical memory allocation using a buddy
+ * allocator.  This replaces the older bitmap-based PMM and exposes a more
+ * flexible API capable of highmem and multi-node support.
+ */
+
 #pragma once
 #include <stdint.h>
 #include "bootinfo.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef PAGE_SIZE
+#define PAGE_SIZE 4096
+#endif
 
 // Buddy allocator constants
 #define PMM_BUDDY_MIN_ORDER  0               // 4KiB
@@ -34,3 +50,7 @@ uint64_t buddy_free_frames_node(int node);
 uint64_t buddy_zone_base(int node);
 
 void buddy_debug_print(void);
+
+#ifdef __cplusplus
+}
+#endif

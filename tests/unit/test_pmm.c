@@ -1,8 +1,11 @@
 #include <assert.h>
-#include "../../kernel/VM/pmm.h"
-#include "../../kernel/VM/paging.h"
+#include "../../kernel/VM/pmm_buddy.h"
+#include "../../kernel/VM/numa.h"
 #include "../../boot/include/bootinfo.h"
 #include "../../user/libc/libc.h"
+#ifndef PAGE_SIZE
+#define PAGE_SIZE 4096
+#endif
 
 int main(void) {
     bootinfo_memory_t mmap[1] = {
@@ -11,18 +14,18 @@ int main(void) {
     bootinfo_t bi = {0};
     bi.mmap = mmap;
     bi.mmap_entries = 1;
-    pmm_init(&bi);
-    assert(pmm_total_frames() >= 516);
-    assert(pmm_free_frames() == 4);
-    void *p1 = alloc_page();
-    assert(pmm_free_frames() == 3);
-    void *p2 = alloc_page();
-    assert(pmm_free_frames() == 2);
+    numa_init(&bi);
+    buddy_init(&bi);
+    assert(buddy_free_frames_total() == 4);
+    void *p1 = buddy_alloc(0, 0, 0);
+    assert(buddy_free_frames_total() == 3);
+    void *p2 = buddy_alloc(0, 0, 0);
+    assert(buddy_free_frames_total() == 2);
     assert(p1 && p2 && p1 != p2);
-    free_page(p1);
-    assert(pmm_free_frames() == 3);
-    void *p3 = alloc_page();
-    assert(pmm_free_frames() == 2);
+    buddy_free(p1, 0, 0);
+    assert(buddy_free_frames_total() == 3);
+    void *p3 = buddy_alloc(0, 0, 0);
+    assert(buddy_free_frames_total() == 2);
     assert(p3 == p1);
     return 0;
 }

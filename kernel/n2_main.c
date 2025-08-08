@@ -16,6 +16,9 @@
 #include "drivers/IO/usb.h"
 #include "drivers/IO/usbkbd.h"
 #include "Task/thread.h"
+#include "VM/numa.h"
+#include "VM/pmm_buddy.h"
+#include "VM/kheap.h"
 
 extern const uint8_t nosfs_image[] __attribute__((weak));
 extern size_t nosfs_size __attribute__((weak));
@@ -65,6 +68,11 @@ void n2_main(bootinfo_t *bootinfo) {
     print_modules(bootinfo);
     print_framebuffer(bootinfo);
     print_mmap(bootinfo);
+
+    // --- Memory subsystem init ---
+    numa_init(bootinfo);
+    buddy_init(bootinfo);      // replaces old pmm_init
+    kheap_init();              // kernel heap backed by buddy allocator
 
     // --- USB support (early, before TTY) ---
     vprint("[N2] Initializing USB stack...\r\n");
