@@ -87,11 +87,14 @@ void n2_main(bootinfo_t *bootinfo) {
     block_init();
     sata_init();
     net_init();
+    vprint("[N2] Starting Agent Registry\r\n");
 
     // --- Agent system startup ---
     n2_agent_registry_reset();
-    // Launch core service threads (e.g., RegX) early
+    vprint("[N2] Agent Registry Reset\r\n");
+   // Launch core service threads (e.g., RegX) early
     threads_init();
+    vprint("[N2] Launching core service threads\r\n");
 
     // Load built-in agents if present
     // Validate that the embedded images actually point to a sensible address
