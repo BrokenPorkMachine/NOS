@@ -7,13 +7,13 @@ conform to the N2 ABI.
 
 ## Key characteristics
 
-* **Signed and versioned** – manifests include cryptographic signatures and
+- **Signed and versioned** – manifests include cryptographic signatures and
   semantic versions so the kernel can verify integrity.
-* **Hot-loadable** – modules may be loaded, upgraded or unloaded at runtime
+- **Hot-loadable** – modules may be loaded, upgraded or unloaded at runtime
   without rebooting the system.
-* **Capability scoped** – manifests declare the capabilities and privileges
+- **Capability scoped** – manifests declare the capabilities and privileges
   required by the module, enforcing least privilege.
-* **Language neutral** – the ABI supports multiple implementation languages
+- **Language neutral** – the ABI supports multiple implementation languages
   including C and Rust.
 
 ## Lifecycle
@@ -25,4 +25,3 @@ conform to the N2 ABI.
    discovered via the agent registry.
 4. **Upgrade/Unload** – modules can be replaced or removed via
    `n2_agent_unregister()` with all resources cleaned up.
-

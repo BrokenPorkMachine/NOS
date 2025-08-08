@@ -9,6 +9,7 @@ NitrOS is evolving toward a unified, secure architecture where every component i
 - Verifies signatures for all loaded components before jumping to the kernel.
 
 **Bootloader Layout**
+
 ```
 /EFI/NitrOS/
  ├── bootloader.efi
@@ -17,6 +18,7 @@ NitrOS is evolving toward a unified, secure architecture where every component i
 ```
 
 **`bootinfo` Structure**
+
 ```c
 typedef struct {
     uint32_t magic;
@@ -44,6 +46,7 @@ typedef struct {
 - Kernel can load/unload modules at runtime with sandboxing and symbol resolution.
 
 **NOSM Layout**
+
 ```
 +-------------------+
 | NOSM Header       |
@@ -59,6 +62,7 @@ typedef struct {
 ```
 
 **Sample Manifest**
+
 ```json
 {
   "name": "nosfs",
@@ -82,6 +86,7 @@ typedef struct {
 - Metadata and ACLs are signed and discoverable.
 
 **Superblock**
+
 ```c
 typedef struct {
     uint32_t magic;       // 'NFS1'
@@ -105,12 +110,14 @@ int sys_nosfs_snap(const char *path, uint64_t *snap_id);
 ```
 
 ### `nosmctl`
+
 ```
 $ nosmctl list
 nosfs@1.0.3  [loaded]
 ```
 
 ### `nosfsctl`
+
 ```
 $ nosfsctl snapshot /
 Snapshot 42 created.

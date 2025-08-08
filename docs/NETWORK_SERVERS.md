@@ -1,9 +1,9 @@
 # Planned Network Servers
 
-This document outlines the network services for NitrOS.  A small network stack
+This document outlines the network services for NitrOS. A small network stack
 in `Net/` allows user-mode servers to exchange packets even without real
-hardware.  Each service communicates over a dedicated logical port so they no
-longer interfere with one another.  The stack tracks a basic IPv4 address and
+hardware. Each service communicates over a dedicated logical port so they no
+longer interfere with one another. The stack tracks a basic IPv4 address and
 can now answer ARP requests, paving the way for real hardware networking. A
 brief overview of the stack and how current servers make use of it follows.
 
