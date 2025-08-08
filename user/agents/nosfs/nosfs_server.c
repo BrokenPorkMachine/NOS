@@ -1,80 +1,126 @@
-#include "nosfs_server.h"
 #include "nosfs.h"
 #include <string.h>
+#include <stdint.h>
 #include <stdio.h>
 
-// Optionally add: #include <unistd.h> for file/manifest validation
+#define NOSFS_LOG(fmt, ...) /* printf(fmt, ##__VA_ARGS__) */
 
-void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
-    nosfs_fs_t fs;
-    if (nosfs_init(&fs) != 0) {
-        ipc_message_t fail = {0};
-        fail.type = IPC_HEALTH_PONG;
-        fail.arg1 = -1;
-        ipc_send(q, self_id, &fail);
-        return;
-    }
+#define VALID_HANDLE(h, fs) ((h) >= 0 && (h) < NOSFS_MAX_FILES && (fs)->used[h])
+#define RETURN_ERR_UNLOCK(mtx) do { nosfs_unlock(mtx); return NOSFS_ERR; } while(0)
 
-    // Optional: Manifest validation (suggested for integrity)
-    // if (!nosfs_validate_manifest()) { ... }
+// --- Internal helpers ---
 
-    ipc_message_t msg, reply;
-    while (1) {
-        if (ipc_receive_blocking(q, self_id, &msg) != 0)
-            continue;
-        if (msg.len > IPC_MSG_DATA_MAX) {
-            // Optionally send error/reject message
-            continue;
-        }
-        memset(&reply, 0, sizeof(reply));
-        reply.type = msg.type;
+static void nosfs_lock(nosfs_fs_t *fs)   { /* pthread_mutex_lock or agent mutex */ }
+static void nosfs_unlock(nosfs_fs_t *fs) { /* pthread_mutex_unlock or agent mutex */ }
 
-        switch (msg.type) {
-        case IPC_HEALTH_PING:
-            reply.type = IPC_HEALTH_PONG;
-            ipc_send(q, self_id, &reply);
-            continue;
-        case NOSFS_MSG_CREATE:
-            if (!msg.data || msg.len == 0) {
-                reply.arg1 = NOSFS_ERR;
-                break;
-            }
-            reply.arg1 = nosfs_create(&fs, (const char*)msg.data, msg.arg1, msg.arg2);
-            break;
-        case NOSFS_MSG_WRITE:
-            reply.arg1 = nosfs_write(&fs, msg.arg1, msg.arg2, msg.data, msg.len);
-            break;
-        case NOSFS_MSG_READ:
-            reply.arg1 = nosfs_read(&fs, msg.arg1, msg.arg2, reply.data, msg.len);
-            reply.len  = (reply.arg1 == 0) ? msg.len : 0;
-            break;
-        case NOSFS_MSG_DELETE:
-            reply.arg1 = nosfs_delete(&fs, msg.arg1);
-            break;
-        case NOSFS_MSG_RENAME:
-            if (!msg.data || msg.len == 0) {
-                reply.arg1 = NOSFS_ERR;
-                break;
-            }
-            reply.arg1 = nosfs_rename(&fs, msg.arg1, (const char*)msg.data);
-            break;
-        case NOSFS_MSG_LIST:
-            reply.arg1 = nosfs_list(&fs, (char (*)[NOSFS_NAME_LEN])reply.data, IPC_MSG_DATA_MAX / NOSFS_NAME_LEN);
-            reply.len  = reply.arg1 * NOSFS_NAME_LEN;
-            break;
-        case NOSFS_MSG_CRC:
-            reply.arg1 = nosfs_compute_crc(&fs, msg.arg1);
-            if (reply.arg1 == 0)
-                reply.arg2 = fs.files[msg.arg1].crc32;
-            break;
-        case NOSFS_MSG_VERIFY:
-            reply.arg1 = nosfs_verify(&fs, msg.arg1);
-            break;
-        // Feature extension: Quota management, journaling ops, snapshots
-        default:
-            reply.arg1 = NOSFS_ERR;
-            break;
-        }
-        ipc_send(q, self_id, &reply);
-    }
+// --- Initialization ---
+
+int nosfs_init(nosfs_fs_t *fs) {
+    memset(fs, 0, sizeof(*fs));
+    // Optionally: Load from journal, check quota, validate manifest.
+    return 0;
 }
+
+// --- File Operations ---
+
+int nosfs_create(nosfs_fs_t *fs, const char *name, int mode, int quota) {
+    nosfs_lock(fs);
+    for (int i = 0; i < NOSFS_MAX_FILES; ++i) {
+        if (!fs->used[i]) {
+            memset(&fs->files[i], 0, sizeof(fs->files[i]));
+            strncpy(fs->files[i].name, name, NOSFS_NAME_LEN-1);
+            fs->files[i].name[NOSFS_NAME_LEN-1] = 0;
+            fs->files[i].mode = mode;
+            fs->files[i].quota = quota;
+            fs->used[i] = 1;
+            NOSFS_LOG("File created: %s (handle %d)\n", name, i);
+            nosfs_unlock(fs);
+            return i;
+        }
+    }
+    NOSFS_LOG("File create failed: no slots\n");
+    RETURN_ERR_UNLOCK(fs);
+}
+
+int nosfs_write(nosfs_fs_t *fs, int handle, uint32_t offset, const void *buf, uint32_t len) {
+    if (!VALID_HANDLE(handle, fs) || !buf) return NOSFS_ERR;
+    nosfs_lock(fs);
+    nosfs_file_t *f = &fs->files[handle];
+    if (offset + len > NOSFS_FILE_SIZE || len > NOSFS_FILE_SIZE) {
+        NOSFS_LOG("Write out of bounds: %d+%u>%d\n", offset, len, NOSFS_FILE_SIZE);
+        RETURN_ERR_UNLOCK(fs);
+    }
+    memcpy(f->data + offset, buf, len);
+    if (offset + len > f->size) f->size = offset + len;
+    // Update CRC if used
+    f->crc32 = nosfs_crc32(f->data, f->size);
+    NOSFS_LOG("Write %u bytes at %u to handle %d\n", len, offset, handle);
+    nosfs_unlock(fs);
+    return 0;
+}
+
+int nosfs_read(nosfs_fs_t *fs, int handle, uint32_t offset, void *buf, uint32_t len) {
+    if (!VALID_HANDLE(handle, fs) || !buf) return NOSFS_ERR;
+    nosfs_lock(fs);
+    nosfs_file_t *f = &fs->files[handle];
+    if (offset >= f->size) {
+        nosfs_unlock(fs);
+        return 0;
+    }
+    uint32_t to_read = (offset + len > f->size) ? (f->size - offset) : len;
+    memcpy(buf, f->data + offset, to_read);
+    NOSFS_LOG("Read %u bytes at %u from handle %d\n", to_read, offset, handle);
+    nosfs_unlock(fs);
+    return 0;
+}
+
+int nosfs_delete(nosfs_fs_t *fs, int handle) {
+    if (!VALID_HANDLE(handle, fs)) return NOSFS_ERR;
+    nosfs_lock(fs);
+    memset(&fs->files[handle], 0, sizeof(fs->files[handle]));
+    fs->used[handle] = 0;
+    NOSFS_LOG("Deleted handle %d\n", handle);
+    nosfs_unlock(fs);
+    return 0;
+}
+
+int nosfs_rename(nosfs_fs_t *fs, int handle, const char *new_name) {
+    if (!VALID_HANDLE(handle, fs) || !new_name) return NOSFS_ERR;
+    nosfs_lock(fs);
+    strncpy(fs->files[handle].name, new_name, NOSFS_NAME_LEN-1);
+    fs->files[handle].name[NOSFS_NAME_LEN-1] = 0;
+    NOSFS_LOG("Renamed handle %d to %s\n", handle, new_name);
+    nosfs_unlock(fs);
+    return 0;
+}
+
+int nosfs_list(nosfs_fs_t *fs, char (*out)[NOSFS_NAME_LEN], int max) {
+    nosfs_lock(fs);
+    int count = 0;
+    for (int i = 0; i < NOSFS_MAX_FILES && count < max; ++i)
+        if (fs->used[i])
+            strncpy(out[count++], fs->files[i].name, NOSFS_NAME_LEN);
+    nosfs_unlock(fs);
+    return count;
+}
+
+// --- CRC/Verify/Journaling/Quotas ---
+
+int nosfs_compute_crc(nosfs_fs_t *fs, int handle) {
+    if (!VALID_HANDLE(handle, fs)) return NOSFS_ERR;
+    nosfs_lock(fs);
+    fs->files[handle].crc32 = nosfs_crc32(fs->files[handle].data, fs->files[handle].size);
+    nosfs_unlock(fs);
+    return 0;
+}
+
+int nosfs_verify(nosfs_fs_t *fs, int handle) {
+    if (!VALID_HANDLE(handle, fs)) return NOSFS_ERR;
+    nosfs_lock(fs);
+    uint32_t crc = nosfs_crc32(fs->files[handle].data, fs->files[handle].size);
+    nosfs_unlock(fs);
+    return (crc == fs->files[handle].crc32) ? 0 : NOSFS_ERR;
+}
+
+// TODO: Implement journaling, quotas, and snapshots for multi-file atomicity/security.
+
