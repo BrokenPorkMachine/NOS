@@ -1,7 +1,6 @@
 #include "thread.h"
 #include "../IPC/ipc.h"
 #include "../../user/libc/libc.h"
-#include "../drivers/IO/serial.h"
 #include <stdint.h>
 #include "../arch/CPU/smp.h"
 #include "../../user/agents/login/login.h"
@@ -130,8 +129,6 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
         tail_cpu[cpu] = t;
     }
 
-    char buf[20];
-    
     return t;
 }
 
@@ -141,9 +138,6 @@ thread_t *thread_create(void (*func)(void)) {
 
 void thread_block(thread_t *t) {
     if (!t || t->magic != THREAD_MAGIC) return;
-    char buf[20];
-    serial_puts("[thread] block id=");
-    utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
     t->state = THREAD_BLOCKED;
     if (t == thread_current())
         schedule();
@@ -151,9 +145,6 @@ void thread_block(thread_t *t) {
 
 void thread_unblock(thread_t *t) {
     if (!t || t->magic != THREAD_MAGIC) return;
-    char buf[20];
-    serial_puts("[thread] unblock id=");
-    utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
     t->state = THREAD_READY;
     thread_t *cur = thread_current();
     if (t->priority > cur->priority && cur->state == THREAD_RUNNING)
@@ -166,10 +157,6 @@ int thread_is_alive(thread_t *t) {
 
 void thread_kill(thread_t *t) {
     if (!t || t->magic != THREAD_MAGIC) return;
-    char buf[20];
-    serial_puts("[thread] kill id=");
-    utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
-
     t->state = THREAD_EXITED;
 
     int cpu = smp_cpu_index();
@@ -194,10 +181,6 @@ void thread_kill(thread_t *t) {
 }
 
 void thread_yield(void) {
-    char buf[20];
-    thread_t *cur = thread_current();
-    serial_puts("[thread] yield id=");
-    utoa_dec(cur->id, buf); serial_puts(buf); serial_puts("\n");
     schedule();
 }
 
@@ -206,9 +189,6 @@ static void thread_reap(void) {
     zombie_list = NULL;
     while (t) {
         thread_t *next = t->next;
-        char buf[20];
-        serial_puts("[thread] free id=");
-        utoa_dec(t->id, buf); serial_puts(buf); serial_puts("\n");
         memset(t, 0, sizeof(thread_t)); // Wipe slot
         t = next;
     }
@@ -225,8 +205,7 @@ static thread_t *pick_next(int cpu) {
         return NULL;
 
     thread_t *best = NULL;
-    char buf[32];
-    
+
     return best;
 }
 
@@ -248,22 +227,12 @@ void schedule(void) {
 
     if (!next) {
         prev->state = THREAD_RUNNING;
-        serial_puts("[sched] idle\n");
         __asm__ volatile("push %0; popfq; hlt" :: "r"(rflags) : "memory");
         return;
     }
 
     next->state = THREAD_RUNNING;
     next->started = 1;
-
-    char buf[32];
-    serial_puts("[sched] switch ");
-    utoa_dec(prev->id, buf); serial_puts(buf);
-    serial_puts(" -> ");
-    utoa_dec(next->id, buf); serial_puts(buf);
-    serial_puts(" [prio ");
-    utoa_dec(next->priority, buf); serial_puts(buf);
-    serial_puts("]\n");
 
     current_cpu[cpu] = next;
     context_switch(&prev->rsp, next->rsp);
@@ -297,15 +266,6 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
     next->state = THREAD_RUNNING;
     next->started = 1;
 
-    char buf[32];
-    serial_puts("[sched] preempt ");
-    utoa_dec(prev->id, buf); serial_puts(buf);
-    serial_puts(" -> ");
-    utoa_dec(next->id, buf); serial_puts(buf);
-    serial_puts(" [prio ");
-    utoa_dec(next->priority, buf); serial_puts(buf);
-    serial_puts("]\n");
-
     current_cpu[cpu] = next;
 
     return next->rsp;
@@ -313,11 +273,9 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
 
 // --- Example Service Threads ---
 static void regx_thread_func(void) {
-    serial_puts("[regx] service started\n");
     ipc_message_t msg;
     while (1) {
         if (ipc_receive_blocking(&regx_queue, thread_self(), &msg) == 0) {
-            serial_puts("[regx] request received\n");
             ipc_message_t reply = {0};
             reply.type = msg.type;
             ipc_send(&regx_queue, thread_self(), &reply);
@@ -326,20 +284,15 @@ static void regx_thread_func(void) {
     }
 }
 static void login_thread_func(void) {
-    serial_puts("[login] service started\n");
     login_server(&fs_queue, thread_self());
 }
 static void init_thread_func(void) {
     static uint32_t init_tid = 0;
     init_tid = thread_self();
-    serial_puts("[init] init server started\n");
-    thread_t *login = thread_create_with_priority(login_thread_func, 180);
-    if (!login)
-        serial_puts("[init] WARNING: cannot create login thread\n");
+    thread_create_with_priority(login_thread_func, 180);
     ipc_message_t msg;
     while (1) {
         if (ipc_receive_blocking(&init_queue, init_tid, &msg) == 0) {
-            serial_puts("[init] forwarding to regx\n");
             ipc_send(&regx_queue, init_tid, &msg);
             ipc_message_t reply;
             if (ipc_receive_blocking(&regx_queue, init_tid, &reply) == 0)
@@ -356,7 +309,6 @@ void threads_init(void) {
     thread_t *regx = thread_create_with_priority(regx_thread_func, 220);
     thread_t *init = thread_create_with_priority(init_thread_func, 200);
     if (!regx || !init) {
-        serial_puts("[thread] FATAL: cannot create core threads\n");
         for (;;) __asm__ volatile("hlt");
     }
 
@@ -380,14 +332,3 @@ void threads_init(void) {
     current_cpu[cpu] = &main_thread;
 }
 
-// --- Decimal utoa utility, unchanged ---
-static void utoa_dec(uint32_t val, char *buf) {
-    char tmp[20];
-    int i = 0, j = 0;
-    if (!val) { buf[0] = '0'; buf[1] = 0; return; }
-    while (val && i < (int)sizeof(tmp) - 1) {
-        tmp[i++] = '0' + (val % 10); val /= 10;
-    }
-    while (i) buf[j++] = tmp[--i];
-    buf[j] = 0;
-}
