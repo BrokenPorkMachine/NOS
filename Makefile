@@ -61,7 +61,11 @@ kernel: libc
     user/libc/libc.o -o kernel.bin
 	cp kernel.bin n2.bin
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.o -o O2.elf
-	$(OBJCOPY) -O binary O2.elf O2.bin
+	# Strip ELF note sections so O2.bin begins with executable code
+	$(OBJCOPY) -O binary \
+		--remove-section=.note.gnu.build-id \
+		--remove-section=.note.gnu.property \
+		O2.elf O2.bin
 
 boot:
 	make -C boot
