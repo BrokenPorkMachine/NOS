@@ -8,8 +8,9 @@
 #endif
 
 int main(void) {
+    static uint8_t region[4 * PAGE_SIZE];
     bootinfo_memory_t mmap[1] = {
-        { .addr = 512*PAGE_SIZE, .len = 4*PAGE_SIZE, .type = 7, .reserved = 0 }
+        { .addr = (uint64_t)(uintptr_t)region, .len = sizeof(region), .type = 7, .reserved = 0 }
     };
     bootinfo_t bi = {0};
     bi.mmap = mmap;
