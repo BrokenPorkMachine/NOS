@@ -44,6 +44,15 @@ static int json_extract_int(const char *json, const char *key) {
     return (int)strtol(p, NULL, 10);
 }
 
+// strdup is not provided by our minimal libc, so implement a local helper.
+static char *strdup_local(const char *s) {
+    size_t len = strlen(s) + 1;
+    char *d = (char *)malloc(len);
+    if (d)
+        memcpy(d, s, len);
+    return d;
+}
+
 // ---- Internal entry registry ------------------------------------------------
 #define MAX_ENTRIES 32
 static struct {
@@ -145,7 +154,9 @@ static int register_from_manifest(const char *json) {
         snprintf(agent.name, sizeof(agent.name), "%s", m.name);
         snprintf(agent.version, sizeof(agent.version), "%s", m.version);
         agent.entry = fn;
-        agent.manifest = json;
+        const char *caps = m.capabilities[0] ? m.capabilities : "";
+        char *cap_copy = caps[0] ? strdup_local(caps) : NULL;
+        agent.manifest = cap_copy ? (const void *)cap_copy : (const void *)caps;
         n2_agent_register(&agent);
         fn();
     } else {
