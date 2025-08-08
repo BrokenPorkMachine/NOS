@@ -18,6 +18,7 @@ kernel: libc
 	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch.o
 	$(CC) $(O2_CFLAGS) -c kernel/O2.c -o kernel/O2.o
 	$(CC) $(CFLAGS) -c kernel/n2_main.c -o kernel/n2_main.o
+	$(CC) $(CFLAGS) -c kernel/builtin_nosfs.c -o kernel/builtin_nosfs.o
 	$(CC) $(CFLAGS) -c kernel/agent.c -o kernel/agent.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
 	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
@@ -49,7 +50,7 @@ kernel: libc
 	$(CC) $(CFLAGS) -c kernel/drivers/IO/pci.c -o kernel/drivers/IO/pci.o
 	$(CC) $(CFLAGS) -c kernel/drivers/Net/netstack.c -o kernel/drivers/Net/netstack.o
 	$(CC) $(CFLAGS) -c kernel/drivers/Net/e1000.c -o kernel/drivers/Net/e1000.o
-	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o \
+	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
 	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
 	    kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
@@ -81,7 +82,7 @@ disk.img: boot kernel
 	mcopy -i disk.img n2.bin ::/
 
 clean:
-	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/agent.o \
+	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
 	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
             kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o user/agents/login/login.o disk.img \
 	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
