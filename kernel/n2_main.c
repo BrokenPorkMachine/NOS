@@ -100,13 +100,13 @@ void n2_main(bootinfo_t *bootinfo) {
     // dereferenced by load_agent. Guard against that by insisting the pointer
     // is non‑NULL and outside the low identity‑mapped area.
     if ((uintptr_t)nosfs_image > 0x1000 && nosfs_size > 0 &&
-        (uintptr_t)nosfs_image < 0x100000000ULL) {
+        (uintptr_t)nosfs_image + nosfs_size < 0x100000000ULL) {
         load_agent(nosfs_image, nosfs_size, AGENT_FORMAT_NOSM);
     } else {
         vprint("[N2] Builtin NOSFS image missing or invalid\r\n");
     }
     if ((uintptr_t)my_mach_agent_image > 0x1000 && my_mach_agent_size > 0 &&
-        (uintptr_t)my_mach_agent_image < 0x100000000ULL) {
+        (uintptr_t)my_mach_agent_image + my_mach_agent_size < 0x100000000ULL) {
         load_agent(my_mach_agent_image, my_mach_agent_size, AGENT_FORMAT_MACHO2);
     } else if ((uintptr_t)my_mach_agent_image || my_mach_agent_size) {
         vprint("[N2] Builtin Mach agent image missing or invalid\r\n");
