@@ -17,9 +17,18 @@ static void itoahex(uint64_t v, char *buf) {
 }
 
 // ========== Serial output (optional, for qemu/bochs debugging) ==========
-// NOTE: On real hardware, you may need to init serial port first.
+// Initialize COM1 so early boot logs appear even if firmware hasn't set it up.
 #define COM1_PORT 0x3F8
 static inline void outb(uint16_t port, uint8_t val) { asm volatile ("outb %0,%1" : : "a"(val), "Nd"(port)); }
+static void serial_init(void) {
+    outb(COM1_PORT + 1, 0x00); // Disable all interrupts
+    outb(COM1_PORT + 3, 0x80); // Enable DLAB
+    outb(COM1_PORT + 0, 0x03); // Set divisor to 3 (38400 baud)
+    outb(COM1_PORT + 1, 0x00); // High byte of divisor
+    outb(COM1_PORT + 3, 0x03); // 8 bits, no parity, one stop bit
+    outb(COM1_PORT + 2, 0xC7); // Enable FIFO, clear, 14-byte threshold
+    outb(COM1_PORT + 4, 0x0B); // IRQs enabled, RTS/DSR set
+}
 static void serial_putc(char c) { outb(COM1_PORT, c); }
 static void serial_print(const char *s) { while (*s) serial_putc(*s++); }
 static void print_hex(uint64_t v) { char b[20]; itoahex(v, b); serial_print(b); }
@@ -69,6 +78,7 @@ static int load_elf64(const void *image, size_t size, void **entry, kernel_segme
 // ========== Main Stage0 Entrypoint ==========
 
 void _start(bootinfo_t *bi) {
+    serial_init();
     serial_print("\r\n[O2/stage0] handoff from nboot\r\n");
     if (!bi) { serial_print("[O2/stage0] ERROR: no bootinfo\r\n"); while(1){} }
 
