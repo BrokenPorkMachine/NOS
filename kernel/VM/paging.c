@@ -147,11 +147,4 @@ uint64_t paging_virt_to_phys(uint64_t virt) {
     if (pd_t[pd_i] & PAGE_SIZE_2MB)
         return (pd_t[pd_i] & ~0x1FFFFFULL) | (virt & 0x1FFFFFULL);
 
-    uint64_t *pt_t = (uint64_t *)(pd_t[pd_i] & ~0xFFFULL);
-    if (!(pt_t[pt_i] & PAGE_PRESENT)) return 0;
-    return (pt_t[pt_i] & ~0xFFFULL) | (virt & 0xFFFULL);
-}
-
-uint64_t paging_get_pml4(void) {
-    return (uint64_t)pml4;
-}
+    uint64_t *pt_t = (uint
