@@ -73,7 +73,9 @@ void pmm_init(const bootinfo_t *bootinfo) {
         if (end > PMM_MAX_ADDR)
             end = PMM_MAX_ADDR;
         uint64_t s = start / PAGE_SIZE;
-        uint64_t e = end / PAGE_SIZE;
+        uint64_t e = (end + PAGE_SIZE - 1) / PAGE_SIZE;
+        if (e > total_frames)
+            e = total_frames;
         for (uint64_t f = s; f < e; ++f)
             bit_clear(f);
         free_frames += (e - s);
