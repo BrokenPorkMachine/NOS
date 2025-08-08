@@ -150,9 +150,16 @@ static int load_elf64(const void *image, size_t size, void **entry,
         // uint64_t p_align  = rd64(ph + 48); // currently unused
 
         if (p_type != 1) continue; // PT_LOAD
-        memcpy((void *)(uintptr_t)p_paddr, d + p_offset, (size_t)p_filesz);
+
+        // --- Fix: Use vaddr if p_paddr is above 4GB
+        uintptr_t dst = (uintptr_t)p_paddr;
+        if (dst >= 0x100000000ULL) {
+            dst = (uintptr_t)p_vaddr;
+        }
+
+        memcpy((void *)dst, d + p_offset, (size_t)p_filesz);
         if (p_memsz > p_filesz)
-            memset((void *)(uintptr_t)(p_paddr + p_filesz), 0, (size_t)(p_memsz - p_filesz));
+            memset((void *)(dst + p_filesz), 0, (size_t)(p_memsz - p_filesz));
 
         // Print info over serial
         vprint("[O2] n2.seg: vaddr="); vhex(p_vaddr);
@@ -175,3 +182,4 @@ static int load_elf64(const void *image, size_t size, void **entry,
     *entry = (void *)(uintptr_t)e_entry;
     return 0;
 }
+
