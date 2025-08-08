@@ -84,6 +84,12 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
     }
     if (!t) return NULL;   // no free slots
 
+    // thread_pool is pre-zeroed during threads_early_init(), but
+    // guard the explicit memset so we never touch a bogus low
+    // address if the symbol resolves unexpectedly (e.g. to 0x38)
+    // which could trigger a #GP fault on early boot.
+    if ((uintptr_t)t < 0x1000)
+        return NULL;
     memset(t, 0, sizeof(thread_t));
     t->magic = THREAD_MAGIC;
     t->stack = stack_pool[index];
