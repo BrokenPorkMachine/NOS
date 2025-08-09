@@ -201,10 +201,28 @@ static thread_t *pick_next(int cpu) {
         return NULL;
 
     thread_t *t = start->next;
-    if (!t)
-        return NULL;
-
     thread_t *best = NULL;
+
+    /*
+     * Iterate once over the circular run queue looking for the highest
+     * priority thread that is ready to run.  Ties are broken in favour of
+     * the thread that appears earliest after the currently running thread
+     * (simple round‑robin within a priority level).
+     */
+    while (t && t != start) {
+        if (t->state == THREAD_READY && (!best || t->priority > best->priority))
+            best = t;
+        t = t->next;
+    }
+
+    /*
+     * Finally consider the current thread.  It was marked READY by the
+     * caller, so include it in the priority comparison.  If no other
+     * runnable threads exist, this may return the current thread which will
+     * result in a benign self switch.
+     */
+    if (start->state == THREAD_READY && (!best || start->priority >= best->priority))
+        best = start;
 
     return best;
 }
