@@ -8,7 +8,7 @@ NASM    := nasm
 
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
           -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-          -I include -I boot/include -no-pie -no-integrated-as
+          -I include -I boot/include -no-pie
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
 all: libc kernel boot disk.img
