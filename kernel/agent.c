@@ -4,7 +4,10 @@
 static n2_agent_t registry[N2_MAX_AGENTS];
 static size_t registry_count;
 
+extern int kprintf(const char *fmt, ...);
+
 void n2_agent_registry_reset(void) {
+    kprintf("[regx] registry reset (count=%zu)\n", registry_count);
     registry_count = 0;
 }
 

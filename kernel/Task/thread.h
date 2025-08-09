@@ -117,6 +117,7 @@ void thread_join(thread_t *t);
  * Yield CPU to next ready thread (cooperative scheduling).
  */
 void thread_yield(void);
+int thread_runqueue_length(int cpu);
 
 /**
  * Run the scheduler (internal, also used by yield/block/unblock).

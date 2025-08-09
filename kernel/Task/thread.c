@@ -136,7 +136,7 @@ uint64_t schedule_from_isr(uint64_t *old_rsp){
 }
 
 __attribute__((noreturn)) void thread_exit(void){ thread_t *t=thread_current(); if(t) t->state=THREAD_EXITED; schedule(); __builtin_unreachable(); }
-__attribute__((noreturn,used)) static void thread_start(void(*f)(void)){ f(); thread_exit(); }
+__attribute__((noreturn,used)) static void thread_start(void(*f)(void)){ kprintf("[thread] id=%u first timeslice\n", thread_self()); f(); thread_exit(); }
 static void __attribute__((naked,noreturn)) thread_entry(void){ __asm__ volatile("pop %rdi\ncall thread_start\njmp .\n"); }
 
 thread_t *thread_create_with_priority(void(*func)(void), int priority){
@@ -152,6 +152,7 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
     *cf=(context_frame_t){ .r15=0,.r14=0,.r13=0,.r12=0,.rbx=0,.rbp=0, .rflags=0x202,.rax_dummy=0, .rip=(uint64_t)thread_entry, .arg_rdi=(uint64_t)func };
     t->rsp=(uint64_t)cf; t->func=func; t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
     t->state=THREAD_READY; t->started=0; t->priority=priority; t->next=NULL;
+    kprintf("[thread] spawn id=%d entry=%p stack=%p-%p prio=%d\n", t->id, func, t->stack, t->stack+STACK_SIZE, priority);
     uint64_t rf=irq_save_disable(); int cpu=smp_cpu_index(); rq_insert_tail(cpu,t); irq_restore(rf); return t;
 }
 thread_t *thread_create(void(*func)(void)){ return thread_create_with_priority(func,(MAX_PRIORITY+MIN_PRIORITY)/2); }
@@ -177,6 +178,14 @@ void thread_set_priority(thread_t *t,int prio){
 }
 void thread_join(thread_t *t){ if(!t||t->magic!=THREAD_MAGIC) return; while(thread_is_alive(t)){ __asm__ volatile("pause"); thread_yield(); } }
 void thread_yield(void){ schedule(); }
+
+int thread_runqueue_length(int cpu){
+    thread_t *start=current_cpu[cpu];
+    if(!start) return 0;
+    int count=0; thread_t *t=start;
+    do{ count++; t=t->next; }while(t&&t!=start);
+    return count;
+}
 
 // Wrappers
 static void regx_thread_wrapper(void){ regx_main(); thread_exit(); }

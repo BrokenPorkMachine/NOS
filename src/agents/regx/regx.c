@@ -1,6 +1,8 @@
 // src/agents/regx/regx.c
 #include "../../user/libc/libc.h"   // adjust include if your libc path differs when linked into kernel
 #include <stdint.h>
+#include "../../kernel/Task/thread.h"
+#include "../../kernel/arch/CPU/lapic.h"
 
 // Kernel console
 extern int kprintf(const char *fmt, ...);
@@ -17,6 +19,19 @@ typedef int (*agent_gate_fn)(const char *path,
 extern void agent_loader_set_gate(agent_gate_fn gate);
 extern int  agent_loader_run_from_path(const char *path, int prio);
 
+static inline uint64_t rdtsc(void){
+    uint32_t lo,hi; __asm__ volatile("rdtsc":"=a"(lo),"=d"(hi));
+    return ((uint64_t)hi<<32)|lo;
+}
+
+static void watchdog_thread(void){
+    for(;;){
+        kprintf(".");
+        for(volatile uint64_t i=0;i<1000000;i++) __asm__ volatile("pause");
+        thread_yield();
+    }
+}
+
 // ---- Security policy ----
 // 1) Only allow files under /agents/ with .bin suffix
 // 2) Require a non-empty name + entry
@@ -28,6 +43,13 @@ static int regx_policy_gate(const char *path,
                             const char *entry)
 {
     (void)version;
+
+    uint32_t tid = thread_self();
+    void *caller = __builtin_return_address(0);
+    uint64_t ts = rdtsc();
+
+    if (name && strcmp(name, "init") == 0)
+        kprintf("[regx] allow call tid=%u pc=%p ts=%llu\n", tid, caller, ts);
 
     if (!path || strncmp(path, "/agents/", 8) != 0) {
         kprintf("[regx] deny: path %s outside /agents/\n", path?path:"(null)");
@@ -78,6 +100,8 @@ void regx_main(void){
     agent_loader_set_gate(regx_policy_gate);
 
     // Kick off init as standalone; it will load the rest (subject to gate)
+    thread_create_with_priority(watchdog_thread, 250);
+    kprintf("[regx] launching init (boot:init:regx)\n");
     if (agent_loader_run_from_path("/agents/init.bin", 200) < 0) {
         kprintf("[regx] failed to launch /agents/init.bin\n");
     }
