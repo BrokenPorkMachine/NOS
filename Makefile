@@ -9,43 +9,33 @@ CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUIL
         -I include -I boot/include -no-pie
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
-# ===== Standalone Agents =====
-# Each subdir under user/agents/* becomes one agent binary: <name>.elf and <name>.bin
-AGENT_DIRS := $(filter-out user/agents/login,$(wildcard user/agents/*))
-# Optional: explicitly choose which to package (uncomment to pin)
-# AGENT_DIRS := user/agents/regx user/agents/nosm user/agents/nosfs user/agents/init
+# ===== Standalone Agents on Disk =====
+# Build all user/agents/* except the three linked into the kernel
+AGENT_DIRS_ALL := $(filter-out user/agents/login,$(wildcard user/agents/*))
+AGENT_DIRS_EXCL := user/agents/regx user/agents/nosm user/agents/nosfs
+AGENT_DIRS := $(filter-out $(AGENT_DIRS_EXCL),$(AGENT_DIRS_ALL))
 
-# All .c files for each agent dir
 AGENT_SRCS := $(foreach d,$(AGENT_DIRS),$(wildcard $(d)/*.c))
-# Per-file objects for those sources
 AGENT_OBJS := $(AGENT_SRCS:.c=.o)
 
-# Agent names (basename of directory path)
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
-
-# One ELF and BIN per agent name, linked from that agent's objects
 AGENT_ELFS := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
 AGENT_BINS := $(foreach n,$(AGENT_NAMES),out/agents/$(n).bin)
 
-# Per-agent object list variable:
-# e.g. for user/agents/regx/*.c -> $(call AGENT_OBJ_LIST,regx) yields obj list
 define AGENT_OBJ_LIST
 $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 endef
 
-# ===== Targets =====
 all: libc kernel boot disk.img
 
 libc:
 	$(CC) $(CFLAGS) -c user/libc/libc.c -o user/libc/libc.o
 
-# Generic compile rule for agent .c files
+# Build rules for standalone agents
 $(AGENT_OBJS): %.o : %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
 
-# Link each agent ELF, then strip to .bin
-# We reuse the same approach as O2.elf → O2.bin (no notes, flat text at start)
 $(AGENT_ELFS): out/agents/%.elf : $(call AGENT_OBJ_LIST,%)
 	@mkdir -p $(dir $@)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $@
@@ -56,7 +46,9 @@ $(AGENT_BINS): out/agents/%.bin : out/agents/%.elf
 		--remove-section=.note.gnu.property \
 		$< $@
 
-# Build kernel as before (no agents linked into the kernel)
+# Convenience: build all standalone agents (ELF+BIN)
+agents: $(AGENT_ELFS) $(AGENT_BINS)
+
 kernel: libc agents
 	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
 	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch.o
@@ -68,7 +60,12 @@ kernel: libc agents
 	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
 	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
-	$(CC) $(CFLAGS) -c user/agents/login/login.c -o user/agents/login/login.o
+
+	# Link regx/nosm/nosfs *into* the kernel as threads
+	$(CC) $(CFLAGS) -c user/agents/regx/regx.c   -o user/agents/regx/regx.o
+	$(CC) $(CFLAGS) -c user/agents/nosm/nosm.c   -o user/agents/nosm/nosm.o
+	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs.c -o user/agents/nosfs/nosfs.o
+
 	$(CC) $(CFLAGS) -c kernel/arch/CPU/smp.c -o kernel/arch/CPU/smp.o
 	$(CC) $(CFLAGS) -c kernel/arch/CPU/lapic.c -o kernel/arch/CPU/lapic.o
 	$(CC) $(CFLAGS) -c kernel/macho2.c -o kernel/macho2.o
@@ -94,6 +91,7 @@ kernel: libc agents
 	$(CC) $(CFLAGS) -c kernel/drivers/IO/pci.c -o kernel/drivers/IO/pci.o
 	$(CC) $(CFLAGS) -c kernel/drivers/Net/netstack.c -o kernel/drivers/Net/netstack.o
 	$(CC) $(CFLAGS) -c kernel/drivers/Net/e1000.c -o kernel/drivers/Net/e1000.o
+
 	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
 	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
@@ -104,17 +102,16 @@ kernel: libc agents
             kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
-    user/agents/login/login.o user/libc/libc.o -o kernel.bin
+    user/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o \
+    user/libc/libc.o -o kernel.bin
+
 	cp kernel.bin n2.bin
+
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.o -o O2.elf
-	# Strip ELF note sections so O2.bin begins with executable code
 	$(OBJCOPY) -O binary \
 		--remove-section=.note.gnu.build-id \
 		--remove-section=.note.gnu.property \
 		O2.elf O2.bin
-
-# Convenience: build all agents (ELF+BIN)
-agents: $(AGENT_ELFS) $(AGENT_BINS)
 
 boot:
 	make -C boot
@@ -134,14 +131,15 @@ disk.img: boot kernel agents
 clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
 	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
-            kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o user/agents/login/login.o disk.img \
+            kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
 	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
 	    kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
 	    kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
             kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
             kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
-            kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o
+            kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
+            $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS)
 	rm -rf out
 	make -C boot clean
 
