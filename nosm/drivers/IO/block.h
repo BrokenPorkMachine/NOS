@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../../IPC/ipc.h"
+#include "../../kernel/IPC/ipc.h"
 
 #define BLOCK_SIZE 512
 #define BLOCK_DEVICE_BLOCKS 2048
