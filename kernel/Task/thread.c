@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "../arch/CPU/smp.h"
 
-extern int kprintf(const char *fmt, ...);
+extern int printf(const char *fmt, ...);
 
 // If you have a real kprintf, include its header instead of this macro.
 // e.g. #include "../Console/kprintf.h"
