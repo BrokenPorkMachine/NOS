@@ -14,18 +14,20 @@
 // --- Forward decls from low-level context switch asm ---
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
 
-// --- Context frame expected by context_switch.S
+// --- Context frame expected by your context_switch.asm
 // Stack (top -> bottom at t->rsp):
-//   r15, r14, r13, r12, rbx, rbp, rip(thread_entry), arg_for_thread_entry
+//   r15, r14, r13, r12, rbx, rbp, rflags, rax_dummy, rip(thread_entry), arg_for_thread_entry
 typedef struct context_frame {
     uint64_t r15, r14, r13, r12, rbx, rbp;
-    uint64_t rip;       // -> thread_entry
-    uint64_t arg_rdi;   // consumed by 'pop %rdi' in thread_entry
+    uint64_t rflags;
+    uint64_t rax_dummy;   // consumed by 'pop rax' in context_switch
+    uint64_t rip;         // -> thread_entry
+    uint64_t arg_rdi;     // consumed by 'pop %rdi' in thread_entry
 } context_frame_t;
 
 static inline uintptr_t align16(uintptr_t v) { return v & ~0xFULL; }
 
-// Zombie list to track exited threads (IF-masked crit sections protect it)
+// Zombie list to track exited threads (protected by IF-masked critical sections)
 static thread_t *zombie_list = NULL;
 
 static thread_t thread_pool[MAX_KERNEL_THREADS];
@@ -204,10 +206,12 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
 
     uintptr_t top = align16((uintptr_t)t->stack + STACK_SIZE);
 
-    // Build initial context frame to match context_switch.S contract
+    // Build initial context frame to match your context_switch.asm contract
     context_frame_t *cf = (context_frame_t *)(top - sizeof(*cf));
     *cf = (context_frame_t){
         .r15=0,.r14=0,.r13=0,.r12=0,.rbx=0,.rbp=0,
+        .rflags=0x202,             // IF=1 so the new thread starts with interrupts enabled
+        .rax_dummy=0,              // consumed by 'pop rax'
         .rip=(uint64_t)thread_entry,
         .arg_rdi=(uint64_t)func
     };
@@ -347,12 +351,14 @@ static thread_t *pick_next(int cpu) {
 }
 
 void schedule(void) {
-    uint64_t rflags = irq_save_disable(); // mask interrupts during pick/switch
+    // Disable interrupts for the pick/switch critical section.
+    // DO NOT restore saved rflags here — the asm restores the NEXT thread's rflags.
+    (void)irq_save_disable();
 
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
     if (!prev) {
-        irq_restore(rflags);
+        // No current thread? Park CPU.
         __asm__ volatile("hlt");
         return;
     }
@@ -364,7 +370,6 @@ void schedule(void) {
 
     if (!next) { // should not happen with main_thread fallback
         prev->state = THREAD_RUNNING;
-        irq_restore(rflags);
         __asm__ volatile("hlt");
         return;
     }
@@ -376,15 +381,13 @@ void schedule(void) {
     current_cpu[cpu] = next;
     context_switch(&prev->rsp, next->rsp);
 
-    // We resume here when 'prev' becomes current again later.
+    // We resume here later when 'prev' runs again.
 
     if (prev->state == THREAD_EXITED)
         add_to_zombie_list(prev);
 
-    // Reap outside the critical section
+    // Reap any zombies
     thread_reap();
-    // Re-enable interrupts to what they were before schedule()
-    irq_restore(rflags);
 }
 
 uint64_t schedule_from_isr(uint64_t *old_rsp) {
