@@ -50,6 +50,10 @@ user/rt/rt0_user.o: user/rt/rt0_user.S
 	@mkdir -p $(dir $@)
 	$(NASM) -f elf64 $< -o $@
 
+user/rt/rt0_agent.o: user/rt/rt0_agent.c
+	@mkdir -p $(dir $@)
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
+
 BIN_SRCS  := $(wildcard bin/*.c)      # e.g., bin/cp.c
 BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
 BIN_ELFS  := $(foreach n,$(BIN_NAMES),out/bin/$(n).elf)
