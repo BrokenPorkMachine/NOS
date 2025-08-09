@@ -7,7 +7,6 @@
 #include "../login/login.h"
 #include "../vnc/vnc.h"
 #include "../ssh/ssh.h"
-#include "../nosfs/nosfs_server.h"
 #include "../ftp/ftp.h"
 #include "../pkg/server.h"
 #include "../update/server.h"
@@ -37,7 +36,6 @@ extern ipc_queue_t upd_queue;
 static void login_thread(void)  { login_server(&fs_queue, thread_self()); }
 static void vnc_thread(void)    { vnc_server(&fs_queue, thread_self()); }
 static void ssh_thread(void)    { ssh_server(&fs_queue, thread_self()); }
-static void nosfs_thread(void) { nosfs_server(&fs_queue, thread_self()); }
 static void ftp_thread(void)    { ftp_server(&fs_queue, thread_self()); }
 static void pkg_thread(void)    { pkg_server(&pkg_queue, thread_self()); }
 static void update_thread(void) { update_server(&upd_queue, &pkg_queue, thread_self()); }
@@ -46,7 +44,6 @@ static void update_thread(void) { update_server(&upd_queue, &pkg_queue, thread_s
 static ipc_queue_t *login_grants[]   = { &fs_queue, &pkg_queue, &upd_queue };
 static ipc_queue_t *vnc_grants[]     = { &fs_queue };
 static ipc_queue_t *ssh_grants[]     = { &fs_queue };
-static ipc_queue_t *nosfs_grants[]  = { &fs_queue };
 static ipc_queue_t *ftp_grants[]     = { &fs_queue };
 static ipc_queue_t *pkg_grants[]     = { &pkg_queue };
 static ipc_queue_t *update_grants[]  = { &upd_queue, &pkg_queue };
@@ -89,7 +86,6 @@ typedef struct {
 
 // --------- Service Table ----------
 static service_desc_t services[] = {
-    { "nosfs", nosfs_thread, nosfs_grants,  1, 1, NULL,         10 },
     { "pkg",    pkg_thread,    pkg_grants,     1, 1, NULL,         10 },
     { "update", update_thread, update_grants,  2, 1, NULL,         10 },
     { "ftp",    ftp_thread,    ftp_grants,     1, 0, &enable_ftp,   5 },
