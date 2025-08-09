@@ -5,6 +5,8 @@
 #include "printf.h"
 #include "macho2.h"          /* your minimal parser to locate symbols/sections */
 
+extern int printf(const char *fmt, ...);
+
 extern ipc_queue_t nosm_queue;  /* create/init this in threads_init; grant nosm agent */
 #define MAX_NMODS 64
 

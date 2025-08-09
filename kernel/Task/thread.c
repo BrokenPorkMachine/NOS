@@ -48,7 +48,7 @@ static thread_t *tail_cpu[MAX_CPUS] = {0};
 static int next_id = 1;
 static thread_t main_thread;
 
-ipc_queue_t fs_queue, pkg_queue, upd_queue, init_queue, regx_queue;
+ipc_queue_t fs_queue, pkg_queue, upd_queue, init_queue, regx_queue, nosm_queue;
 int timer_ready = 0;
 
 static inline uint64_t irq_save_disable(void){ uint64_t rf; __asm__ volatile("pushfq; pop %0; cli":"=r"(rf)::"memory"); return rf; }
@@ -71,8 +71,14 @@ static inline void rq_insert_tail(int cpu, thread_t *t){
 static inline void rq_remove(int cpu, thread_t *t){
     thread_t *cur=current_cpu[cpu]; if(!cur||!t) return;
     thread_t *p=cur; do{
-        if(p->next==t){ p->next=t->next; if(tail_cpu[cpu]==t) tail_cpu[cpu]=p;
-            if(current_cpu[cpu]==t) current_cpu[cpu]=(t->next==t)?NULL:t->next; t->next=NULL; return; }
+        if(p->next==t){
+            p->next=t->next;
+            if(tail_cpu[cpu]==t) tail_cpu[cpu]=p;
+            if(current_cpu[cpu]==t)
+                current_cpu[cpu]=(t->next==t)?NULL:t->next;
+            t->next=NULL;
+            return;
+        }
         p=p->next;
     }while(p&&p!=cur);
 }
@@ -101,8 +107,12 @@ static thread_t *pick_next(int cpu){
     thread_t *start=current_cpu[cpu]; if(!start) return NULL;
     thread_t *t=start,*best=NULL;
     do{ if(t->state==THREAD_READY && (!best || t->priority>best->priority)) best=t; t=t->next; } while(t&&t!=start);
-    if(!best){ if(start->state==THREAD_READY||start->state==THREAD_RUNNING) best=start; }
-    if(!best) best=&main_thread; return best;
+    if(!best){
+        if(start->state==THREAD_READY||start->state==THREAD_RUNNING)
+            best=start;
+    }
+    if(!best) best=&main_thread;
+    return best;
 }
 
 void schedule(void){
@@ -130,10 +140,12 @@ __attribute__((noreturn,used)) static void thread_start(void(*f)(void)){ f(); th
 static void __attribute__((naked,noreturn)) thread_entry(void){ __asm__ volatile("pop %rdi\ncall thread_start\njmp .\n"); }
 
 thread_t *thread_create_with_priority(void(*func)(void), int priority){
-    if(priority<MIN_PRIORITY) priority=MIN_PRIORITY; if(priority>MAX_PRIORITY) priority=MAX_PRIORITY;
+    if(priority<MIN_PRIORITY) priority=MIN_PRIORITY;
+    if(priority>MAX_PRIORITY) priority=MAX_PRIORITY;
     thread_t *t=NULL; int idx=-1;
     for(int i=0;i<(int)MAX_KERNEL_THREADS;i++){ if(thread_pool[i].magic==0){ t=&thread_pool[i]; idx=i; break; } }
-    if(!t) return NULL; if((uintptr_t)t<0x1000) return NULL;
+    if(!t) return NULL;
+    if((uintptr_t)t<0x1000) return NULL;
     memset(t,0,sizeof(thread_t)); t->magic=THREAD_MAGIC; t->stack=stack_pool[idx];
     uintptr_t top=align16((uintptr_t)t->stack+STACK_SIZE);
     context_frame_t *cf=(context_frame_t*)(top-sizeof(*cf));
@@ -150,10 +162,18 @@ void thread_kill(thread_t *t){ if(!t||t->magic!=THREAD_MAGIC) return; uint64_t r
     if(t==cur){ irq_restore(rf); schedule(); return; } rq_remove(cpu,t); add_to_zombie_list(t); irq_restore(rf); }
 static void rq_on_priority_change(int cpu, thread_t *t){ rq_requeue_tail(cpu,t); }
 void thread_set_priority(thread_t *t,int prio){
-    if(!t||t->magic!=THREAD_MAGIC) return; if(prio<MIN_PRIORITY) prio=MIN_PRIORITY; if(prio>MAX_PRIORITY) prio=MAX_PRIORITY;
-    uint64_t rf=irq_save_disable(); int old=t->priority; t->priority=prio; int cpu=smp_cpu_index(); rq_on_priority_change(cpu,t);
-    thread_t *cur=thread_current(); int yield=((t!=cur && t->state==THREAD_READY && t->priority>(cur?cur->priority:MIN_PRIORITY)) || (t==cur && prio<old));
-    irq_restore(rf); if(yield) schedule();
+    if(!t||t->magic!=THREAD_MAGIC) return;
+    if(prio<MIN_PRIORITY) prio=MIN_PRIORITY;
+    if(prio>MAX_PRIORITY) prio=MAX_PRIORITY;
+    uint64_t rf=irq_save_disable();
+    int old=t->priority;
+    t->priority=prio;
+    int cpu=smp_cpu_index();
+    rq_on_priority_change(cpu,t);
+    thread_t *cur=thread_current();
+    int yield=((t!=cur && t->state==THREAD_READY && t->priority>(cur?cur->priority:MIN_PRIORITY)) || (t==cur && prio<old));
+    irq_restore(rf);
+    if(yield) schedule();
 }
 void thread_join(thread_t *t){ if(!t||t->magic!=THREAD_MAGIC) return; while(thread_is_alive(t)){ __asm__ volatile("pause"); thread_yield(); } }
 void thread_yield(void){ schedule(); }
@@ -168,7 +188,7 @@ static int agentfs_read_all(const char *path, void **out, size_t *out_sz){ retur
 static void agentfs_free(void *p){ kfree(p); }
 
 void threads_init(void){
-    ipc_init(&fs_queue); ipc_init(&pkg_queue); ipc_init(&upd_queue); ipc_init(&init_queue); ipc_init(&regx_queue);
+    ipc_init(&fs_queue); ipc_init(&pkg_queue); ipc_init(&upd_queue); ipc_init(&init_queue); ipc_init(&regx_queue); ipc_init(&nosm_queue);
 
     agent_loader_set_read(agentfs_read_all, agentfs_free);
 
@@ -188,6 +208,7 @@ void threads_init(void){
         ipc_grant(&regx_queue, t_nosfs->id, IPC_CAP_SEND | IPC_CAP_RECV);
     }
     if (t_nosm){
+        ipc_grant(&nosm_queue, t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);
         ipc_grant(&regx_queue, t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);
     }
 

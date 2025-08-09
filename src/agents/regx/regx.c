@@ -15,17 +15,6 @@ typedef int (*agent_gate_fn)(const char *path,
 extern void agent_loader_set_gate(agent_gate_fn gate);
 extern int  agent_loader_run_from_path(const char *path, int prio);
 
-// Simple helpers
-static int string_contains(const char *hay, const char *needle){
-    if(!hay||!needle) return 0;
-    const char *p = hay; size_t nlen = strlen(needle);
-    while (*p){
-        if (strncmp(p, needle, nlen)==0) return 1;
-        ++p;
-    }
-    return 0;
-}
-
 // ---- Security policy ----
 // 1) Only allow files under /agents/ with .bin suffix
 // 2) Require a non-empty name + entry
@@ -56,9 +45,14 @@ static int regx_policy_gate(const char *path,
     const char *allowed[] = {"fs","net","pkg","upd","tty","gui"};
     if (capabilities && capabilities[0]) {
         // crude check: ensure every token appears in allowed list
-        char caps[128]; snprintf(caps, sizeof(caps), "%s", capabilities);
-        char *tok = strtok(caps, ",");
-        while (tok){
+        char caps[128];
+        snprintf(caps, sizeof(caps), "%s", capabilities);
+        char *p = caps;
+        while (*p){
+            char *tok = p;
+            while (*p && *p != ',') p++;
+            char saved = *p;
+            *p = '\0';
             int ok = 0;
             for (size_t i=0;i<sizeof(allowed)/sizeof(allowed[0]);++i){
                 if (strcmp(tok, allowed[i]) == 0){ ok = 1; break; }
@@ -67,7 +61,7 @@ static int regx_policy_gate(const char *path,
                 kprintf("[regx] deny: cap \"%s\" not allowed for %s\n", tok, name);
                 return 0;
             }
-            tok = strtok(NULL, ",");
+            if (saved == ',') p++; /* skip comma */
         }
     }
 
