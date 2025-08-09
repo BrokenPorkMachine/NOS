@@ -345,7 +345,7 @@ thread_t *thread_create(void (*func)(void)) {
 }
 
 void thread_block(thread_t *t) {
-    if (!t || !t->magic == THREAD_MAGIC) return;
+    if ((!t || !t->magic) == THREAD_MAGIC) return;
 
     uint64_t rf = irq_save_disable();
     t->state = THREAD_BLOCKED;
