@@ -1,214 +1,248 @@
-#include "init.h"
-#include "../../../kernel/Task/thread.h"
-#include "../../../kernel/IPC/ipc.h"
-#include "../../libc/libc.h"
-#include "../../../kernel/drivers/IO/serial.h"
+/*
+ * init agent (standalone, gated by regx)
+ *
+ * Responsibilities:
+ *   - Read a manifest (/agents/init.json) listing agents to launch
+ *   - Ask regx (via NOS->regx_load) to load each agent
+ *   - Basic logging and optional health pings
+ *
+ * NO kernel symbols, NO direct thread_* or serial_* usage.
+ */
 
-#include "../login/login.h"
-#include "../vnc/vnc.h"
-#include "../ssh/ssh.h"
-#include "../ftp/ftp.h"
-#include "../pkg/server.h"
-#include "../update/server.h"
+#include "../../rt/agent_abi.h"
+#include "../../libc/libc.h"     /* fopen/fread/fclose, memset, memcpy, etc. */
+#include <stdint.h>
+#include <stddef.h>
 
-/* ========= Portable manifest section ========= */
-#if defined(__APPLE__) || defined(__MACH__)
-#  define O2INFO_SEC __attribute__((section("__O2INFO,__manifest")))
-#else
-#  define O2INFO_SEC __attribute__((section(".o2info")))
-#endif
-
-O2INFO_SEC __attribute__((used))
-const char mo2_manifest[] =
+/* ---------- Embedded manifest section for Mach-O2 style (optional) ---------- */
+__attribute__((section("__O2INFO,__manifest")))
+static const char mo2_manifest[] =
 "{\n"
 "  \"name\": \"init\",\n"
 "  \"type\": \"service_launcher\",\n"
 "  \"version\": \"1.0.0\",\n"
-"  \"entry\": \"init_main\"\n"
+"  \"entry\": \"agent_main\"\n"
 "}\n";
 
-/* --------- Service enable/disable flags (simulated config) ----------- */
-static int enable_ftp   = 1;
-static int enable_login = 1;
-static int enable_vnc   = 0; /* vnc disabled as example */
-static int enable_ssh   = 1;
+/* ---------- Simple JSON manifest parser ------------------------------------
+   We expect a very small JSON like:
 
-/* --------- External queues ----------- */
-extern ipc_queue_t fs_queue;
-extern ipc_queue_t pkg_queue;
-extern ipc_queue_t upd_queue;
-
-/* --------- Service thread wrappers ----------- */
-static void login_thread(void)  { login_server(&fs_queue, thread_self()); }
-#if 1 /* keep compiled; gated by enable_vnc below so no unused warnings */
-static void vnc_thread(void)    { vnc_server(&fs_queue, thread_self()); }
-#endif
-static void ssh_thread(void)    { ssh_server(&fs_queue, thread_self()); }
-static void ftp_thread(void)    { ftp_server(&fs_queue, thread_self()); }
-static void pkg_thread(void)    { pkg_server(&pkg_queue, thread_self()); }
-static void update_thread(void) { update_server(&upd_queue, &pkg_queue, thread_self()); }
-
-/* --------- Per-service grant queues ----------- */
-static ipc_queue_t *login_grants[]   = { &fs_queue, &pkg_queue, &upd_queue };
-/* Only reference these when the service is enabled to silence “unused” */
-static ipc_queue_t *vnc_grants[]     = { &fs_queue };
-static ipc_queue_t *ssh_grants[]     = { &fs_queue };
-static ipc_queue_t *ftp_grants[]     = { &fs_queue };
-static ipc_queue_t *pkg_grants[]     = { &pkg_queue };
-static ipc_queue_t *update_grants[]  = { &upd_queue, &pkg_queue };
-
-/* --------- Health check IPC protocol ---------- */
-#define HEALTH_RETRIES 1000
-
-static uint32_t init_tid = 0;
-
-static int ipc_ping(ipc_queue_t *q, uint32_t svc_tid) {
-    if (!q) return 0;
-    ipc_message_t ping = (ipc_message_t){0};
-    ping.type = IPC_HEALTH_PING;
-    if (ipc_send(q, init_tid, &ping) != 0) return 0;
-
-    for (int i = 0; i < HEALTH_RETRIES; ++i) {
-        ipc_message_t reply = {0};
-        if (ipc_receive(q, init_tid, &reply) == 0) {
-            if (reply.type == IPC_HEALTH_PONG && reply.sender == svc_tid)
-                return 1;
-        }
-        thread_yield();
-    }
-    return 0;
+{
+  "services": [
+    { "path": "/agents/login.bin",  "args": "" },
+    { "path": "/agents/pkg.bin",    "args": "" },
+    { "path": "/agents/update.bin", "args": "" },
+    { "path": "/agents/ssh.bin",    "args": "" },
+    { "path": "/agents/ftp.bin",    "args": "" }
+  ]
 }
 
-/* --------- Service Descriptor --------- */
+   The parser below is tolerant and only extracts "path" and "args" pairs.
+---------------------------------------------------------------------------- */
 typedef struct {
-    const char *name;
-    void (*entry)(void);
-    ipc_queue_t **grant_queues;
-    int num_grants;
-    int is_core;
-    int *enabled;
-    int respawn_limit;
-} service_desc_t;
+    char path[160];
+    char args[160];
+} svc_spec_t;
 
-/* --------- Service Table --------- */
-static service_desc_t services[] = {
-    { "pkg",    pkg_thread,    pkg_grants,     1, 1, NULL,         10 },
-    { "update", update_thread, update_grants,  2, 1, NULL,         10 },
-    { "ftp",    ftp_thread,    ftp_grants,     1, 0, &enable_ftp,   5 },
-    { "login",  login_thread,  login_grants,   3, 0, &enable_login, 5 },
-    { "vnc",    vnc_thread,    vnc_grants,     1, 0, &enable_vnc,   3 },
-    { "ssh",    ssh_thread,    ssh_grants,     1, 0, &enable_ssh,   5 },
-};
-#define NUM_SERVICES (sizeof(services)/sizeof(services[0]))
+#define MAX_SERVICES 16
 
-/* --------- Service Status Tracking --------- */
-typedef struct {
-    thread_t *t;
-    int restarts;
-} service_state_t;
-
-static service_state_t service_state[NUM_SERVICES];
-
-/* --------- Config (placeholder) --------- */
-static void apply_service_config(void) {
-    /* TODO: parse file/boot args; using static flags above for now */
+static int json_skip_ws(const char *s, int i) {
+    while (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n') i++;
+    return i;
 }
 
-/* --------- Spawn & grant ---------- */
-static int spawn_service(size_t i) {
-    service_desc_t *svc = &services[i];
+static int json_match(const char *s, int i, const char *kw) {
+    int j = 0;
+    while (kw[j] && s[i+j] == kw[j]) j++;
+    return kw[j] ? 0 : 1;
+}
 
-    if (svc->enabled && !*(svc->enabled)) {
-        serial_printf("[init] config: '%s' disabled by config\n", svc->name);
-        service_state[i].t = NULL;
-        service_state[i].restarts = 0;
-        return 0;
+static int json_copy_quoted(const char *s, int i, char *out, size_t out_sz) {
+    i = json_skip_ws(s, i);
+    if (s[i] != '"') return -1;
+    i++;
+    size_t w = 0;
+    while (s[i] && s[i] != '"' && w + 1 < out_sz) {
+        out[w++] = s[i++];
     }
-
-    thread_t *t = thread_create(svc->entry);
-    if (!t) {
-        if (svc->is_core) {
-            serial_printf("[init] FATAL: could not create core service '%s'.\n", svc->name);
-            return -1;
-        } else {
-            serial_printf("[init] WARNING: could not create optional service '%s'.\n", svc->name);
-            return 0;
-        }
-    }
-
-    /* Only touch grant arrays when enabled to avoid “unused variable” noise */
-    for (int g = 0; g < svc->num_grants; ++g)
-        ipc_grant(svc->grant_queues[g], t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-
-    serial_printf("[init] launched service '%s' (tid=%u, restarts=%d)\n",
-                  svc->name, t->id, service_state[i].restarts);
-    service_state[i].t = t;
-    return 1;
+    if (s[i] != '"') return -1;
+    out[w] = 0;
+    return i + 1;
 }
 
-static int service_healthcheck(size_t i) {
-    thread_t *t = service_state[i].t;
-    if (!t || !thread_is_alive(t)) return 0;
-    ipc_queue_t *q = NULL;
-    if (services[i].num_grants > 0) q = services[i].grant_queues[0];
-    return ipc_ping(q, t->id);
-}
+static int parse_manifest_services(const char *buf, size_t len, svc_spec_t *list, int max_list) {
+    int n = 0;
+    int i = 0;
+    (void)len;
 
-/* --------- Periodic Health Check and Respawn ---------- */
-static void health_check_and_respawn(void) {
-    for (size_t i = 0; i < NUM_SERVICES; ++i) {
-        service_desc_t *svc = &services[i];
-        service_state_t *ss = &service_state[i];
+    /* find "services" : [ ... ] */
+    while (buf[i]) {
+        i = json_skip_ws(buf, i);
+        if (json_match(buf, i, "\"services\"")) {
+            i += 10;
+            i = json_skip_ws(buf, i);
+            if (buf[i] != ':') break;
+            i++;
+            i = json_skip_ws(buf, i);
+            if (buf[i] != '[') break;
+            i++;
 
-        if (svc->is_core || (svc->enabled && *(svc->enabled))) {
-            if (!ss->t || !thread_is_alive(ss->t)) {
-                if (ss->restarts < svc->respawn_limit) {
-                    serial_printf("[init] respawning service '%s' (restart #%d)\n",
-                                  svc->name, ss->restarts + 1);
-                    ss->restarts++;
-                    spawn_service(i);
-                } else {
-                    serial_printf("[init] WARNING: service '%s' exceeded respawn limit (%d). Giving up.\n",
-                                  svc->name, svc->respawn_limit);
+            /* parse array of { "path": "...", "args": "..." } */
+            while (buf[i]) {
+                i = json_skip_ws(buf, i);
+                if (buf[i] == ']') return n; /* end array */
+
+                if (buf[i] != '{') break;
+                i++;
+
+                char path[160] = {0}, args[160] = {0};
+                int have_path = 0, have_args = 0;
+
+                for (;;) {
+                    i = json_skip_ws(buf, i);
+                    if (buf[i] == '}') { i++; break; }
+
+                    /* key */
+                    char key[16] = {0};
+                    int ni = json_copy_quoted(buf, i, key, sizeof(key));
+                    if (ni < 0) return n;
+                    i = json_skip_ws(buf, ni);
+                    if (buf[i] != ':') return n;
+                    i++;
+                    i = json_skip_ws(buf, i);
+
+                    /* value (string only) */
+                    char val[160] = {0};
+                    ni = json_copy_quoted(buf, i, val, sizeof(val));
+                    if (ni < 0) return n;
+                    i = ni;
+
+                    if (!have_path && !strcmp(key, "path")) {
+                        snprintf(path, sizeof(path), "%s", val);
+                        have_path = 1;
+                    } else if (!have_args && !strcmp(key, "args")) {
+                        snprintf(args, sizeof(args), "%s", val);
+                        have_args = 1;
+                    }
+
+                    i = json_skip_ws(buf, i);
+                    if (buf[i] == ',') { i++; continue; }
+                    if (buf[i] == '}') { i++; break; }
                 }
-                continue;
-            }
-            if (!service_healthcheck(i)) {
-                serial_printf("[init] healthcheck: service '%s' is unhealthy, restarting...\n", svc->name);
-                thread_kill(ss->t);
-                ss->t = NULL;
+
+                if (have_path && n < max_list) {
+                    snprintf(list[n].path, sizeof(list[n].path), "%s", path);
+                    snprintf(list[n].args, sizeof(list[n].args), "%s", args);
+                    n++;
+                }
+
+                i = json_skip_ws(buf, i);
+                if (buf[i] == ',') { i++; continue; }
+                if (buf[i] == ']') return n;
             }
         }
+        if (buf[i]) i++;
     }
+    return n;
 }
 
-/* --------- Main Init Entrypoint ---------- */
-void init_main(ipc_queue_t *q, uint32_t self_id) {
-    (void)q;
-    init_tid = self_id;
+/* ---------- Load manifest from disk (optional) ----------------------------- */
+static int load_manifest_from_disk(svc_spec_t *out, int max_out) {
+    char *buf = NULL;
+    size_t sz = 0;
 
-    serial_puts("[init] reading service config...\n");
-    apply_service_config();
+    FILE *fp = fopen("/agents/init.json", "r");
+    if (!fp) return 0;
 
-    for (size_t i = 0; i < NUM_SERVICES; ++i) {
-        service_state[i].restarts = 0;
-        int r = spawn_service(i);
-        if (r == -1) goto fail;
-        thread_yield();
+    /* Read whole file */
+    fseek(fp, 0, 2);
+    long fsz = ftell(fp);
+    if (fsz <= 0 || fsz > 64 * 1024) { fclose(fp); return 0; }
+    fseek(fp, 0, 0);
+
+    buf = (char *)malloc((size_t)fsz + 1);
+    if (!buf) { fclose(fp); return 0; }
+
+    sz = fread(buf, 1, (size_t)fsz, fp);
+    fclose(fp);
+    buf[sz] = 0;
+
+    int n = parse_manifest_services(buf, sz, out, max_out);
+    free(buf);
+    return n;
+}
+
+/* ---------- Built-in fallback list ---------------------------------------- */
+static int default_manifest(svc_spec_t *out, int max_out) {
+    static const char *paths[] = {
+        "/agents/pkg.bin",
+        "/agents/update.bin",
+        "/agents/login.bin",
+        /* Optional agents (uncomment as they become available): */
+        /* "/agents/ssh.bin", */
+        /* "/agents/ftp.bin", */
+        /* "/agents/vnc.bin", */
+    };
+    int n = 0;
+    for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]) && n < max_out; ++i) {
+        snprintf(out[n].path, sizeof(out[n].path), "%s", paths[i]);
+        out[n].args[0] = 0;
+        n++;
+    }
+    return n;
+}
+
+/* ---------- Agent main ----------------------------------------------------- */
+__attribute__((noreturn))
+void agent_main(void)
+{
+    if (!NOS) {
+        /* no API? nothing to do */
+        for (;;) {}
     }
 
-    serial_puts("[init] all requested system services launched\n");
+    NOS->puts("[init] starting (user agent)\n");
 
-    /* Let other services run: drop our priority. */
-    thread_set_priority(thread_current(), MIN_PRIORITY);
-
-    while (1) {
-        thread_yield();
-        health_check_and_respawn();
-        for (volatile int i = 0; i < 100000; ++i) __asm__ __volatile__("pause");
+    /* Load services list */
+    svc_spec_t svcs[MAX_SERVICES];
+    int count = load_manifest_from_disk(svcs, MAX_SERVICES);
+    if (count <= 0) {
+        NOS->puts("[init] /agents/init.json not found or empty; using defaults\n");
+        count = default_manifest(svcs, MAX_SERVICES);
     }
 
-fail:
-    serial_puts("[init] SYSTEM HALT: core service startup failure.\n");
-    for (;;) __asm__ volatile("hlt");
+    /* Try a quick handshake with regx (optional) */
+    if (NOS->regx_ping && !NOS->regx_ping()) {
+        NOS->puts("[init] WARNING: regx did not answer ping, proceeding anyway\n");
+    }
+
+    /* Ask regx to load each service */
+    for (int i = 0; i < count; ++i) {
+        uint32_t tid = 0;
+        int rc = -1;
+
+        if (NOS->regx_load) {
+            rc = NOS->regx_load(svcs[i].path, svcs[i].args[0] ? svcs[i].args : NULL, &tid);
+        }
+
+        if (rc == 0) {
+            if (tid)
+                NOS->printf("[init] launched '%s' tid=%u\n", svcs[i].path, tid);
+            else
+                NOS->printf("[init] launched '%s'\n", svcs[i].path);
+        } else {
+            NOS->printf("[init] FAILED to launch '%s' (rc=%d)\n", svcs[i].path, rc);
+        }
+
+        if (NOS->yield) NOS->yield();
+    }
+
+    NOS->puts("[init] bootstrap complete; entering monitor loop\n");
+
+    /* Very light monitor loop: just yield; future: poll health, reload manifest, etc. */
+    for (;;) {
+        if (NOS->yield) NOS->yield();
+        /* sleeping spin */
+        for (volatile int i = 0; i < 200000; ++i) __asm__ __volatile__("pause");
+    }
 }
