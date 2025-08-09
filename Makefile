@@ -109,6 +109,7 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
 	$(CC) $(CFLAGS) -c kernel/stubs.c -o kernel/stubs.o
+	$(CC) $(CFLAGS) -c nosm/drivers/IO/serial.c -o nosm/drivers/IO/serial.o
 	
 	# Linked-in security gate + core agents:
 	$(CC) $(CFLAGS) -c src/agents/regx/regx.c   -o src/agents/regx/regx.o
@@ -127,7 +128,7 @@ kernel: libc agents bins
 
 	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
-            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/stubs.o \
+            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o nosm/drivers/IO/serial.o kernel/stubs.o \
     src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
     user/libc/libc.o -o kernel.bin
 
@@ -167,7 +168,7 @@ clean:
             $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
             src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
             user/rt/rt0_user.o user/rt/rt0_agent.o \
-            nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2
+            nosm/drivers/IO/serial.o nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2
 	rm -rf out
 	make -C boot clean
 
