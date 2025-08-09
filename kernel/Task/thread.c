@@ -4,7 +4,8 @@
 #include "../../user/libc/libc.h"
 #include <stdint.h>
 #include "../arch/CPU/smp.h"
-#include "../../user/agents/login/login.h"
+#include "../../user/agents/init/init.h"
+#include "../../user/agents/nosfs/nosfs_server.h"
 
 #ifndef STACK_SIZE
 #define STACK_SIZE 8192
@@ -44,7 +45,7 @@ static int next_id = 1;
 static thread_t main_thread; // CPU0 bootstrap/idle
 
 // IPC queues for servers (exposed globally)
-ipc_queue_t fs_queue, pkg_queue, upd_queue, init_queue, regx_queue;
+ipc_queue_t fs_queue, pkg_queue, upd_queue;
 
 // --- Optional: enable SSE/FXSR if kernel code may use FP/SIMD
 static void enable_sse(void) {
@@ -432,62 +433,43 @@ void thread_yield(void) {
     schedule();
 }
 
-// --- Example Service Threads ---
-static void regx_thread_func(void) {
-    ipc_message_t msg;
-    while (1) {
-        if (ipc_receive_blocking(&regx_queue, thread_self(), &msg) == 0) {
-            ipc_message_t reply = (ipc_message_t){0};
-            reply.type = msg.type;
-            ipc_send(&regx_queue, thread_self(), &reply);
-        }
-        thread_yield();
-    }
-}
+// --- Core service launchers ---
+extern void nosm_example_entry(void);
 
-static void login_thread_func(void) {
-    // NOTE: If login_server needs caps, ensure they are granted before this runs.
-    login_server(&fs_queue, thread_self());
+static void nosfs_thread_func(void) {
+    nosfs_server(&fs_queue, thread_self());
 }
 
 static void init_thread_func(void) {
-    static uint32_t init_tid = 0;
-    init_tid = thread_self();
-    thread_create_with_priority(login_thread_func, 180);
-    /*
-     * The init thread originally ran at a higher priority than the login
-     * server it launches.  Because the scheduler always selects the highest
-     * priority READY thread, the init thread would immediately pre-empt the
-     * newly created login thread on every yield, effectively starving it and
-     * preventing the login prompt from ever appearing.  Drop our priority to
-     * the minimum so other services, like the login server, can run.
-     */
-    thread_set_priority(thread_current(), MIN_PRIORITY);
-    ipc_message_t msg;
-    while (1) {
-        if (ipc_receive_blocking(&init_queue, init_tid, &msg) == 0) {
-            ipc_send(&regx_queue, init_tid, &msg);
-            ipc_message_t reply;
-            if (ipc_receive_blocking(&regx_queue, init_tid, &reply) == 0)
-                ipc_send(&init_queue, init_tid, &reply);
-        }
-        thread_yield();
+    init_main(NULL, thread_self());
+}
+
+static void regx_thread_func(void) {
+    nosm_example_entry();
+
+    thread_t *nosfs = thread_create_with_priority(nosfs_thread_func, 200);
+    thread_t *init = thread_create_with_priority(init_thread_func, 200);
+    if (!nosfs || !init) {
+        for (;;) __asm__ volatile("hlt");
     }
+
+    ipc_grant(&fs_queue, nosfs->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&fs_queue, init->id,  IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&pkg_queue, init->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&upd_queue, init->id, IPC_CAP_SEND | IPC_CAP_RECV);
+
+    while (1)
+        thread_yield();
 }
 
 // --- Init threading and launch core services ---
 void threads_init(void) {
-    ipc_init(&fs_queue); ipc_init(&pkg_queue); ipc_init(&upd_queue); ipc_init(&init_queue); ipc_init(&regx_queue);
+    ipc_init(&fs_queue); ipc_init(&pkg_queue); ipc_init(&upd_queue);
 
     thread_t *regx = thread_create_with_priority(regx_thread_func, 220);
-    thread_t *init = thread_create_with_priority(init_thread_func, 200);
-    if (!regx || !init) {
+    if (!regx) {
         for (;;) __asm__ volatile("hlt");
     }
-
-    ipc_grant(&regx_queue, regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&regx_queue, init->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&init_queue,  init->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
     // main_thread already installed in threads_early_init
 }
