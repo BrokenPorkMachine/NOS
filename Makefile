@@ -30,7 +30,7 @@ $(AGENT_OBJS): %.o : %.c
 define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
-out/agents/$(1).elf: $$(AGENT_$(1)_OBJS) user/libc/libc.o
+out/agents/$(1).elf: $$(AGENT_$(1)_OBJS) user/rt/rt0_agent.o user/libc/libc.o
 	@mkdir -p $$(@D)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
 
