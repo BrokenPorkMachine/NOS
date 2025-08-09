@@ -28,16 +28,10 @@ enter_user_mode:
     ; Prepare iretq frame: SS, RSP, RFLAGS, CS, RIP (in that order, bottom to top)
     push GDT_SEL_USER_DATA_R3  ; User SS
     push rax                   ; User RSP
-    pushfq                     ; RFLAGS (current flags, but be sure IF=1)
+    mov  rdx, 0x202            ; RFLAGS with IF set
+    push rdx                   ; User RFLAGS
     push GDT_SEL_USER_CODE_R3  ; User CS
     push rcx                   ; User RIP
-
-    ; Double-check: ensure IF=1 (interrupts enabled) in RFLAGS
-    ; This is optional, but safest if you want user code to see interrupts
-    ; (Uncomment if needed:)
-    ; pop rdx
-    ; or  rdx, 0x200      ; Set IF
-    ; push rdx
 
     ; Far return to user mode, privilege transition!
     iretq

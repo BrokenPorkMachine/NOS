@@ -180,6 +180,37 @@ void thread_kill(thread_t *t) {
     add_to_zombie_list(t);
 }
 
+void thread_set_priority(thread_t *t, int priority) {
+    if (!t || t->magic != THREAD_MAGIC)
+        return;
+
+    if (priority < MIN_PRIORITY) priority = MIN_PRIORITY;
+    if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
+
+    int old = t->priority;
+    t->priority = priority;
+
+    thread_t *cur = thread_current();
+    /*
+     * If we boosted another thread above the current thread's priority,
+     * or lowered the current thread, invoke the scheduler to give other
+     * runnable threads a chance.
+     */
+    if ((t != cur && t->priority > cur->priority && t->state == THREAD_READY) ||
+        (t == cur && priority < old)) {
+        schedule();
+    }
+}
+
+void thread_join(thread_t *t) {
+    if (!t || t->magic != THREAD_MAGIC)
+        return;
+
+    while (thread_is_alive(t)) {
+        thread_yield();
+    }
+}
+
 void thread_yield(void) {
     schedule();
 }
