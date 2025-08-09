@@ -3,40 +3,34 @@
 global enter_user_mode
 
 ; void enter_user_mode(void *entry, void *user_stack)
-; Arguments:
-;   rdi = entry point (user RIP)
-;   rsi = user stack pointer (user RSP)
-;
-; GDT Selectors (should be 0x23 for data, 0x1B for code with RPL=3)
-;   GDT_SEL_USER_DATA_R3  equ 0x23
-;   GDT_SEL_USER_CODE_R3  equ 0x1B
+;   rdi = user RIP
+;   rsi = user RSP (ideally 16-byte aligned)
+; GDT_SEL_USER_DATA_R3 = 0x23, GDT_SEL_USER_CODE_R3 = 0x1B
 
 section .text
 enter_user_mode:
-    ; Set user-mode segment registers
+    ; Load RPL=3 segments. In long mode DS/ES are ignored; SS DPL matters.
     mov  ax, GDT_SEL_USER_DATA_R3
     mov  ds, ax
     mov  es, ax
-    mov  fs, ax
-    mov  gs, ax
+    mov  fs, ax       ; selector only; FS base is via MSR_FS_BASE if using TLS
+    mov  gs, ax       ; selector only; GS base via MSR_GS_BASE/KERNEL_GS_BASE
     mov  ss, ax
 
-    ; Load arguments
-    mov  rcx, rdi         ; rcx = user entry point (RIP)
-    mov  rax, rsi         ; rax = user stack pointer (RSP)
+    ; Stash args
+    mov  rcx, rdi     ; rcx = user RIP
+    mov  rax, rsi     ; rax = user RSP (should be canonical & 16B aligned)
 
-    ; Prepare iretq frame: SS, RSP, RFLAGS, CS, RIP (in that order, bottom to top)
-    push GDT_SEL_USER_DATA_R3  ; User SS
-    push rax                   ; User RSP
-    mov  rdx, 0x202            ; RFLAGS with IF set
-    push rdx                   ; User RFLAGS
-    push GDT_SEL_USER_CODE_R3  ; User CS
-    push rcx                   ; User RIP
+    ; iretq frame (SS,RSP,RFLAGS,CS,RIP). iretq pops in reverse into user mode.
+    push GDT_SEL_USER_DATA_R3   ; SS (RPL=3)
+    push rax                    ; RSP
+    mov  rdx, 0x202             ; RFLAGS: IF=1, others cleared
+    push rdx                    ; RFLAGS
+    push GDT_SEL_USER_CODE_R3   ; CS (RPL=3, 64-bit)
+    push rcx                    ; RIP
 
-    ; Far return to user mode, privilege transition!
-    iretq
+    iretq                       ; drop to user mode, never returns
 
-    ; Should never return; just in case, halt forever
 .dead:
     hlt
     jmp .dead
