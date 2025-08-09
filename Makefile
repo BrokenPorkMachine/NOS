@@ -149,13 +149,13 @@ disk.img: boot kernel agents bins modules
 	mmd -i disk.img ::/EFI/BOOT
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img O2.bin ::/
-        mcopy -i disk.img n2.bin ::/
-        mmd -i disk.img ::/agents || true
+	mcopy -i disk.img n2.bin ::/
+	mmd -i disk.img ::/agents || true
 	$(foreach b,$(AGENT_BINS), mcopy -i disk.img $(b) ::/agents/$(notdir $(b));)
-        mmd -i disk.img ::/bin || true
+	mmd -i disk.img ::/bin || true
 	$(foreach b,$(BIN_BINS), mcopy -i disk.img $(b) ::/bin/$(notdir $(b));)
-        mmd -i disk.img ::/modules || true
-        mcopy -i disk.img out/modules/hello.mo2 ::/modules/hello.mo2
+	mmd -i disk.img ::/modules || true
+	mcopy -i disk.img out/modules/hello.mo2 ::/modules/hello.mo2
 
 # ===== utility =====
 clean:
