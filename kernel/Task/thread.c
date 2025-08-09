@@ -131,6 +131,10 @@ void threads_early_init(void) {
     main_thread.priority = MIN_PRIORITY;
     main_thread.next     = &main_thread;
 
+    uint64_t rsp;
+    __asm__ volatile("mov %%rsp, %0" : "=r"(rsp));
+    main_thread.rsp = rsp;
+
     current_cpu[0] = &main_thread;
     tail_cpu[0]    = &main_thread;
 }
