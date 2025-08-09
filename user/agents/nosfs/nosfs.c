@@ -1,5 +1,5 @@
 #include "nosfs.h"
-#include "block.h"
+#include "../../../nosm/drivers/IO/block.h"
 
 // ---------- Quota helpers ----------
 void nosfs_set_quota(nosfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes) {
