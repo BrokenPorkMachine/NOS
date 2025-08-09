@@ -10,26 +10,23 @@ CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUIL
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
 # ===== Standalone Agents on Disk =====
-# Build all user/agents/* EXCEPT nosm/nosfs (linked into kernel).
+# Build all user/agents/* EXCEPT the ones linked into the kernel.
 AGENT_DIRS_ALL := $(filter-out user/agents/login,$(wildcard user/agents/*))
 AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs
 AGENT_DIRS := $(filter-out $(AGENT_DIRS_EXCL),$(AGENT_DIRS_ALL))
 
-AGENT_SRCS := $(foreach d,$(AGENT_DIRS),$(wildcard $(d)/*.c))
-AGENT_OBJS := $(AGENT_SRCS:.c=.o)
+# Keep only agent dirs that actually have at least one .c file
+AGENT_DIRS_NONEMPTY := $(foreach d,$(AGENT_DIRS),$(if $(wildcard $(d)/*.c),$(d),))
 
-AGENT_NAMES := $(notdir $(AGENT_DIRS))
-AGENT_ELFS := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
-AGENT_BINS := $(foreach n,$(AGENT_NAMES),out/agents/$(n).bin)
+# Objects / outputs only from non-empty dirs
+AGENT_OBJS  := $(foreach d,$(AGENT_DIRS_NONEMPTY),$(patsubst %.c,%.o,$(wildcard $(d)/*.c)))
+AGENT_NAMES := $(notdir $(AGENT_DIRS_NONEMPTY))
+AGENT_ELFS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
+AGENT_BINS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).bin)
 
 define AGENT_OBJ_LIST
 $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 endef
-
-all: libc kernel boot disk.img
-
-libc:
-	$(CC) $(CFLAGS) -c user/libc/libc.c -o user/libc/libc.o
 
 # Build rules for standalone agents
 $(AGENT_OBJS): %.o : %.c
