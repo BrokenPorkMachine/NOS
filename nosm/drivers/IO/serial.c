@@ -131,6 +131,13 @@ void serial_vprintf(const char *fmt, va_list ap) {
             serial_puts(s);
             break;
         }
+        case 'p': {
+            uintptr_t v = (uintptr_t)va_arg(ap, void *);
+            serial_write('0');
+            serial_write('x');
+            serial_print_uint(v, 16, sizeof(void*) * 2, 1);
+            break;
+        }
         case '%':
             serial_write('%');
             break;
