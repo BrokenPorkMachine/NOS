@@ -1,14 +1,14 @@
 CROSS_COMPILE ?= x86_64-linux-gnu-
-CC := $(CROSS_COMPILE)gcc
-LD := $(CROSS_COMPILE)ld
-AS := $(CROSS_COMPILE)as
-AR := $(CROSS_COMPILE)ar
+CC      := $(CROSS_COMPILE)gcc
+LD      := $(CROSS_COMPILE)ld
+AS      := $(CROSS_COMPILE)as
+AR      := $(CROSS_COMPILE)ar
 OBJCOPY := $(CROSS_COMPILE)objcopy
-NASM := nasm
+NASM    := nasm
 
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
-        -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-        -I include -I boot/include -no-pie
+          -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+          -I include -I boot/include -no-pie -no-integrated-as
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
 all: libc kernel boot disk.img
@@ -56,7 +56,7 @@ user/rt/rt0_agent.o: user/rt/rt0_agent.c
 	@mkdir -p $(dir $@)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
 
-BIN_SRCS  := $(wildcard bin/*.c)      # e.g., bin/cp.c
+BIN_SRCS  := $(wildcard bin/*.c)      # e.g., bin/cp.c, bin/grep.c, bin/mv.c
 BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
 BIN_ELFS  := $(foreach n,$(BIN_NAMES),out/bin/$(n).elf)
 BIN_BINS  := $(foreach n,$(BIN_NAMES),out/bin/$(n).bin)
@@ -181,7 +181,8 @@ clean:
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
             $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
-            src/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o
+            src/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o \
+            user/rt/rt0_user.o user/rt/rt0_agent.o
 	rm -rf out
 	make -C boot clean
 
