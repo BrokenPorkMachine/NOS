@@ -1,7 +1,7 @@
 #include "paging_adv.h"
 #include "pmm_buddy.h"
 #include "numa.h"
-#include "../drivers/IO/serial.h"
+#include "../../nosm/drivers/IO/serial.h"
 #include "../../user/libc/libc.h"
 #include "cow.h"
 
