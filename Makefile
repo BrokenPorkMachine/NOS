@@ -13,7 +13,8 @@ all: libc kernel boot disk.img
 
 # ===== Standalone Agents on Disk =====
 AGENT_DIRS_ALL := $(filter-out user/agents/login,$(wildcard user/agents/*))
-AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs user/agents/audio user/agents/cp
+# Exclude agents that are kernel-linked or need IPC/net shims
+AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs user/agents/audio user/agents/cp user/agents/ftp
 AGENT_DIRS := $(filter-out $(AGENT_DIRS_EXCL),$(AGENT_DIRS_ALL))
 AGENT_DIRS_NONEMPTY := $(foreach d,$(AGENT_DIRS),$(if $(wildcard $(d)/*.c),$(d),))
 AGENT_NAMES := $(notdir $(AGENT_DIRS_NONEMPTY))
