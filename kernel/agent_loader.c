@@ -237,10 +237,40 @@ static int load_agent_macho_impl(const void *image,size_t size,const char *path,
     return -1;
 }
 
-static int load_agent_flat_impl(const void *image,size_t size,const char *path,int prio){
-    (void)image;(void)size;(void)path;(void)prio;
-    kprintf("[loader] flat loader stub\n");
-    return -1;
+static int load_agent_flat_impl(const void *image, size_t size, const char *path, int prio){
+    if (!image || size == 0)
+        return -1;
+
+    /* derive name from path: basename without extension */
+    char name[32] = {0};
+    if (path){
+        const char *base = path;
+        for (const char *p = path; *p; ++p)
+            if (*p == '/') base = p + 1;
+        snprintf(name, sizeof(name), "%s", base);
+        char *dot = NULL;
+        for (char *p = name; *p; ++p)
+            if (*p == '.') dot = p;
+        if (dot) *dot = 0;
+    } else {
+        snprintf(name, sizeof(name), "flat");
+    }
+
+    /* Security gate decision with placeholder metadata */
+    if (g_gate_fn){
+        int ok = g_gate_fn(path ? path : "(buffer)", name, "0", "", "agent_main");
+        if (!ok)
+            return -1;
+    }
+
+    /* Register entry and fabricate minimal manifest */
+    agent_loader_register_entry("agent_main", (agent_entry_t)image);
+    char manifest[128];
+    snprintf(manifest, sizeof(manifest),
+             "{\"name\":\"%s\",\"type\":4,\"version\":\"0\",\"entry\":\"agent_main\",\"capabilities\":\"\"}",
+             name);
+
+    return register_and_spawn_from_manifest(manifest, path, prio);
 }
 
 static int load_agent_nosm_impl(const void *image, size_t size, const char *path, int prio)
