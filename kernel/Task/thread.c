@@ -1,14 +1,15 @@
 // kernel/Task/thread.c
 #include "thread.h"
 #include "../IPC/ipc.h"
-#include "../../user/libc/libc.h"
+#include "../../user/libc/libc.h"     // printf, memset, etc.
 #include <stdint.h>
 #include "../arch/CPU/smp.h"
 
-// --- Agents brought up by regx (weak so we build even if not linked yet)
-__attribute__((weak)) void nosm_entry(void);
-__attribute__((weak)) void nosfs_server(ipc_queue_t *fsq, uint32_t self_tid);
-__attribute__((weak)) void init_main(ipc_queue_t *fsq, ipc_queue_t *pkgq, ipc_queue_t *updq, uint32_t self_tid);
+// If you have a real kprintf, include its header instead of this macro.
+// e.g. #include "../Console/kprintf.h"
+#ifndef kprintf
+#define kprintf printf
+#endif
 
 #ifndef STACK_SIZE
 #define STACK_SIZE 8192
@@ -16,13 +17,20 @@ __attribute__((weak)) void init_main(ipc_queue_t *fsq, ipc_queue_t *pkgq, ipc_qu
 
 #define THREAD_MAGIC 0x74687264UL
 
-// Timer readiness: set to 1 in PIT/LAPIC init once the timer ISR is armed and interrupts are enabled.
+// ---- Agents brought up by regx (weak so build succeeds even if not linked yet)
+__attribute__((weak)) void nosm_entry(void);
+__attribute__((weak)) void nosfs_server(ipc_queue_t *fsq, uint32_t self_tid);
+__attribute__((weak)) void init_main(ipc_queue_t *fsq, ipc_queue_t *pkgq, ipc_queue_t *updq, uint32_t self_tid);
+
+// ---- Timer readiness: set to 1 in PIT/LAPIC init once ISR is armed and interrupts enabled
 int timer_ready = 0;
 
+// Optional scheduler tracing
 #ifndef SCHED_TRACE
 #define SCHED_TRACE 0
 #endif
 
+// Low-level context switch (asm)
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
 
 // ---- Saved frame layout restored by context_switch.asm
@@ -36,7 +44,7 @@ typedef struct context_frame {
 
 static inline uintptr_t align16(uintptr_t v) { return v & ~0xFULL; }
 
-// Zombie list (simple SLIST)
+// ---- Zombie list (simple SLIST)
 static thread_t *zombie_list = NULL;
 
 static thread_t thread_pool[MAX_KERNEL_THREADS];
@@ -410,48 +418,7 @@ void thread_join(thread_t *t) {
 
 void thread_yield(void) { schedule(); }
 
-// ---- Agent threads ----
-
-// regx: responsible for bootstrapping the agent system (nosm, nosfs, init)
-static void regx_thread_func(void) {
-    // Load/initialize NOSM if linked
-    if (nosm_entry) {
-        nosm_entry();
-    } else {
-        kprintf("[regx] NOSM agent not linked; skipping\n");
-    }
-
-    // Launch NOSFS server if linked
-    thread_t *nosfs_t = NULL;
-    if (nosfs_server) {
-        nosfs_t = thread_create_with_priority((void(*)(void)) (void*) ( // cast to match trampoline
-            ^{ nosfs_server(&fs_queue, thread_self()); } ), 200);
-        // NOTE: GCC doesn't support statement-lambdas; we'll wrap below instead.
-    }
-
-    // Launch INIT if linked
-    thread_t *init_t = NULL;
-    if (init_main) {
-        init_t = thread_create_with_priority((void(*)(void)) (void*) (
-            ^{ init_main(&fs_queue, &pkg_queue, &upd_queue, thread_self()); } ), 200);
-    }
-
-    // The above lambda trick isn't C; provide real wrappers:
-    // (We define them below and reassign if symbols are present.)
-    (void)nosfs_t; (void)init_t;
-
-    // regx main loop can act as a simple router/heartbeat
-    ipc_message_t msg;
-    while (1) {
-        if (ipc_receive_blocking(&regx_queue, thread_self(), &msg) == 0) {
-            // echo or route as desired
-            ipc_send(&regx_queue, thread_self(), &msg);
-        }
-        thread_yield();
-    }
-}
-
-// Real C wrappers for the weak agent entrypoints:
+// ---- Agent wrappers (plain C, no lambdas) ----
 static void nosfs_thread_wrapper(void) {
     if (nosfs_server) nosfs_server(&fs_queue, thread_self());
     thread_exit();
@@ -461,54 +428,68 @@ static void init_thread_wrapper(void) {
     thread_exit();
 }
 
-// init thread that regx would spawn (used by wrapper creation above)
-
-static void spawn_agents_from_regx(void) {
-    if (nosfs_server) {
-        thread_t *t = thread_create_with_priority(nosfs_thread_wrapper, 200);
-        if (t) {
-            ipc_grant(&fs_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-        } else {
-            kprintf("[regx] failed to spawn nosfs\n");
-        }
+// ---- regx: bootstraps the agent system (nosm, nosfs, init)
+static void regx_thread_func(void) {
+    // Initialize NOSM if linked
+    if (nosm_entry) {
+        nosm_entry();
     } else {
-        kprintf("[regx] nosfs_server not linked; skipping\n");
+        kprintf("[regx] NOSM agent not linked; skipping\n");
     }
 
-    if (init_main) {
-        thread_t *t = thread_create_with_priority(init_thread_wrapper, 200);
-        if (t) {
-            ipc_grant(&fs_queue, t->id,  IPC_CAP_SEND | IPC_CAP_RECV);
-            ipc_grant(&pkg_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
-            ipc_grant(&upd_queue, t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    // Spawn NOSFS if linked
+    if (nosfs_server) {
+        thread_t *nosfs_t = thread_create_with_priority(nosfs_thread_wrapper, 200);
+        if (nosfs_t) {
+            ipc_grant(&fs_queue, nosfs_t->id, IPC_CAP_SEND | IPC_CAP_RECV);
         } else {
-            kprintf("[regx] failed to spawn init\n");
+            kprintf("[regx] Failed to spawn NOSFS\n");
         }
     } else {
-        kprintf("[regx] init_main not linked; skipping\n");
+        kprintf("[regx] NOSFS agent not linked; skipping\n");
+    }
+
+    // Spawn INIT if linked
+    if (init_main) {
+        thread_t *init_t = thread_create_with_priority(init_thread_wrapper, 200);
+        if (init_t) {
+            ipc_grant(&fs_queue, init_t->id,  IPC_CAP_SEND | IPC_CAP_RECV);
+            ipc_grant(&pkg_queue, init_t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+            ipc_grant(&upd_queue, init_t->id, IPC_CAP_SEND | IPC_CAP_RECV);
+        } else {
+            kprintf("[regx] Failed to spawn INIT\n");
+        }
+    } else {
+        kprintf("[regx] INIT agent not linked; skipping\n");
+    }
+
+    // regx mailbox loop (basic echo; adjust to your routing needs)
+    ipc_message_t msg;
+    while (1) {
+        if (ipc_receive_blocking(&regx_queue, thread_self(), &msg) == 0) {
+            ipc_send(&regx_queue, thread_self(), &msg);
+        }
+        thread_yield();
     }
 }
 
-// ---- Init threading and launch core services ----
+// ---- Bring-up
 void threads_init(void) {
-    // Bring up queues first
+    // Create queues first
     ipc_init(&fs_queue);
     ipc_init(&pkg_queue);
     ipc_init(&upd_queue);
     ipc_init(&init_queue);
     ipc_init(&regx_queue);
 
-    // Spawn regx (it will load nosm, nosfs, init)
+    // Spawn regx (it will load nosm/nosfs/init)
     thread_t *regx = thread_create_with_priority(regx_thread_func, 220);
     if (!regx) { for (;;) __asm__ volatile("hlt"); }
 
-    // Give regx capabilities to bootstrap the rest
+    // Give regx capabilities to bootstrap / message itself
     ipc_grant(&regx_queue, regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
-    // Let regx immediately spin up nosfs/init (if linked)
-    spawn_agents_from_regx();
-
-    // Hand off only if your timer is armed (avoid deadlock before preemption)
+    // If your timer is already armed, hand off once so regx can start immediately
     if (timer_ready) {
         thread_yield();
     }
