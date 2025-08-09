@@ -12,30 +12,26 @@ section .text
 ; ----------------------------------------------------------------------
 ; void gdt_flush(const struct gdtr *p);
 ; Loads a new GDT, reloads data segments and CS via far return.
-; Clobbers: rax, rdx  (preserved on exit)
+; Clobbers: rax (preserved on exit)
 ; ----------------------------------------------------------------------
 gdt_flush:
     push rax
-    push rdx
-
     lgdt [rdi]
 
     ; Reload data segments (long mode: DS/ES ignored for addressing but keep sane)
-    mov ax, GDT_SEL_KERNEL_DATA
+    mov ax, 0x10              ; GDT_SEL_KERNEL_DATA
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
     mov ss, ax
 
-    ; Far return to reload CS
-    lea rax, [rel .after_flush_cs]
-    push qword GDT_SEL_KERNEL_CODE
+    ; Far return to reload CS with kernel code selector (0x08)
+    lea rax, [rel .after]
+    push qword 0x08           ; GDT_SEL_KERNEL_CODE
     push rax
     lretq
-
-.after_flush_cs:
-    pop rdx
+.after:
     pop rax
     ret
 

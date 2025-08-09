@@ -45,7 +45,7 @@ static inline uint16_t rdcs(void) {
 }
 
 static void arch_post_gdt_probe(void) {
-    serial_printf("[gdt] CS=0x%04x\n", rdcs());
+    serial_printf("[gdt] CS=0x%04x (expect 0x0008)\n", rdcs());
 }
 
 /* ------------------------------------------------------------------ */
