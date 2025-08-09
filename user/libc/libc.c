@@ -237,6 +237,12 @@ double sqrt(double x) {
 #define SYS_EXEC 3
 #define SYS_SBRK 4
 #define SYS_CLOCK_GETTIME 7
+#define SYS_OPEN 8
+#define SYS_READ 9
+#define SYS_WRITE 10
+#define SYS_CLOSE 11
+#define SYS_LSEEK 12
+#define SYS_RENAME 13
 
 static inline long syscall3(long n, long a1, long a2, long a3) {
     long ret;
@@ -417,4 +423,86 @@ time_t time(time_t *t) {
 }
 */
 // ================== FILE I/O (NOSFS) ===================
-// ... (Insert your FILE I/O implementation here) ...
+// Minimal syscall-backed FILE I/O implementation.
+
+typedef struct FILE {
+    int fd;
+} FILE;
+
+#define O_RDONLY 0
+#define O_WRONLY 1
+#define O_RDWR   2
+#define O_CREAT  64
+#define O_TRUNC  512
+#define O_APPEND 1024
+
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
+FILE *fopen(const char *path, const char *mode) {
+    int flags = 0;
+    if (mode && mode[0] == 'r') {
+        flags = O_RDONLY;
+    } else if (mode && mode[0] == 'w') {
+        flags = O_WRONLY | O_CREAT | O_TRUNC;
+    } else if (mode && mode[0] == 'a') {
+        flags = O_WRONLY | O_CREAT | O_APPEND;
+    } else {
+        return NULL;
+    }
+
+    long fd = syscall3(SYS_OPEN, (long)path, flags, 0644);
+    if (fd < 0)
+        return NULL;
+
+    FILE *f = (FILE *)malloc(sizeof(FILE));
+    if (!f) {
+        syscall3(SYS_CLOSE, fd, 0, 0);
+        return NULL;
+    }
+    f->fd = (int)fd;
+    return f;
+}
+
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+    size_t total = size * nmemb;
+    long ret = syscall3(SYS_READ, stream->fd, (long)ptr, total);
+    if (ret < 0)
+        return 0;
+    return (size_t)ret / (size ? size : 1);
+}
+
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+    size_t total = size * nmemb;
+    long ret = syscall3(SYS_WRITE, stream->fd, (long)ptr, total);
+    if (ret < 0)
+        return 0;
+    return (size_t)ret / (size ? size : 1);
+}
+
+int fclose(FILE *stream) {
+    if (!stream)
+        return -1;
+    int fd = stream->fd;
+    free(stream);
+    return (int)syscall3(SYS_CLOSE, fd, 0, 0);
+}
+
+int rename(const char *old, const char *new) {
+    return (int)syscall3(SYS_RENAME, (long)old, (long)new, 0);
+}
+
+long ftell(FILE *stream) {
+    if (!stream)
+        return -1;
+    return syscall3(SYS_LSEEK, stream->fd, 0, SEEK_CUR);
+}
+
+int fseek(FILE *stream, long offset, int whence) {
+    if (!stream)
+        return -1;
+    long ret = syscall3(SYS_LSEEK, stream->fd, offset, whence);
+    return ret < 0 ? -1 : 0;
+}
+
