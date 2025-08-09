@@ -154,14 +154,12 @@ void isr_page_fault_handler(struct isr_context *ctx) {
 }
 
 void isr_ud_handler(struct isr_context *ctx) {
-    serial_printf("\n[FAULT] #UD at RIP=%016lx CS=%04lx RFLAGS=%016lx\n",
+    serial_printf("[#UD] rip=%016lx cs=%04lx rfl=%016lx\n",
                   ctx->rip, ctx->cs, ctx->rflags);
-
     const uint8_t *p = (const uint8_t *)ctx->rip;
-    serial_printf("Bytes @RIP: ");
+    serial_printf("Bytes: ");
     for (int i = 0; i < 16; ++i) serial_printf("%02x ", p[i]);
-    serial_printf("\n");
-
+    serial_puts("\n");
     for (;;) __asm__ volatile("hlt");
 }
 
