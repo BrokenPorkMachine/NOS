@@ -158,7 +158,7 @@ void login_server(ipc_queue_t *fs_q, uint32_t self_id)
             current_session.session_id++;
             current_session.active = 1;
             /* write username safely */
-            strlcpy(current_session.username, hit->u, sizeof(current_session.username));
+            strlcpy((char*)current_session.username, hit->u, sizeof(current_session.username));
             break;
         } else {
             puts_out("Login failed\n\n");
