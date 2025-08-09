@@ -26,10 +26,23 @@ void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer){ g_re
 void agent_loader_set_gate(agent_gate_fn gate){ g_gate_fn = gate; }
 
 // --- memmem (portable) ---
-static const void *memmem_local(const void *hay, size_t haylen, const void *need, size_t needlen){
-    const unsigned char *h=(const unsigned char*)hay,*n=(const unsigned char*)need;
-    if(needlen==0) return hay; for(size_t i=0;i+needlen<=haylen;++i) if(memcmp(h+i,n,needlen)==0) return h+i; return NULL;
+// add: #include <string.h> at top for memcmp/memchr
+static const void *memmem_local(const void *hay, size_t haylen,
+                                const void *need, size_t needlen)
+{
+    const unsigned char *h = (const unsigned char*)hay;
+    const unsigned char *n = (const unsigned char*)need;
+
+    if (needlen == 0)
+        return hay;
+
+    for (size_t i = 0; i + needlen <= haylen; ++i)
+        if (memcmp(h + i, n, needlen) == 0)
+            return h + i;
+
+    return NULL;
 }
+
 
 // --- Minimal JSON helpers ---
 static int json_extract_string(const char *json, const char *key, char *out, size_t out_sz){
