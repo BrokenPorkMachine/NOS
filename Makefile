@@ -20,34 +20,46 @@ AGENT_DIRS := $(filter-out $(AGENT_DIRS_EXCL),$(AGENT_DIRS_ALL))
 # Keep only agent dirs that actually have at least one .c file
 AGENT_DIRS_NONEMPTY := $(foreach d,$(AGENT_DIRS),$(if $(wildcard $(d)/*.c),$(d),))
 
-# Objects / outputs only from non-empty dirs
-AGENT_OBJS  := $(foreach d,$(AGENT_DIRS_NONEMPTY),$(patsubst %.c,%.o,$(wildcard $(d)/*.c)))
+# Names (dir basenames) for non-empty agents
 AGENT_NAMES := $(notdir $(AGENT_DIRS_NONEMPTY))
+
+# Convenience aggregates
 AGENT_ELFS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
 AGENT_BINS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).bin)
 
-define AGENT_OBJ_LIST
-$(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
-endef
+# Generic compile rule for any agent .c -> .o (objects live in source dirs)
+AGENT_C_SRCS := $(foreach d,$(AGENT_DIRS_NONEMPTY),$(wildcard $(d)/*.c))
+AGENT_OBJS   := $(patsubst %.c,%.o,$(AGENT_C_SRCS))
 
-# Build rules for standalone agents
 $(AGENT_OBJS): %.o : %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
 
-$(AGENT_ELFS): out/agents/%.elf : $(call AGENT_OBJ_LIST,%)
-	@mkdir -p $(dir $@)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $@
+# Per-agent link rules with concrete deps (avoids "no input files")
+define MAKE_AGENT_RULES
+AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
-$(AGENT_BINS): out/agents/%.bin : out/agents/%.elf
+out/agents/$(1).elf: $$(AGENT_$(1)_OBJS)
+	@mkdir -p $$(@D)
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
+
+out/agents/$(1).bin: out/agents/$(1).elf
 	$(OBJCOPY) -O binary \
 		--remove-section=.note.gnu.build-id \
 		--remove-section=.note.gnu.property \
-		$< $@
+		$$< $$@
+endef
+
+$(foreach n,$(AGENT_NAMES),$(eval $(call MAKE_AGENT_RULES,$(n))))
 
 # Convenience
 agents: $(AGENT_ELFS) $(AGENT_BINS)
 
+# ===== libc =====
+libc:
+	$(CC) $(CFLAGS) -c user/libc/libc.c -o user/libc/libc.o
+
+# ===== kernel =====
 kernel: libc agents
 	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
 	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch.o
@@ -112,6 +124,7 @@ kernel: libc agents
 		--remove-section=.note.gnu.property \
 		O2.elf O2.bin
 
+# ===== boot & image =====
 boot:
 	make -C boot
 
@@ -123,9 +136,10 @@ disk.img: boot kernel agents
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img O2.bin ::/
 	mcopy -i disk.img n2.bin ::/
-	mmd   -i disk.img ::/agents || true
+	mmd -i disk.img ::/agents || true
 	$(foreach b,$(AGENT_BINS), mcopy -i disk.img $(b) ::/agents/$(notdir $(b));)
 
+# ===== utility =====
 clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
 	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
