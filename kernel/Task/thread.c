@@ -351,14 +351,15 @@ static thread_t *pick_next(int cpu) {
 }
 
 void schedule(void) {
-    // Disable interrupts for the pick/switch critical section.
-    // DO NOT restore saved rflags here — the asm restores the NEXT thread's rflags.
-    (void)irq_save_disable();
+    // Save and disable here to cover the pick/manipulation window
+    uint64_t rf;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(rf) :: "memory");
 
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
     if (!prev) {
-        // No current thread? Park CPU.
+        // No current thread: don't sleep with IF=0
+        __asm__ volatile("push %0; popfq" :: "r"(rf) : "memory");
         __asm__ volatile("hlt");
         return;
     }
@@ -368,8 +369,10 @@ void schedule(void) {
 
     thread_t *next = pick_next(cpu);
 
-    if (!next) { // should not happen with main_thread fallback
+    if (!next) {
+        // Nothing else runnable: keep running prev, restore IF before HLT
         prev->state = THREAD_RUNNING;
+        __asm__ volatile("push %0; popfq" :: "r"(rf) : "memory");
         __asm__ volatile("hlt");
         return;
     }
@@ -377,16 +380,15 @@ void schedule(void) {
     next->state = THREAD_RUNNING;
     next->started = 1;
 
-    // Switch: update current to next, swap stacks
+    // Switch: asm will restore the next thread's RFLAGS via popfq,
+    // so we do NOT restore 'rf' here.
     current_cpu[cpu] = next;
     context_switch(&prev->rsp, next->rsp);
 
-    // We resume here later when 'prev' runs again.
-
+    // ...post-switch bookkeeping...
     if (prev->state == THREAD_EXITED)
         add_to_zombie_list(prev);
 
-    // Reap any zombies
     thread_reap();
 }
 
