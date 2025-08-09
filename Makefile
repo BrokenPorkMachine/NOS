@@ -14,7 +14,7 @@ all: libc kernel boot disk.img
 # ===== Standalone Agents on Disk =====
 # Build all user/agents/* EXCEPT the ones linked into the kernel.
 AGENT_DIRS_ALL := $(filter-out user/agents/login,$(wildcard user/agents/*))
-AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs
+AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs user/agents/audio
 AGENT_DIRS := $(filter-out $(AGENT_DIRS_EXCL),$(AGENT_DIRS_ALL))
 
 # Keep only agent dirs that actually have at least one .c file
