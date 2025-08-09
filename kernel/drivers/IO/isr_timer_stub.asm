@@ -1,65 +1,38 @@
-global isr_timer_stub
-extern isr_timer_handler
+#ifndef MMIO_H
+#define MMIO_H
 
-section .text
+#include <stddef.h>
+#include <stdint.h>
 
-isr_timer_stub:
-    cli
-    ; Save all general-purpose registers (order must match your C struct)
-    push r15
-    push r14
-    push r13
-    push r12
-    push r11
-    push r10
-    push r9
-    push r8
-    push rdi
-    push rsi
-    push rbp
-    push rbx
-    push rdx
-    push rcx
-    push rax
+/*
+ * Minimal memory barrier used for MMIO accesses.  The empty "asm" ensures the
+ * compiler does not reorder accesses around the barrier.  Keeping it in a
+ * macro allows reuse across all helpers below.
+ */
+#define mmio_barrier() asm volatile("" ::: "memory")
 
-    ; Push interrupt vector number (for timer, usually IRQ0 = 32)
-    mov rax, 32
-    push rax
-    ; Push dummy error code (0 for IRQs)
-    xor rax, rax
-    push rax
-    ; Push dummy CR2 (not needed for timer, but keeps context struct uniform)
-    xor rax, rax
-    push rax
+/*
+ * Generate typed MMIO read/write helpers.  Each helper issues the memory
+ * barrier after the access to prevent the compiler from reordering operations
+ * and to make intent explicit.
+ */
+#define MMIO_RW(width, type)                                                   \
+    static inline void mmio_write##width(uintptr_t addr, type val) {           \
+        *(volatile type *)addr = val;                                          \
+        mmio_barrier();                                                        \
+    }                                                                          \
+    static inline type mmio_read##width(uintptr_t addr) {                      \
+        type ret = *(volatile type *)addr;                                     \
+        mmio_barrier();                                                        \
+        return ret;                                                            \
+    }
 
-    ; Pass context pointer (rsp) in rdi
-    mov rdi, rsp
-    call isr_timer_handler
+MMIO_RW(8, uint8_t)
+MMIO_RW(16, uint16_t)
+MMIO_RW(32, uint32_t)
+MMIO_RW(64, uint64_t)
 
-    ; Pop dummy CR2, error code, int_no
-    add rsp, 24
+#undef MMIO_RW
+#undef mmio_barrier
 
-    ; Restore registers in exact reverse order
-    pop rax
-    pop rcx
-    pop rdx
-    pop rbx
-    pop rbp
-    pop rsi
-    pop rdi
-    pop r8
-    pop r9
-    pop r10
-    pop r11
-    pop r12
-    pop r13
-    pop r14
-    pop r15
-
-    ; Send EOI to PIC
-    mov al, 0x20
-    out 0x20, al
-
-    iretq
-
-section .note.GNU-stack noalloc nobits align=1
+#endif // MMIO_H
