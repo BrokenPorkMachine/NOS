@@ -5,7 +5,4 @@
 // init_main is implemented in init.c
 void init_main(ipc_queue_t *q, unsigned self_id);
 
-void agent_main(void) {
-    // For now we don't pass a queue; init_main uses global queues.
-    init_main(NULL, thread_self());
-}
+void agent_main(void) { init_main(NOS, NOS_TID); for(;;) NOS->yield(); }
