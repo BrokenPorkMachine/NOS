@@ -14,7 +14,6 @@ extern int agent_loader_run_from_path(const char *path, int prio);
 
 // FS + alloc hooks you already have
 extern int fs_read_all(const char *path, void **out, size_t *out_sz);
-extern void kfree(void *p);
 
 // Linked-in agent entrypoints
 extern void regx_main(void);                         // src/agents/regx/regx.c
@@ -184,8 +183,10 @@ static void nosm_thread_wrapper(void){ nosm_entry(); thread_exit(); }
 static void nosfs_thread_wrapper(void){ nosfs_server(&fs_queue, thread_self()); thread_exit(); }
 
 // FS hook used by agent_loader_run_from_path()
-static int agentfs_read_all(const char *path, void **out, size_t *out_sz){ return fs_read_all(path, out, out_sz); }
-static void agentfs_free(void *p){ kfree(p); }
+static int agentfs_read_all(const char *path, void **out, size_t *out_sz){
+    return fs_read_all(path, out, out_sz);
+}
+static void agentfs_free(void *p){ (void)p; }
 
 void threads_init(void){
     ipc_init(&fs_queue); ipc_init(&pkg_queue); ipc_init(&upd_queue); ipc_init(&init_queue); ipc_init(&regx_queue); ipc_init(&nosm_queue);

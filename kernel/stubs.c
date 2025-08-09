@@ -18,15 +18,11 @@ void net_init(void) {}
 int block_read(uint32_t lba, uint8_t *buf, size_t count) { (void)lba; (void)buf; (void)count; return -1; }
 int block_write(uint32_t lba, const uint8_t *buf, size_t count) { (void)lba; (void)buf; (void)count; return -1; }
 
-extern void *kalloc(size_t sz);
-
 int fs_read_all(const char *path, void **out, size_t *out_sz) {
-    if (!path || !out || !out_sz) return -1;
+    if (!path || !out || !out_sz)
+        return -1;
     if (strcmp(path, "/agents/init.bin") == 0) {
-        void *buf = kalloc(init_bin_len);
-        if (!buf) return -1;
-        memcpy(buf, init_bin, init_bin_len);
-        *out = buf;
+        *out = (void *)init_bin;
         *out_sz = init_bin_len;
         return 0;
     }
