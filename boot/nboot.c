@@ -122,11 +122,25 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     memset(bi, 0, bi_pages * 0x1000);
     bi->magic = BOOTINFO_MAGIC_UEFI;
     bi->size = sizeof(*bi);
+    bi->uefi_system_table = SystemTable;
 
     // --- Load O2.bin as "kernel" ---
     void *o2_buf = NULL; UINTN o2_size = 0;
     status = load_file(SystemTable, root, O2_NAME, EfiLoaderCode, &o2_buf, &o2_size);
     if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "O2.bin not found\r\n"); return status; }
+
+    // Record kernel metadata for later diagnostics/debugging
+    bi->bootloader_name    = "nboot";
+    bi->kernel_entry       = o2_buf;
+    bi->kernel_load_base   = (uint64_t)(uintptr_t)o2_buf;
+    bi->kernel_load_size   = o2_size;
+    bi->kernel_segment_count = 1;
+    bi->kernel_segments[0].vaddr  = (uint64_t)(uintptr_t)o2_buf;
+    bi->kernel_segments[0].paddr  = (uint64_t)(uintptr_t)o2_buf;
+    bi->kernel_segments[0].filesz = o2_size;
+    bi->kernel_segments[0].memsz  = o2_size;
+    bi->kernel_segments[0].flags  = 0;
+    strcpy(bi->kernel_segments[0].name, "O2.bin");
 
     // --- Load n2.bin as module ---
     void *n2_buf = NULL; UINTN n2_size = 0;
