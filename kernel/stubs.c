@@ -4,14 +4,6 @@
 
 typedef struct ipc_queue ipc_queue_t;
 
-void serial_init(void) {}
-void serial_write(char c) { (void)c; }
-void serial_puts(const char *s) { (void)s; }
-void serial_puthex(uint32_t v) { (void)v; }
-void serial_vprintf(const char *fmt, va_list ap) { (void)fmt; (void)ap; }
-void serial_printf(const char *fmt, ...) { (void)fmt; }
-int  serial_read(void) { return -1; }
-
 void usb_init(void) {}
 void usb_kbd_init(void) {}
 void video_init(const void *fb) { (void)fb; }
