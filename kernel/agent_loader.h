@@ -8,7 +8,7 @@ extern "C" {
 
 #include <stddef.h>
 #include <stdint.h>
-#include <regx.h>     // for regx_manifest_t, regx_register(), n2_agent_t, etc.
+#include <regx.h>     // regx_manifest_t, regx_register(), n2_agent_t
 
 /*
  * Supported on-disk/in-memory formats
@@ -16,7 +16,7 @@ extern "C" {
 typedef enum {
     AGENT_FORMAT_ELF = 0,
     AGENT_FORMAT_MACHO,
-    AGENT_FORMAT_MACHO2,  // “O2-style” with embedded JSON manifest
+    AGENT_FORMAT_MACHO2,  // O2-style with embedded JSON manifest
     AGENT_FORMAT_FLAT,
     AGENT_FORMAT_NOSM,
     AGENT_FORMAT_UNKNOWN
@@ -34,10 +34,9 @@ agent_format_t detect_agent_format(const void *image, size_t size);
 
 /*
  * Loaders (return 0 on success, <0 on error)
- *
- *  - Auto: detect and load (default priority = 200)
+ *  - Auto: detect and load (default prio = 200)
  *  - Auto with explicit priority
- *  - Explicit: caller provides the format (default priority = 200)
+ *  - Explicit: caller provides the format (default prio = 200)
  *  - Explicit with priority
  */
 int load_agent_auto(const void *image, size_t size);
@@ -47,12 +46,8 @@ int load_agent(const void *image, size_t size, agent_format_t fmt);
 int load_agent_with_prio(const void *image, size_t size, agent_format_t fmt, int prio);
 
 /*
- * NOSM pathway (opaque blob handed to nosm_request_verify_and_load)
+ * NOSM: opaque blob handed to nosm_request_verify_and_load
  * Returns 0 on success, <0 on error.
- *
- * Note: This is a convenience wrapper that uses a default priority.
- *       The internal implementation may accept path/prio, but those are not
- *       exposed here (the per-format implementations are internal).
  */
 int load_agent_nosm(const void *image, size_t size);
 
@@ -74,11 +69,7 @@ void agent_loader_register_entry(const char *name, agent_entry_t fn);
 /*                   Kernel integration / extensibility                      */
 /* ------------------------------------------------------------------------- */
 
-/*
- * Reader/free hooks so the loader can fetch agent bytes from your FS layer.
- *  - reader(path, &buf, &sz) should malloc/alloc a buffer and fill it.
- *  - freer(buf) releases it.
- */
+/* Reader/free hooks so the loader can fetch agent bytes from your FS layer. */
 typedef int  (*agent_read_file_fn)(const char *path, void **out, size_t *out_sz);
 typedef void (*agent_free_fn)(void *ptr);
 
@@ -98,8 +89,7 @@ void agent_loader_set_gate(agent_gate_fn gate);
 
 /*
  * Convenience helper: read an agent from the filesystem and load it
- * (auto-detecting format). 'prio' is the initial thread priority for the
- * spawned agent thread (if applicable).
+ * (auto-detecting format). 'prio' is the initial thread priority.
  */
 int agent_loader_run_from_path(const char *path, int prio);
 
