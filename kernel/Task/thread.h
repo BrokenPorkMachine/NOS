@@ -87,6 +87,18 @@ int thread_is_alive(thread_t *t);
 void thread_kill(thread_t *t);
 
 /**
+ * Adjust the priority of a thread. Priority is clamped to the valid range
+ * and the scheduler is invoked if the change should cause pre-emption.
+ */
+void thread_set_priority(thread_t *t, int priority);
+
+/**
+ * Block until the supplied thread has exited. This simple join primitive
+ * is cooperative and repeatedly yields the processor while waiting.
+ */
+void thread_join(thread_t *t);
+
+/**
  * Yield CPU to next ready thread (cooperative scheduling).
  */
 void thread_yield(void);
