@@ -90,7 +90,7 @@ static inline void insl(uint16_t port, void *addr, size_t count) {
 
 /* Classic POST-port I/O delay (1 byte to port 0x80). Safe on PC chipset. */
 static inline void io_wait(void) {
-    __asm__ volatile ("outb %0, $0x80" :: "a"(0) : "memory");
+    __asm__ volatile ("outb %%al, $0x80" :: "a"(0) : "memory");
 }
 
 /* Compiler barrier around MMIO/PIO sequences (does not serialize the CPU). */
