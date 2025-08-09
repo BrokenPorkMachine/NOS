@@ -1,33 +1,50 @@
-#include "../nosfs/nosfs_server.h"
-#include "../../libc/libc.h"
-#include "../../../kernel/IPC/ipc.h"
-#include "../../../include/agent.h"
+// bin/nosfsctl.c  — simple “nosfs control” user tool using project libc only.
+#include "../user/libc/libc.h"   // your freestanding stdio/stdio-like API
+#include <stdint.h>
 #include <string.h>
-#include <stdio.h>
 
-/* Simple demonstration of interacting with the NOSFS agent via IPC.  Real
- * implementations would discover the filesystem agent ID via syscalls or the
- * agent registry. */
-int main(void) {
-    ipc_queue_t q;
-    ipc_message_t msg = {0}, reply = {0};
+static void usage(const char *argv0) {
+    printf("usage: %s <list|cat> [path]\n", argv0);
+}
 
-    ipc_queue_init(&q); // stubbed helper from libc
+int main(int argc, char **argv) {
+    if (argc < 2) { usage(argv[0]); return 1; }
 
-    /* Discover the filesystem agent dynamically and request a directory
-     * listing. */
-    const n2_agent_t *fs = n2_agent_find_capability("filesystem");
-    if (!fs)
-        return 1; /* agent not found */
-    msg.type = NOSFS_MSG_LIST;
-    ipc_send(&q, fs->id, &msg);      // send using agent registry ID
-    ipc_receive_blocking(&q, fs->id, &reply);
+    if (!strcmp(argv[1], "list")) {
+        const char *path = (argc >= 3) ? argv[2] : "/";
+        // very basic poor-man’s “ls”: read a text index file exported by NOSFS
+        // (adjust to whatever your NOSFS exposes; this is just a demo).
+        char idxpath[256];
+        snprintf(idxpath, sizeof(idxpath), "%s/.index", path);
 
-    if (reply.arg1 > 0) {
-        size_t count = reply.arg1;
-        for (size_t i = 0; i < count; ++i) {
-            printf("%s\n", &reply.data[i * NOSFS_NAME_LEN]);
+        FILE *f = fopen(idxpath, "r");
+        if (!f) { printf("nosfsctl: cannot open %s\n", idxpath); return 1; }
+
+        char line[256];
+        while (fgets(line, sizeof(line), f)) {
+            // strip newline
+            size_t n = strlen(line);
+            if (n && (line[n-1] == '\n' || line[n-1] == '\r')) line[n-1] = 0;
+            printf("%s\n", line);
         }
+        fclose(f);
+        return 0;
     }
-    return 0;
+
+    if (!strcmp(argv[1], "cat")) {
+        if (argc < 3) { usage(argv[0]); return 1; }
+        const char *path = argv[2];
+        FILE *f = fopen(path, "r");
+        if (!f) { printf("nosfsctl: cannot open %s\n", path); return 1; }
+
+        char buf[1024];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+            fwrite(buf, 1, n, stdout);
+        fclose(f);
+        return 0;
+    }
+
+    usage(argv[0]);
+    return 1;
 }
