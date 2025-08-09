@@ -4,7 +4,7 @@
 #include "Task/thread.h"
 #include "../../user/libc/libc.h"
 #include <stdint.h>
-#include <nosm.h>
+#include "../include/nosm.h"
 
 extern int kprintf(const char *fmt, ...);
 
