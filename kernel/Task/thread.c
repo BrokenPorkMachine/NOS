@@ -19,6 +19,7 @@ extern int fs_read_all(const char *path, void **out, size_t *out_sz);
 extern void regx_main(void);                         // src/agents/regx/regx.c
 extern void nosm_entry(void);                        // user/agents/nosm/nosm.c
 extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.c
+extern void login_server(ipc_queue_t*, uint32_t);    // stubbed in stubs.c
 
 #ifndef STACK_SIZE
 #define STACK_SIZE 8192
@@ -181,6 +182,7 @@ void thread_yield(void){ schedule(); }
 static void regx_thread_wrapper(void){ regx_main(); thread_exit(); }
 static void nosm_thread_wrapper(void){ nosm_entry(); thread_exit(); }
 static void nosfs_thread_wrapper(void){ nosfs_server(&fs_queue, thread_self()); thread_exit(); }
+static void login_thread_wrapper(void){ login_server(&fs_queue, thread_self()); thread_exit(); }
 
 // FS hook used by agent_loader_run_from_path()
 static int agentfs_read_all(const char *path, void **out, size_t *out_sz){
@@ -198,10 +200,12 @@ void threads_init(void){
     // Bring core helpers alongside
     thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, 210);
     thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 200);
+    thread_t *t_login = thread_create_with_priority(login_thread_wrapper, 190);
 
     if(!t_regx){ kprintf("[boot] failed to spawn regx\n"); for(;;)__asm__ volatile("hlt"); }
     if(!t_nosm)  kprintf("[boot] failed to spawn nosm\n");
     if(!t_nosfs) kprintf("[boot] failed to spawn nosfs\n");
+    if(!t_login) kprintf("[boot] failed to spawn login\n");
 
     ipc_grant(&regx_queue, t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
     if (t_nosfs){
@@ -211,6 +215,9 @@ void threads_init(void){
     if (t_nosm){
         ipc_grant(&nosm_queue, t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);
         ipc_grant(&regx_queue, t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    }
+    if (t_login){
+        ipc_grant(&fs_queue, t_login->id, IPC_CAP_SEND | IPC_CAP_RECV);
     }
 
     if (timer_ready) thread_yield();

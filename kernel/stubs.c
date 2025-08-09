@@ -4,6 +4,12 @@
 #include "../user/libc/libc.h"
 #include "init_bin.h"
 
+/* Basic kernel logging helper */
+extern int kprintf(const char *fmt, ...);
+
+/* Yield stub so busy loops don't hog the CPU */
+extern void thread_yield(void);
+
 typedef struct ipc_queue ipc_queue_t;
 
 void usb_init(void) {}
@@ -14,6 +20,9 @@ void ps2_init(void) {}
 void block_init(void) {}
 int  sata_init(void) { return 0; }
 void net_init(void) {}
+
+/* Minimal TTY hook so login/nsh can print messages */
+void tty_write(const char *s) { kprintf("%s", s); }
 
 int block_read(uint32_t lba, uint8_t *buf, size_t count) { (void)lba; (void)buf; (void)count; return -1; }
 int block_write(uint32_t lba, const uint8_t *buf, size_t count) { (void)lba; (void)buf; (void)count; return -1; }
@@ -26,10 +35,27 @@ int fs_read_all(const char *path, void **out, size_t *out_sz) {
         *out_sz = init_bin_len;
         return 0;
     }
+    /* No real filesystem; return not found */
     *out = NULL;
     *out_sz = 0;
     return -1;
 }
 
-void nosfs_server(ipc_queue_t *q, uint32_t self_id) { (void)q; (void)self_id; }
-void nosm_entry(void) {}
+/* Stubbed core agents so boot shows progress */
+void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
+    (void)q; (void)self_id;
+    kprintf("[nosfs] stub filesystem agent online\n");
+    for (;;) thread_yield();
+}
+
+void nosm_entry(void) {
+    kprintf("[nosm] stub module loader online\n");
+    for (;;) thread_yield();
+}
+
+void login_server(ipc_queue_t *q, uint32_t self_id) {
+    (void)q; (void)self_id;
+    kprintf("[login] server starting\n");
+    kprintf("[login] launching nsh...\n");
+    for (;;) thread_yield();
+}
