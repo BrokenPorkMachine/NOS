@@ -1,8 +1,17 @@
 // user/agents/init/agent_entry.c
-#include "../../../kernel/Task/thread.h"
-#include "../../../kernel/IPC/ipc.h"
+#include "../../rt/agent_abi.h"   // provides AgentAPI, NOS, NOS_TID
 
-// init_main is implemented in init.c
-void init_main(ipc_queue_t *q, unsigned self_id);
+// init.c provides this
+extern void init_main(const AgentAPI *api, uint32_t self_tid);
 
-void agent_main(void) { init_main(NOS, NOS_TID); for(;;) NOS->yield(); }
+__attribute__((noreturn))
+void agent_main(void) {
+    // Hand-off to the real entry (API + our TID are provided by rt0_agent)
+    init_main(NOS, NOS_TID);
+
+    // If init_main ever returned, just yield forever
+    for (;;) {
+        if (NOS && NOS->yield) NOS->yield();
+        else __asm__ __volatile__("pause");
+    }
+}
