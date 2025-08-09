@@ -12,22 +12,13 @@ O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 all: libc kernel boot disk.img
 
 # ===== Standalone Agents on Disk =====
-# Build all user/agents/* EXCEPT the ones linked into the kernel.
 AGENT_DIRS_ALL := $(filter-out user/agents/login,$(wildcard user/agents/*))
-AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs user/agents/audio
+AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs user/agents/audio user/agents/cp
 AGENT_DIRS := $(filter-out $(AGENT_DIRS_EXCL),$(AGENT_DIRS_ALL))
-
-# Keep only agent dirs that actually have at least one .c file
 AGENT_DIRS_NONEMPTY := $(foreach d,$(AGENT_DIRS),$(if $(wildcard $(d)/*.c),$(d),))
-
-# Names (dir basenames) for non-empty agents
 AGENT_NAMES := $(notdir $(AGENT_DIRS_NONEMPTY))
-
-# Convenience aggregates
 AGENT_ELFS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
 AGENT_BINS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).bin)
-
-# Generic compile rule for any agent .c -> .o (objects live in source dirs)
 AGENT_C_SRCS := $(foreach d,$(AGENT_DIRS_NONEMPTY),$(wildcard $(d)/*.c))
 AGENT_OBJS   := $(patsubst %.c,%.o,$(AGENT_C_SRCS))
 
@@ -35,11 +26,10 @@ $(AGENT_OBJS): %.o : %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
 
-# Per-agent link rules with concrete deps (avoids "no input files")
 define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
-out/agents/$(1).elf: $$(AGENT_$(1)_OBJS)
+out/agents/$(1).elf: $$(AGENT_$(1)_OBJS) user/libc/libc.o
 	@mkdir -p $$(@D)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
 
@@ -49,18 +39,48 @@ out/agents/$(1).bin: out/agents/$(1).elf
 		--remove-section=.note.gnu.property \
 		$$< $$@
 endef
-
 $(foreach n,$(AGENT_NAMES),$(eval $(call MAKE_AGENT_RULES,$(n))))
 
-# Convenience
 agents: $(AGENT_ELFS) $(AGENT_BINS)
+
+# ===== /bin user programs (single C file each under ./bin) =====
+# Provide a tiny crt0 so programs have a proper _start.
+user/rt/rt0_user.o: user/rt/rt0_user.S
+	@mkdir -p $(dir $@)
+	$(NASM) -f elf64 $< -o $@
+
+BIN_SRCS  := $(wildcard bin/*.c)      # e.g., bin/cp.c
+BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
+BIN_ELFS  := $(foreach n,$(BIN_NAMES),out/bin/$(n).elf)
+BIN_BINS  := $(foreach n,$(BIN_NAMES),out/bin/$(n).bin)
+BIN_OBJS  := $(patsubst %.c,%.o,$(BIN_SRCS))
+
+$(BIN_OBJS): %.o : %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
+
+# Link each tool with crt0 + libc
+define MAKE_BIN_RULES
+out/bin/$(1).elf: user/rt/rt0_user.o bin/$(1).o user/libc/libc.o
+	@mkdir -p $$(@D)
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
+
+out/bin/$(1).bin: out/bin/$(1).elf
+	$(OBJCOPY) -O binary \
+		--remove-section=.note.gnu.build-id \
+		--remove-section=.note.gnu.property \
+		$$< $$@
+endef
+$(foreach n,$(BIN_NAMES),$(eval $(call MAKE_BIN_RULES,$(n))))
+
+bins: user/rt/rt0_user.o $(BIN_ELFS) $(BIN_BINS)
 
 # ===== libc =====
 libc:
 	$(CC) $(CFLAGS) -c user/libc/libc.c -o user/libc/libc.o
 
 # ===== kernel =====
-kernel: libc agents
+kernel: libc agents bins
 	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
 	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch.o
 	$(CC) $(O2_CFLAGS) -c kernel/O2.c -o kernel/O2.o
@@ -72,7 +92,7 @@ kernel: libc agents
 	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
 
-	# Link the security gate + core service agents into the kernel:
+	# Linked-in security gate + core agents:
 	$(CC) $(CFLAGS) -c src/agents/regx/regx.c   -o src/agents/regx/regx.o
 	$(CC) $(CFLAGS) -c user/agents/nosm/nosm.c   -o user/agents/nosm/nosm.o
 	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs.c -o user/agents/nosfs/nosfs.o
@@ -128,7 +148,7 @@ kernel: libc agents
 boot:
 	make -C boot
 
-disk.img: boot kernel agents
+disk.img: boot kernel agents bins
 	dd if=/dev/zero of=disk.img bs=1M count=64
 	mkfs.vfat -F 32 disk.img
 	mmd -i disk.img ::/EFI
@@ -138,6 +158,8 @@ disk.img: boot kernel agents
 	mcopy -i disk.img n2.bin ::/
 	mmd -i disk.img ::/agents || true
 	$(foreach b,$(AGENT_BINS), mcopy -i disk.img $(b) ::/agents/$(notdir $(b));)
+	mmd -i disk.img ::/bin || true
+	$(foreach b,$(BIN_BINS), mcopy -i disk.img $(b) ::/bin/$(notdir $(b));)
 
 # ===== utility =====
 clean:
@@ -151,7 +173,7 @@ clean:
             kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
-            $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) \
+            $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
             src/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o
 	rm -rf out
 	make -C boot clean
@@ -176,4 +198,4 @@ runmac: disk.img
 	-device i8042 \
 	-serial stdio -display cocoa
 
-.PHONY: all libc kernel boot agents clean run runmac
+.PHONY: all libc kernel boot agents bins clean run runmac
