@@ -4,6 +4,8 @@
 
 // Kernel console
 extern int kprintf(const char *fmt, ...);
+// Cooperative scheduler hook
+extern void thread_yield(void);
 
 // Loader APIs (exported by kernel)
 typedef int (*agent_gate_fn)(const char *path,
@@ -80,6 +82,6 @@ void regx_main(void){
         kprintf("[regx] failed to launch /agents/init.bin\n");
     }
 
-    // Idle loop; regx can also handle IPC to update policies at runtime
-    for(;;){ __asm__ volatile("pause"); }
+    // Idle loop; yield so other agents can run
+    for(;;) thread_yield();
 }
