@@ -2,6 +2,7 @@
 #include "segments.h"
 #include <stdint.h>
 #include <string.h>
+#include "../../drivers/IO/serial.h"
 
 /* ----- GDTR ----- */
 struct gdt_ptr {
@@ -36,6 +37,16 @@ static struct gdt_ptr gp;
 
 extern void gdt_flush(const void *gdtr);
 extern void gdt_flush_with_tr(const void *gdtr, uint16_t tss_sel); /* provided in asm I shared */
+
+static inline uint16_t rdcs(void) {
+    uint16_t s;
+    __asm__ volatile ("mov %%cs,%0" : "=r"(s));
+    return s;
+}
+
+static void arch_post_gdt_probe(void) {
+    serial_printf("[gdt] CS=0x%04x\n", rdcs());
+}
 
 /* ------------------------------------------------------------------ */
 /* 8-byte code/data descriptor writer                                  */
@@ -123,6 +134,8 @@ void gdt_install(void)
 
     /* Far reload CS + data segments */
     gdt_flush(&gp);
+
+    arch_post_gdt_probe();
 }
 
 /* Optional: install TSS and load TR.
@@ -143,6 +156,7 @@ void gdt_install_with_tss(void *tss_base, uint32_t tss_limit)
 
     /* Load GDT and TR in one go */
     gdt_flush_with_tr(&gp, GDT_SEL_TSS);
+    arch_post_gdt_probe();
 #else
     (void)tss_base; (void)tss_limit;
     /* Fall back to legacy install if no TSS selector is defined */

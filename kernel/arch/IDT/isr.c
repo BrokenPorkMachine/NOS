@@ -153,6 +153,18 @@ void isr_page_fault_handler(struct isr_context *ctx) {
     for (;;) __asm__ volatile ("hlt");
 }
 
+void isr_ud_handler(struct isr_context *ctx) {
+    serial_printf("\n[FAULT] #UD at RIP=%016lx CS=%04lx RFLAGS=%016lx\n",
+                  ctx->rip, ctx->cs, ctx->rflags);
+
+    const uint8_t *p = (const uint8_t *)ctx->rip;
+    serial_printf("Bytes @RIP: ");
+    for (int i = 0; i < 16; ++i) serial_printf("%02x ", p[i]);
+    serial_printf("\n");
+
+    for (;;) __asm__ volatile("hlt");
+}
+
 void isr_ipi_handler(struct isr_context *ctx) {
     /* IPI is an IRQ -> always EOI */
     apic_eoi_if_needed(ctx->int_no);

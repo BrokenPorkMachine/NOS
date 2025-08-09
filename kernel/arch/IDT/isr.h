@@ -16,6 +16,7 @@ extern "C" {
 /* ----- Fatal / generic ----- */
 void isr_default_handler(struct isr_context *ctx) __attribute__((noreturn));
 void isr_gpf_handler(struct isr_context *ctx) __attribute__((noreturn));
+void isr_ud_handler(struct isr_context *ctx);
 
 /* ----- Exceptions / syscalls / IRQs ----- */
 void isr_page_fault_handler(struct isr_context *ctx);   /* may return if handled */
