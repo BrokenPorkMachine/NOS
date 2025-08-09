@@ -9,3 +9,11 @@ int printf(const char *fmt, ...) {
     return 0;
 }
 
+int kprintf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    serial_vprintf(fmt, ap);
+    va_end(ap);
+    return 0;
+}
+
