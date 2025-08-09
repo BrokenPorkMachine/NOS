@@ -1,26 +1,78 @@
-; GDT assembly routines
-; Flushes new GDT and reloads segment registers
-; rdi = pointer to gdt_ptr structure
+; GDT assembly routines (x86_64, NASM/YASM)
+; rdi = pointer to gdt_ptr { uint16_t limit; uint64_t base; }
+; Optional: gdt_flush_with_tr also loads TR from 'si' (16-bit selector)
 
-%include "segments.inc"            ; :contentReference[oaicite:14]{index=14}
+%include "segments.inc"
 
 global gdt_flush
+global gdt_flush_with_tr
+
 section .text
 
+; ----------------------------------------------------------------------
+; void gdt_flush(const struct gdtr *p);
+; Loads a new GDT, reloads data segments and CS via far return.
+; Clobbers: rax, rdx  (preserved on exit)
+; ----------------------------------------------------------------------
 gdt_flush:
+    push rax
+    push rdx
+
     lgdt [rdi]
+
+    ; Reload data segments (long mode: DS/ES ignored for addressing but keep sane)
     mov ax, GDT_SEL_KERNEL_DATA
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
     mov ss, ax
-    ; Far jump to reload CS
-    push GDT_SEL_KERNEL_CODE
-    lea rax, [rel .flush]
+
+    ; Far return to reload CS
+    lea rax, [rel .after_flush_cs]
+    push qword GDT_SEL_KERNEL_CODE
     push rax
-    retfq
-.flush:
+    lretq
+
+.after_flush_cs:
+    pop rdx
+    pop rax
+    ret
+
+; ----------------------------------------------------------------------
+; void gdt_flush_with_tr(const struct gdtr *p, uint16_t tss_sel);
+; Loads GDT, reloads segments, loads TR with the provided TSS selector,
+; then reloads CS via far return.
+; Clobbers: rax, rdx, rcx  (preserved on exit)
+; ----------------------------------------------------------------------
+gdt_flush_with_tr:
+    push rax
+    push rdx
+    push rcx
+
+    lgdt [rdi]
+
+    mov ax, GDT_SEL_KERNEL_DATA
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    ; Load task register (TSS selector in SI)
+    mov ax, si
+    ltr ax
+
+    ; Far return to reload CS
+    lea rax, [rel .after_flush_cs_tr]
+    push qword GDT_SEL_KERNEL_CODE
+    push rax
+    lretq
+
+.after_flush_cs_tr:
+    pop rcx
+    pop rdx
+    pop rax
     ret
 
 section .note.GNU-stack noalloc nobits align=1
