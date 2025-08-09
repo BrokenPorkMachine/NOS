@@ -8,7 +8,7 @@
 
 #pragma once
 #include <stdint.h>
-#include "bootinfo.h"
+#include "../../boot/include/bootinfo.h"
 
 #ifdef __cplusplus
 extern "C" {

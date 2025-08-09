@@ -1,8 +1,13 @@
+// Kernel copy-on-write interface.
 #pragma once
 #include <stdint.h>
 
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 4096
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /**
@@ -56,3 +61,7 @@ int cow_free_frame(uint64_t phys);
  * Uses the advanced paging subsystem to allocate or copy pages as needed.
  */
 void paging_handle_fault(uint64_t err, uint64_t addr, int cpu_id);
+
+#ifdef __cplusplus
+}
+#endif
