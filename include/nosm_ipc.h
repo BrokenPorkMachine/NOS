@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "IPC/ipc.h"
+#include "../kernel/IPC/ipc.h"
 
 /* Message types (req->type) */
 enum {
