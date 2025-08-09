@@ -7,7 +7,7 @@
 #include "../update/update.h"
 #include "../../include/nosfs.h"
 #include "../nosfs/nosfs_server.h"
-#include "../../../kernel/drivers/IO/tty.h"
+#include "../../../nosm/drivers/IO/tty.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>

@@ -1,7 +1,7 @@
 #include "demo2.h"
 #include "window.h"
 #include "../../libc/libc.h"
-#include "../../../kernel/drivers/IO/serial.h"
+#include "../../../nosm/drivers/IO/serial.h"
 
 void window_demo2(ipc_queue_t *q, uint32_t self_id, uint32_t server) {
     int win = window_create(q, server, 160, 20, 120, 80);

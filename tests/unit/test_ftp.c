@@ -4,7 +4,7 @@
 #include "../../user/agents/ftp/ftp.h"
 #include "../../kernel/IPC/ipc.h"
 #include "../../user/libc/libc.h"
-#include "../../kernel/drivers/Net/netstack.h"
+#include "../../nosm/drivers/Net/netstack.h"
 
 static const char *input = "QUIT\r\n";
 static size_t in_pos;

@@ -1,45 +1,31 @@
-#ifndef NOS_NOSM_H
-#define NOS_NOSM_H
-
+#pragma once
 #include <stdint.h>
-#include <stddef.h>
+#include "nosm_ipc.h"
 
-#define NOSM_MAGIC 0x4D534F4EU /* 'NOSM' in little endian */
+typedef struct nosm_env {
+    uint32_t mod_id;
+    uint64_t caps;     /* granted by nosm agent */
+} nosm_env_t;
 
-/* Segment permission flags */
-#define NOSM_FLAG_R 0x1
-#define NOSM_FLAG_W 0x2
-#define NOSM_FLAG_X 0x4
-
-/* Module header present at the beginning of every .nosm file */
+/* Module entry ABI inside a .nmod */
 typedef struct {
-    uint32_t magic;          /* must be NOSM_MAGIC */
-    uint16_t version;        /* format version */
-    uint16_t num_segments;   /* number of segment descriptors */
-    uint32_t entry;          /* entrypoint relative to load base */
-    uint32_t manifest_offset;/* offset to embedded manifest */
-    uint32_t manifest_size;  /* size of manifest in bytes */
-    /* Future expansion: symbol table offset/size, signature, etc. */
-} __attribute__((packed)) nosm_header_t;
+    /* Required */
+    int  (*init)(const nosm_env_t *env);  /* return 0=OK */
+    void (*fini)(void);
 
-/* Segment descriptor describing a loadable region */
-typedef struct {
-    uint64_t vaddr;   /* virtual address to map/copy to */
-    uint64_t size;    /* size of segment in bytes */
-    uint64_t offset;  /* offset in file where segment data resides */
-    uint8_t flags;    /* bit 0 = R, bit1 = W, bit2 = X */
-    uint8_t reserved[7]; /* reserved for alignment */
-} __attribute__((packed)) nosm_segment_t;
+    /* Optional control hooks */
+    void (*suspend)(void);
+    void (*resume)(void);
+} nosm_module_ops_t;
 
-/* Minimal manifest structure used by the N2 kernel to register agents. */
-typedef struct {
-    char name[32];
-    char version[16];
-} __attribute__((packed)) nosm_manifest_t;
+/* A compiled module must export this symbol name: */
+#define NOSM_MODULE_ENTRY_SYMBOL "nosm_module_ops"
 
-/* Load a NOSM image already present in memory.
- * Returns pointer to module entrypoint on success or NULL on error.
- */
-void *nosm_load(const void *image, size_t size);
+/* Kernel API */
+int  nosm_request_verify_and_load(const void *blob, uint32_t len, uint32_t *out_mod_id);
+int  nosm_unload(uint32_t mod_id);
+int  nosm_cap_check(uint32_t mod_id, uint64_t need_caps);
 
-#endif /* NOS_NOSM_H */
+/* For nosm agent to revoke at runtime via IPC */
+void nosm_revoke(uint32_t mod_id);
+

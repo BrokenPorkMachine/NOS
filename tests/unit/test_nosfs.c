@@ -2,7 +2,7 @@
 #include <string.h>
 #include "../../include/nosfs.h"
 #include "../../user/libc/libc.h"
-#include "../../kernel/drivers/IO/block.h"
+#include "../../nosm/drivers/IO/block.h"
 
 int main(void) {
     block_init();
