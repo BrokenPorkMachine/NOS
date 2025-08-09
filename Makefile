@@ -1,6 +1,8 @@
 CROSS_COMPILE ?= x86_64-linux-gnu-
 CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
+AS := $(CROSS_COMPILE)as
+AR := $(CROSS_COMPILE)ar
 OBJCOPY := $(CROSS_COMPILE)objcopy
 NASM := nasm
 
