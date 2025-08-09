@@ -9,16 +9,6 @@ struct gdt_ptr {
     uint64_t base;
 } __attribute__((packed));
 
-/* Your 8-byte legacy descriptor (code/data) */
-struct gdt_entry {
-    uint16_t limit_low;
-    uint16_t base_low;
-    uint8_t  base_middle;
-    uint8_t  access;       /* type | S | DPL | P */
-    uint8_t  granularity;  /* limit[19:16] | AVL | L | D/B | G */
-    uint8_t  base_high;
-} __attribute__((packed));
-
 /* 16-byte TSS/ system descriptor (only if you use TSS) */
 struct gdt_tss_desc {
     uint16_t limit0;
@@ -30,25 +20,6 @@ struct gdt_tss_desc {
     uint32_t base3;
     uint32_t reserved;
 } __attribute__((packed));
-
-/* Access bits */
-#define ACC_P        0x80
-#define ACC_DPL(n)   (((n) & 0x3) << 5)
-#define ACC_S_CODE   0x10     /* descriptor type: 1 for code/data */
-#define ACC_TYPE_C   0x08     /* executable (code) */
-#define ACC_TYPE_RW  0x02     /* readable (code) / writable (data) */
-#define ACC_CODE64   (ACC_P | ACC_DPL(0) | ACC_S_CODE | ACC_TYPE_C | ACC_TYPE_RW)  /* 0x9A */
-#define ACC_DATA     (ACC_P | ACC_DPL(0) | ACC_S_CODE | ACC_TYPE_RW)               /* 0x92 */
-
-/* Gate/system types for TSS */
-#define ACC_TSS_AVAIL  (ACC_P | /*DPL0*/ 0 | /*S=0*/ 0 | 0x09) /* 64-bit available TSS */
-#define ACC_TSS_BUSY   (ACC_P | 0x0B)
-
-/* Granularity bits */
-#define GRAN_G       0x80     /* 4KiB granularity */
-#define GRAN_DB      0x40     /* D/B: must be 0 for 64-bit code; ignored for data in long mode */
-#define GRAN_L       0x20     /* 64-bit code segment */
-#define GRAN_AVL     0x10     /* available for software */
 
 /* Helpers */
 #define SEL2IDX(sel) ((unsigned)((sel) >> 3))
@@ -120,26 +91,26 @@ static void gdt_fill_core_segments(void)
     gdt_set_gate(0, 0, 0, 0, 0);
 
     /* Kernel ring 0: 64-bit code (L=1, D=0), data (G=1, DB=0, L=0) */
-    gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_CODE), 0, 0xFFFFF, ACC_CODE64, GRAN_G | GRAN_L);
-    gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_DATA), 0, 0xFFFFF, ACC_DATA,    GRAN_G /*| 0*/);
+    gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_CODE), 0, 0xFFFFF, ACC_CODE64_DPL0, GRAN_CODE64);
+    gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_DATA), 0, 0xFFFFF, ACC_DATA_DPL0,  GRAN_DATA);
 
     /* Optional ring1/2 (if you defined them in segments.h) */
 #ifdef GDT_SEL_RING1_CODE
-    gdt_set_gate(SEL2IDX(GDT_SEL_RING1_CODE),  0, 0xFFFFF, (ACC_CODE64 | ACC_DPL(1)), GRAN_G | GRAN_L);
+    gdt_set_gate(SEL2IDX(GDT_SEL_RING1_CODE),  0, 0xFFFFF, (ACC_CODE64_DPL0 | ACC_DPL(1)), GRAN_CODE64);
 #endif
 #ifdef GDT_SEL_RING1_DATA
-    gdt_set_gate(SEL2IDX(GDT_SEL_RING1_DATA),  0, 0xFFFFF, (ACC_DATA   | ACC_DPL(1)), GRAN_G);
+    gdt_set_gate(SEL2IDX(GDT_SEL_RING1_DATA),  0, 0xFFFFF, (ACC_DATA_DPL0   | ACC_DPL(1)), GRAN_DATA);
 #endif
 #ifdef GDT_SEL_RING2_CODE
-    gdt_set_gate(SEL2IDX(GDT_SEL_RING2_CODE),  0, 0xFFFFF, (ACC_CODE64 | ACC_DPL(2)), GRAN_G | GRAN_L);
+    gdt_set_gate(SEL2IDX(GDT_SEL_RING2_CODE),  0, 0xFFFFF, (ACC_CODE64_DPL0 | ACC_DPL(2)), GRAN_CODE64);
 #endif
 #ifdef GDT_SEL_RING2_DATA
-    gdt_set_gate(SEL2IDX(GDT_SEL_RING2_DATA),  0, 0xFFFFF, (ACC_DATA   | ACC_DPL(2)), GRAN_G);
+    gdt_set_gate(SEL2IDX(GDT_SEL_RING2_DATA),  0, 0xFFFFF, (ACC_DATA_DPL0   | ACC_DPL(2)), GRAN_DATA);
 #endif
 
     /* User ring 3 */
-    gdt_set_gate(SEL2IDX(GDT_SEL_USER_CODE),   0, 0xFFFFF, (ACC_CODE64 | ACC_DPL(3)), GRAN_G | GRAN_L);
-    gdt_set_gate(SEL2IDX(GDT_SEL_USER_DATA),   0, 0xFFFFF, (ACC_DATA   | ACC_DPL(3)), GRAN_G);
+    gdt_set_gate(SEL2IDX(GDT_SEL_USER_CODE),   0, 0xFFFFF, ACC_CODE64_DPL3, GRAN_CODE64);
+    gdt_set_gate(SEL2IDX(GDT_SEL_USER_DATA),   0, 0xFFFFF, ACC_DATA_DPL3,   GRAN_DATA);
 }
 
 void gdt_install(void)

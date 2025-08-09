@@ -4,7 +4,7 @@ CFLAGS=-Wall -Wextra -std=gnu11 \
     -I../user/agents/nosfs -I../user/agents/login -I../user/agents/ftp \
     -I../user/libc -I../kernel/drivers/IO -I../kernel/drivers/Audio \
     -I../kernel/drivers/Net -I../kernel/arch/GDT
-LIBC_SRC=../user/libc/libc.c thread_stub.c
+LIBC_SRC=../user/libc/libc.c thread_stub.c smp_stub.c gdt_stub.c
 UNIT_TESTS=test_ipc test_pmm test_login test_ftp test_login_keyboard test_net test_gdt test_nosm test_nosfs test_regx
 
 all: $(UNIT_TESTS)
@@ -29,7 +29,7 @@ test_ftp: unit/test_ftp.c ../user/agents/ftp/ftp.c ../kernel/IPC/ipc.c $(LIBC_SR
 test_net: unit/test_net.c ../kernel/drivers/Net/netstack.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
-test_gdt: unit/test_gdt.c ../kernel/arch/GDT/gdt.c
+test_gdt: unit/test_gdt.c ../kernel/arch/GDT/gdt.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_nosfs: unit/test_nosfs.c ../user/agents/nosfs/nosfs.c \
