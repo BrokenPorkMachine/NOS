@@ -20,5 +20,3 @@ int fs_read_all(const char *path, void **out, size_t *out_sz) { (void)path; if(o
 
 void nosfs_server(ipc_queue_t *q, uint32_t self_id) { (void)q; (void)self_id; }
 void nosm_entry(void) {}
-
-int kprintf(const char *fmt, ...) { (void)fmt; return 0; }
