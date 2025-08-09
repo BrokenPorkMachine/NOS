@@ -34,17 +34,26 @@ agent_format_t detect_agent_format(const void *image, size_t size);
 
 /*
  * Loaders (return 0 on success, <0 on error)
- *  - Auto: detect and load
- *  - Explicit: caller provides the format to skip detection
+ *
+ *  - Auto: detect and load (default priority = 200)
+ *  - Auto with explicit priority
+ *  - Explicit: caller provides the format (default priority = 200)
+ *  - Explicit with priority
  */
 int load_agent_auto(const void *image, size_t size);
-int load_agent(const void *image, size_t size, agent_format_t fmt);
+int load_agent_auto_with_prio(const void *image, size_t size, int prio);
 
-/* Format-specific loaders */
-int load_agent_elf(const void *image, size_t size);
-int load_agent_macho(const void *image, size_t size);
-int load_agent_macho2(const void *image, size_t size);
-int load_agent_flat(const void *image, size_t size);
+int load_agent(const void *image, size_t size, agent_format_t fmt);
+int load_agent_with_prio(const void *image, size_t size, agent_format_t fmt, int prio);
+
+/*
+ * NOSM pathway (opaque blob handed to nosm_request_verify_and_load)
+ * Returns 0 on success, <0 on error.
+ *
+ * Note: This is a convenience wrapper that uses a default priority.
+ *       The internal implementation may accept path/prio, but those are not
+ *       exposed here (the per-format implementations are internal).
+ */
 int load_agent_nosm(const void *image, size_t size);
 
 /*
