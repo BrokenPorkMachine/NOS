@@ -454,6 +454,15 @@ static void init_thread_func(void) {
     static uint32_t init_tid = 0;
     init_tid = thread_self();
     thread_create_with_priority(login_thread_func, 180);
+    /*
+     * The init thread originally ran at a higher priority than the login
+     * server it launches.  Because the scheduler always selects the highest
+     * priority READY thread, the init thread would immediately pre-empt the
+     * newly created login thread on every yield, effectively starving it and
+     * preventing the login prompt from ever appearing.  Drop our priority to
+     * the minimum so other services, like the login server, can run.
+     */
+    thread_set_priority(thread_current(), MIN_PRIORITY);
     ipc_message_t msg;
     while (1) {
         if (ipc_receive_blocking(&init_queue, init_tid, &msg) == 0) {
