@@ -1,29 +1,91 @@
-// user/agents/regx/regx.c
-#include "../../libc/libc.h"
+// src/agents/regx/regx.c
+#include "../../user/libc/libc.h"   // adjust include if your libc path differs when linked into kernel
 #include <stdint.h>
-#include "../../libc/libc.h"
-#include "../../../include/ipc_types.h"   // adjust include path to your IPC types if needed
 
-// Console (kernel printf is linked; calling through is fine if exported)
+// Kernel console
 extern int kprintf(const char *fmt, ...);
 
-// Loader API (provided by kernel)
-extern int agent_loader_run_from_path(const char *path, int prio);
+// Loader APIs (exported by kernel)
+typedef int (*agent_gate_fn)(const char *path,
+                             const char *name,
+                             const char *version,
+                             const char *capabilities,
+                             const char *entry);
 
-// Optional: register self with kernel (depends on your agent.h, regx APIs)
-extern void regx_ready_signal(void);    // if you have a signal to mark regx up; else omit
+extern void agent_loader_set_gate(agent_gate_fn gate);
+extern int  agent_loader_run_from_path(const char *path, int prio);
 
-void regx_main(void) {
-    kprintf("[regx] up: launching init as standalone agent\n");
+// Simple helpers
+static int string_contains(const char *hay, const char *needle){
+    if(!hay||!needle) return 0;
+    const char *p = hay; size_t nlen = strlen(needle);
+    while (*p){
+        if (strncmp(p, needle, nlen)==0) return 1;
+        ++p;
+    }
+    return 0;
+}
 
-    // Start init; it will bring up the rest of the agents from /agents
+// ---- Security policy ----
+// 1) Only allow files under /agents/ with .bin suffix
+// 2) Require a non-empty name + entry
+// 3) Capabilities must be a subset of a small allowlist
+static int regx_policy_gate(const char *path,
+                            const char *name,
+                            const char *version,
+                            const char *capabilities,
+                            const char *entry)
+{
+    (void)version;
+
+    if (!path || strncmp(path, "/agents/", 8) != 0) {
+        kprintf("[regx] deny: path %s outside /agents/\n", path?path:"(null)");
+        return 0;
+    }
+    size_t L = strlen(path);
+    if (L < 5 || strcmp(path + (L - 4), ".bin") != 0) {
+        kprintf("[regx] deny: path %s not .bin\n", path);
+        return 0;
+    }
+    if (!name || !name[0] || !entry || !entry[0]) {
+        kprintf("[regx] deny: missing name/entry (path=%s)\n", path);
+        return 0;
+    }
+
+    // Allowed capabilities (comma-separated): fs,net,pkg,upd,tty,gui
+    const char *allowed[] = {"fs","net","pkg","upd","tty","gui"};
+    if (capabilities && capabilities[0]) {
+        // crude check: ensure every token appears in allowed list
+        char caps[128]; snprintf(caps, sizeof(caps), "%s", capabilities);
+        char *tok = strtok(caps, ",");
+        while (tok){
+            int ok = 0;
+            for (size_t i=0;i<sizeof(allowed)/sizeof(allowed[0]);++i){
+                if (strcmp(tok, allowed[i]) == 0){ ok = 1; break; }
+            }
+            if (!ok){
+                kprintf("[regx] deny: cap \"%s\" not allowed for %s\n", tok, name);
+                return 0;
+            }
+            tok = strtok(NULL, ",");
+        }
+    }
+
+    kprintf("[regx] allow: %s (entry=%s caps=%s)\n", name, entry, capabilities?capabilities:"");
+    return 1;
+}
+
+void regx_main(void){
+    kprintf("[regx] security gate online\n");
+
+    // Install gate so future agent loads (by init or others) are mediated
+    agent_loader_set_gate(regx_policy_gate);
+
+    // Kick off init as standalone; it will load the rest (subject to gate)
     if (agent_loader_run_from_path("/agents/init.bin", 200) < 0) {
-        kprintf("[regx] failed to launch init\n");
+        kprintf("[regx] failed to launch /agents/init.bin\n");
     }
 
-    // (Optional) bring up anything else you want before init, or wait for requests
-    // Example idle loop:
-    for (;;) {
-        __asm__ volatile("pause");
-    }
+    // Idle loop; regx can also handle IPC to update policies at runtime
+    for(;;){ __asm__ volatile("pause"); }
 }
