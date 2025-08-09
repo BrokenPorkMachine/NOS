@@ -15,17 +15,17 @@ static uint64_t __attribute__((aligned(PAGE_SIZE))) pml4[512];
 static uint64_t __attribute__((aligned(PAGE_SIZE), unused)) pdpt[512];
 static uint64_t __attribute__((aligned(PAGE_SIZE), unused)) pd[4][512];
 
-static uint64_t *alloc_table(void) {
-    void *page = buddy_alloc(0, current_cpu_node(), 0);
+static uint64_t *alloc_table(int numa_node) {
+    void *page = buddy_alloc(0, numa_node, 0);
     if (!page)
         return NULL;
     memset(page, 0, PAGE_SIZE);
     return (uint64_t *)page;
 }
 
-static uint64_t *get_or_create(uint64_t *table, uint64_t index, uint64_t flags) {
+static uint64_t *get_or_create(uint64_t *table, uint64_t index, uint64_t flags, int numa_node) {
     if (!(table[index] & PAGE_PRESENT)) {
-        uint64_t *new = alloc_table();
+        uint64_t *new = alloc_table(numa_node);
         if (!new) return NULL;
         table[index] = ((uint64_t)new) | flags | PAGE_PRESENT | PAGE_WRITABLE;
     }
@@ -34,16 +34,15 @@ static uint64_t *get_or_create(uint64_t *table, uint64_t index, uint64_t flags) 
 
 // Map (virt->phys) using huge or normal page, NUMA-aware
 void paging_map_adv(uint64_t virt, uint64_t phys, uint64_t flags, uint32_t order, int numa_node) {
-    (void)numa_node; // NUMA awareness can be added later
     PAGING_LOCK();
     uint64_t pml4_i = (virt >> 39) & 0x1FF;
     uint64_t pdpt_i = (virt >> 30) & 0x1FF;
     uint64_t pd_i   = (virt >> 21) & 0x1FF;
     uint64_t pt_i   = (virt >> 12) & 0x1FF;
 
-    uint64_t *pdpt_t = get_or_create(pml4, pml4_i, PAGE_USER);
+    uint64_t *pdpt_t = get_or_create(pml4, pml4_i, PAGE_USER, numa_node);
     if (!pdpt_t) goto out;
-    uint64_t *pd_t = get_or_create(pdpt_t, pdpt_i, PAGE_USER);
+    uint64_t *pd_t = get_or_create(pdpt_t, pdpt_i, PAGE_USER, numa_node);
     if (!pd_t) goto out;
 
     if (order >= 9 || (flags & PAGE_HUGE_2MB)) {
@@ -52,7 +51,7 @@ void paging_map_adv(uint64_t virt, uint64_t phys, uint64_t flags, uint32_t order
         goto done;
     }
 
-    uint64_t *pt_t = get_or_create(pd_t, pd_i, PAGE_USER);
+    uint64_t *pt_t = get_or_create(pd_t, pd_i, PAGE_USER, numa_node);
     if (!pt_t) goto out;
     pt_t[pt_i] = (phys & ~0xFFFULL) | flags | PAGE_PRESENT;
     goto done;

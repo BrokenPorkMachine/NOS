@@ -1,3 +1,4 @@
+// Minimal kernel heap backed by the buddy allocator.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>

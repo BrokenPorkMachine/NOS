@@ -47,58 +47,60 @@ uint16_t cow_refcount(uint64_t phys) {
     return 0;
 }
 
+// Calculate buddy order for a page count.
+static uint32_t order_for_pages(uint32_t pages) {
+    uint32_t order = 0, count = 1;
+    while (count < pages) { count <<= 1; order++; }
+    return order;
+}
+
 // Contiguous allocator backed by buddy system.
 void *alloc_pages(uint32_t pages) {
     if (pages == 0)
         return NULL;
     int node = current_cpu_node();
-    uint32_t order = 0;
-    uint32_t count = 1;
-    while (count < pages) { count <<= 1; order++; }
+    uint32_t order = order_for_pages(pages);
     return buddy_alloc(order, node, 0);
 }
 
 void free_pages(void *addr, uint32_t pages) {
-    if (!addr)
+    if (!addr || pages == 0)
         return;
     int node = current_cpu_node();
-    uint32_t order = 0;
-    uint32_t count = 1;
-    while (count < pages) { count <<= 1; order++; }
+    uint32_t order = order_for_pages(pages);
     buddy_free(addr, order, node);
 }
 
 // --- COW marking/flag helpers ---
 
-// Get the frame index for a VA, or -1 if not mapped
-static int cow_flag_index(uint64_t virt) {
+// Get the frame index for a VA, optionally returning the physical address.
+static int cow_flag_index(uint64_t virt, uint64_t *phys_out) {
     uint64_t phys = paging_virt_to_phys_adv(virt);
     if (!phys) return -1;
+    if (phys_out) *phys_out = phys;
     return phys / PAGE_SIZE;
 }
 
 void cow_mark(uint64_t virt) {
-    int idx = cow_flag_index(virt);
+    uint64_t phys;
+    int idx = cow_flag_index(virt, &phys);
     if (idx < 0) return;
-    uint64_t phys = paging_virt_to_phys_adv(virt);
-    if (!phys) return;
     cow_flags[idx] = 1;
     paging_unmap_adv(virt);
     paging_map_adv(virt, phys, PAGE_PRESENT | PAGE_USER, 0, current_cpu_node());
 }
 
 void cow_unmark(uint64_t virt) {
-    int idx = cow_flag_index(virt);
+    uint64_t phys;
+    int idx = cow_flag_index(virt, &phys);
     if (idx < 0) return;
-    uint64_t phys = paging_virt_to_phys_adv(virt);
-    if (!phys) return;
     cow_flags[idx] = 0;
     paging_unmap_adv(virt);
     paging_map_adv(virt, phys, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER, 0, current_cpu_node());
 }
 
 int cow_is_marked(uint64_t virt) {
-    int idx = cow_flag_index(virt);
+    int idx = cow_flag_index(virt, NULL);
     if (idx < 0) return 0;
     return cow_flags[idx] ? 1 : 0;
 }

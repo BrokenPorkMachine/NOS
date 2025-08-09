@@ -16,6 +16,7 @@ typedef struct {
 void numa_init(const bootinfo_t *bootinfo);
 int  numa_node_count(void);
 const numa_region_t *numa_node_region(int node);
+// Best-effort NUMA node for the executing CPU.
 int  current_cpu_node(void);
 
 #ifdef __cplusplus
