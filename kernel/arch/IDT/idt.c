@@ -18,12 +18,11 @@ void set_idt_entry(int vec, void *isr, uint8_t type_attr) {
 void idt_install(void) {
     memset(idt, 0, sizeof(idt));
     for (int i = 0; i < IDT_ENTRIES; ++i) {
-        uint8_t type = (i == 0x80) ? 0xEE : 0x8E;
+        uint8_t type = (i == 0x80) ? IDT_USER_GATE : IDT_INTERRUPT_GATE;
         set_idt_entry(i, isr_stub_table[i], type);
     }
 
     idtp.limit = sizeof(idt) - 1;
     idtp.base  = (uintptr_t)&idt;
-
     asm volatile ("lidt %0" : : "m"(idtp));
 }
