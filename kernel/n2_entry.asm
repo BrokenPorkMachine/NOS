@@ -6,8 +6,15 @@ extern n2_main
 
 _start:
     cld
-    ; Bootloader passes bootinfo in RDI (SysV x86_64 ABI),
-    ; so it's already in the correct register for n2_main.
+    ; Enable SSE/FXSR before any C code runs
+    mov rax, cr0
+    and eax, 0xFFFFFFFB  ; clear EM
+    or  eax, 0x2         ; set MP
+    mov cr0, rax
+    mov rax, cr4
+    or  eax, 0x600       ; set OSFXSR | OSXMMEXCPT
+    mov cr4, rax
+    ; Bootloader passes bootinfo in RDI (SysV x86_64 ABI)
     xor rbp, rbp
     call n2_main
 
