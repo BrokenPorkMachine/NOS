@@ -52,6 +52,7 @@
 
 /* Stubs provided by your ISR/IRQ assembly table */
 extern void *isr_stub_table[IDT_ENTRIES];
+extern void isr_ud_stub(void);
 
 /* IDT and descriptor */
 static struct idt_entry idt[IDT_ENTRIES];
@@ -130,6 +131,8 @@ static void idt_populate_all(void) {
 /* Public API: install IDT with sane defaults */
 void idt_install(void) {
     idt_populate_all();
+
+    set_idt_entry(6, isr_ud_stub, IDT_INTERRUPT_GATE);   /* #UD */
 
     idtp.limit = (uint16_t)(sizeof(idt) - 1);
     idtp.base  = (uintptr_t)&idt;

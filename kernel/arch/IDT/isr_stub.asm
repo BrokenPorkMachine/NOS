@@ -19,6 +19,7 @@ global isr_page_fault_stub
 global isr_gpf_stub
 global isr_syscall_stub
 global isr_ipi_stub
+global isr_ud_stub
 global isr_stub_table
 
 extern isr_default_handler
@@ -29,6 +30,7 @@ extern isr_page_fault_handler
 extern isr_gpf_handler
 extern isr_syscall_handler
 extern isr_ipi_handler
+extern isr_ud_handler
 
 %macro PUSH_REGS 0
     ; Preserve GPRs (matches your struct isr_context order)
@@ -162,6 +164,50 @@ isr_stub_%1:
     iretq
 %endmacro
 
+isr_ud_stub:
+    push r15
+    push r14
+    push r13
+    push r12
+    push r11
+    push r10
+    push r9
+    push r8
+    push rdi
+    push rsi
+    push rbp
+    push rbx
+    push rdx
+    push rcx
+    push rax
+
+    mov rax, 6
+    push rax
+    xor  rax, rax
+    push rax
+    push rax
+
+    mov rdi, rsp
+    call isr_ud_handler
+
+    add rsp, 24
+    pop rax
+    pop rcx
+    pop rdx
+    pop rbx
+    pop rbp
+    pop rsi
+    pop rdi
+    pop r8
+    pop r9
+    pop r10
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
+    iretq
+
 ; --- Specific leaf stubs ------------------------------------------------------
 
 ; Error-code exceptions
@@ -183,9 +229,9 @@ ISR_NOERR  0xF0, isr_ipi_handler         ; IPI
 ; Generate defaults for the rest
 %assign i 0
 %rep 256
-%if i != 8 && i != 10 && i != 11 && i != 12 && i != 13 && i != 14 && i != 17 && \
+%if i != 6 && i != 8 && i != 10 && i != 11 && i != 12 && i != 13 && i != 14 && i != 17 && \
     i != 32 && i != 33 && i != 44 && i != 0x80 && i != 0xF0
-ISR_NOERR i, isr_default_handler
+    ISR_NOERR i, isr_default_handler
 %endif
 %assign i i+1
 %endrep
@@ -199,6 +245,8 @@ isr_stub_table:
     dq isr_stub_32
 %elif i = 33
     dq isr_stub_33
+%elif i = 6
+    dq isr_ud_stub
 %elif i = 44
     dq isr_stub_44
 %elif i = 8
