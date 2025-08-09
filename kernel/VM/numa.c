@@ -31,12 +31,11 @@ const numa_region_t *numa_node_region(int node) {
     return &nodes[node];
 }
 
-// Return the NUMA node for the current CPU.  For now we assume a single
-// node system and always return 0.  This can be extended to consult ACPI or
-// other topology information to map CPU IDs to NUMA nodes.
+// Return the NUMA node for the current CPU.  If no topology information is
+// available, fall back to a simple modulo distribution across detected nodes.
 int current_cpu_node(void) {
-    (void)nodes;
-    (void)node_cnt;
-    (void)smp_cpu_id; // suppress unused warning if SMP not used
-    return 0;
+    if (node_cnt <= 1)
+        return 0;
+    uint32_t cpu = smp_cpu_id();
+    return cpu % node_cnt;
 }

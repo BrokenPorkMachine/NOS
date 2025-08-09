@@ -115,6 +115,10 @@ static void split_block(buddy_zone_t *z, uint32_t order) {
 
 // Allocates a block of order N (2^N pages), NUMA-aware, with fallback.
 void *buddy_alloc(uint32_t order, int preferred_node, int strict) {
+    if (zone_count == 0)
+        return NULL;
+    if (preferred_node < 0 || preferred_node >= zone_count)
+        preferred_node = 0;
     for (int tries = 0; tries < (strict ? 1 : zone_count); ++tries) {
         int node = (preferred_node + tries) % zone_count;
         buddy_zone_t *z = &zones[node];
@@ -179,6 +183,8 @@ static void try_merge(buddy_zone_t *z, uint32_t frame, uint32_t order) {
 }
 
 void buddy_free(void *addr, uint32_t order, int node) {
+    if (node < 0 || node >= zone_count)
+        return;
     buddy_zone_t *z = &zones[node];
     spin_lock(&z->lock);
     uint32_t f = addr_to_frame(z, (uint64_t)addr);
