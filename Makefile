@@ -14,12 +14,9 @@ O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 all: libc kernel boot disk.img
 
 # ===== Standalone Agents on Disk =====
-AGENT_DIRS_ALL := $(filter-out user/agents/login,$(wildcard user/agents/*))
-# Exclude agents that are kernel-linked or need IPC/net shims
-AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs user/agents/audio user/agents/cp user/agents/ftp user/agents/nosfsctl
-AGENT_DIRS := $(filter-out $(AGENT_DIRS_EXCL),$(AGENT_DIRS_ALL))
-AGENT_DIRS_NONEMPTY := $(foreach d,$(AGENT_DIRS),$(if $(wildcard $(d)/*.c),$(d),))
-AGENT_NAMES := $(notdir $(AGENT_DIRS_NONEMPTY))
+AGENT_DIRS := user/agents/login
+AGENT_DIRS_NONEMPTY := $(AGENT_DIRS)
+AGENT_NAMES := $(notdir $(AGENT_DIRS))
 AGENT_ELFS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
 AGENT_BINS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).bin)
 AGENT_C_SRCS := $(foreach d,$(AGENT_DIRS_NONEMPTY),$(wildcard $(d)/*.c))
