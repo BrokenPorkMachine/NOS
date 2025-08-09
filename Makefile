@@ -14,7 +14,9 @@ O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 all: libc kernel boot disk.img
 
 # ===== Standalone Agents on Disk =====
-AGENT_DIRS := user/agents/login
+# Build the core user agents that ship on the disk image. Additional
+# agents can be added here as they are migrated to the new architecture.
+AGENT_DIRS := user/agents/init user/agents/login
 AGENT_DIRS_NONEMPTY := $(AGENT_DIRS)
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
 AGENT_ELFS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
@@ -98,7 +100,6 @@ kernel: libc agents bins
 
 	# Linked-in security gate + core agents:
 	$(CC) $(CFLAGS) -c src/agents/regx/regx.c   -o src/agents/regx/regx.o
-	$(CC) $(CFLAGS) -c user/agents/nosm/nosm.c   -o user/agents/nosm/nosm.o
 	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs.c -o user/agents/nosfs/nosfs.o
 
 	$(CC) $(CFLAGS) -c kernel/arch/CPU/smp.c -o kernel/arch/CPU/smp.o
@@ -137,7 +138,7 @@ kernel: libc agents bins
             kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
-    src/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o \
+    src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
     user/libc/libc.o -o kernel.bin
 
 	cp kernel.bin n2.bin
@@ -178,7 +179,7 @@ clean:
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
             $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
-            src/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o \
+            src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
             user/rt/rt0_user.o user/rt/rt0_agent.o
 	rm -rf out
 	make -C boot clean
