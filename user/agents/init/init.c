@@ -11,7 +11,7 @@
 #include <stddef.h>
 
 /* Optional embedded manifest for Mach-O2 discovery (won’t be referenced in code) */
-__attribute__((section("__O2INFO,__manifest")))
+__attribute__((used, section("\"__O2INFO,__manifest\"")))
 static const char mo2_manifest[] =
 "{\n"
 "  \"name\": \"init\",\n"

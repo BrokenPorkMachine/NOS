@@ -4,6 +4,8 @@
 static uint32_t g_mod_id;
 static uint64_t g_caps;
 
+__attribute__((used)) void _start(void) {}
+
 static int hello_init(const nosm_env_t *env) {
     g_mod_id = env->mod_id;
     g_caps   = env->caps;
@@ -22,7 +24,7 @@ static void hello_fini(void) {
 static void hello_suspend(void) { /* quiesce hardware */ }
 static void hello_resume(void)  { /* resume */ }
 
-__attribute__((section("__O2INFO,__manifest")))
+__attribute__((used, section("\"__O2INFO,__manifest\"")))
 static const char manifest[] =
 "{\n"
 "  \"name\":\"hello.nmod\",\n"

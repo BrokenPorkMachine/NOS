@@ -7,7 +7,7 @@ void login_server(ipc_queue_t *fs_q, uint32_t self_id);
 void thread_yield(void);
 
 // Manifest describing this agent
-__attribute__((section("__O2INFO,__manifest")))
+__attribute__((used, section("\"__O2INFO,__manifest\"")))
 static const char mo2_manifest[] =
 "{\n"
 "  \"name\": \"login\",\n"

@@ -1,4 +1,5 @@
 #include "libc.h"
+#include "printf.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <time.h>
@@ -504,5 +505,13 @@ int fseek(FILE *stream, long offset, int whence) {
         return -1;
     long ret = syscall3(SYS_LSEEK, stream->fd, offset, whence);
     return ret < 0 ? -1 : 0;
+}
+
+__attribute__((weak)) int printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    va_end(ap);
+    (void)fmt;
+    return 0;
 }
 
