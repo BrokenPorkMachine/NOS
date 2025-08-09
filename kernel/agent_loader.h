@@ -1,39 +1,100 @@
 #pragma once
+#ifndef AGENT_LOADER_H
+#define AGENT_LOADER_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
-#include <regx.h>
+#include <regx.h>     // for regx_manifest_t, regx_register(), n2_agent_t, etc.
 
-// Supported formats
+/*
+ * Supported on-disk/in-memory formats
+ */
 typedef enum {
-    AGENT_FORMAT_ELF,
+    AGENT_FORMAT_ELF = 0,
     AGENT_FORMAT_MACHO,
-    AGENT_FORMAT_MACHO2,
+    AGENT_FORMAT_MACHO2,  // “O2-style” with embedded JSON manifest
     AGENT_FORMAT_FLAT,
     AGENT_FORMAT_NOSM,
     AGENT_FORMAT_UNKNOWN
 } agent_format_t;
 
-// Detect the format from the buffer
+/*
+ * Entry point type exported by agents (e.g., "init_main")
+ */
+typedef void (*agent_entry_t)(void);
+
+/*
+ * Detect agent format from raw bytes.
+ */
 agent_format_t detect_agent_format(const void *image, size_t size);
 
-// Auto-detect and load any supported agent
+/*
+ * Loaders (return 0 on success, <0 on error)
+ *  - Auto: detect and load
+ *  - Explicit: caller provides the format to skip detection
+ */
 int load_agent_auto(const void *image, size_t size);
-
-// Explicit format loader. Useful when the caller already knows the
-// agent type (e.g., built-in images) and wants to skip detection.
 int load_agent(const void *image, size_t size, agent_format_t fmt);
 
-// Format-specific loaders
+/* Format-specific loaders */
 int load_agent_elf(const void *image, size_t size);
 int load_agent_macho(const void *image, size_t size);
 int load_agent_macho2(const void *image, size_t size);
 int load_agent_flat(const void *image, size_t size);
 int load_agent_nosm(const void *image, size_t size);
 
-// Manifest extraction helpers (return 0 on success)
-int extract_manifest_macho2(const void *image, size_t size, char *out_json, size_t out_sz);
-int extract_manifest_elf(const void *image, size_t size, char *out_json, size_t out_sz);
+/*
+ * Manifest extraction helpers (copy a JSON object into out_json; 0 on success)
+ */
+int extract_manifest_macho2(const void *image, size_t size,
+                            char *out_json, size_t out_sz);
+int extract_manifest_elf(const void *image, size_t size,
+                         char *out_json, size_t out_sz);
 
-// Register an entry point by name (used by agents to export their “main”)
-typedef void (*agent_entry_t)(void);
+/*
+ * Register an entry point by symbolic name so the loader can resolve "entry"
+ * from a manifest to a real function pointer.
+ */
 void agent_loader_register_entry(const char *name, agent_entry_t fn);
+
+/* ------------------------------------------------------------------------- */
+/*                   Kernel integration / extensibility                      */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * Reader/free hooks so the loader can fetch agent bytes from your FS layer.
+ *  - reader(path, &buf, &sz) should malloc/alloc a buffer and fill it.
+ *  - freer(buf) releases it.
+ */
+typedef int  (*agent_read_file_fn)(const char *path, void **out, size_t *out_sz);
+typedef void (*agent_free_fn)(void *ptr);
+
+void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer);
+
+/*
+ * Optional security gate installed by regx: decides whether a load is allowed.
+ * Return non-zero to allow, 0 to deny.
+ */
+typedef int (*agent_gate_fn)(const char *path,
+                             const char *name,
+                             const char *version,
+                             const char *capabilities,
+                             const char *entry);
+
+void agent_loader_set_gate(agent_gate_fn gate);
+
+/*
+ * Convenience helper: read an agent from the filesystem and load it
+ * (auto-detecting format). 'prio' is the initial thread priority for the
+ * spawned agent thread (if applicable).
+ */
+int agent_loader_run_from_path(const char *path, int prio);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+#endif /* AGENT_LOADER_H */
