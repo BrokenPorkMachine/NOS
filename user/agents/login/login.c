@@ -1,6 +1,5 @@
 #include "login.h"
-#include <stddef.h>
-#include <string.h>
+#include "../../libc/libc.h"
 
 /*
  * We avoid pulling kernel-private headers. Declare just what we need.
@@ -19,6 +18,14 @@ __attribute__((weak)) void serial_puts(const char *s) { (void)s; }
 
 /* Basic network helper to print IP at login screen. */
 __attribute__((weak)) uint32_t net_get_ip(void) { return 0x0A00020F; } /* 10.0.2.15 default qemu user-net */
+
+/* Weak IPC stubs for standalone builds */
+__attribute__((weak)) int ipc_receive(ipc_queue_t *q, uint32_t tid, ipc_message_t *m) {
+    (void)q; (void)tid; (void)m; return -1;
+}
+__attribute__((weak)) int ipc_send(ipc_queue_t *q, uint32_t tid, ipc_message_t *m) {
+    (void)q; (void)tid; (void)m; return -1;
+}
 
 /* NitroShell entry — weak so the agent can run even without NSH linked. */
 __attribute__((weak)) void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q,
@@ -102,15 +109,6 @@ static void read_line(char *buf, size_t sz, int echo_asterisk)
  * Manifest for Mach-O2 container (your loader is already looking for this).
  * Change "entry" if you rename the function below.
  */
-__attribute__((section("__O2INFO,__manifest")))
-const char mo2_manifest[] =
-"{\n"
-"  \"name\": \"login\",\n"
-"  \"type\": \"service\",\n"
-"  \"version\": \"1.0.0\",\n"
-"  \"entry\": \"login_server\"\n"
-"}\n";
-
 void login_server(ipc_queue_t *fs_q, uint32_t self_id)
 {
     (void)fs_q;
@@ -160,8 +158,7 @@ void login_server(ipc_queue_t *fs_q, uint32_t self_id)
             current_session.session_id++;
             current_session.active = 1;
             /* write username safely */
-            current_session.username[0] = '\0';
-            strncat(current_session.username, hit->u, sizeof(current_session.username)-1);
+            strlcpy(current_session.username, hit->u, sizeof(current_session.username));
             break;
         } else {
             puts_out("Login failed\n\n");

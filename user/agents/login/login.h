@@ -1,7 +1,7 @@
 #ifndef LOGIN_H
 #define LOGIN_H
 
-#include <stdint.h>
+#include "../../libc/libc.h"
 #include "../../../kernel/IPC/ipc.h"
 
 #ifdef __cplusplus
