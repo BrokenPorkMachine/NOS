@@ -1,6 +1,6 @@
 #include "smp.h"
 #include "lapic.h"
-#include "../../drivers/IO/serial.h"
+#include "../../../nosm/drivers/IO/serial.h"
 #include <string.h>
 #include <stdint.h>
 
