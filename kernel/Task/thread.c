@@ -1,4 +1,4 @@
-// thread.c
+// kernel/Task/thread.c
 #include "thread.h"
 #include "../IPC/ipc.h"
 #include "../../user/libc/libc.h"
@@ -11,6 +11,15 @@
 #endif
 
 #define THREAD_MAGIC 0x74687264UL
+
+// If your timer init sets this to 1 when the ISR is armed, we'll safely yield.
+// Define and set it in your PIT/LAPIC timer init code.
+extern int timer_ready;
+
+// Optional: set to 1 for lightweight scheduler tracing
+#ifndef SCHED_TRACE
+#define SCHED_TRACE 0
+#endif
 
 // --- Forward decls from low-level context switch asm ---
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
@@ -210,6 +219,10 @@ void schedule(void) {
     if (prev->state == THREAD_RUNNING)
         prev->state = THREAD_READY;
 
+#if SCHED_TRACE
+    uint32_t prev_id_dbg = prev ? prev->id : 0;
+#endif
+
     thread_t *next = pick_next(cpu);
 
     if (!next) {
@@ -219,6 +232,10 @@ void schedule(void) {
         __asm__ volatile("hlt");
         return;
     }
+
+#if SCHED_TRACE
+    kprintf("[sched] %u -> %u\n", prev_id_dbg, next ? next->id : 0);
+#endif
 
     next->state = THREAD_RUNNING;
     next->started = 1;
@@ -257,6 +274,10 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
     next->started = 1;
     current_cpu[cpu] = next;
 
+#if SCHED_TRACE
+    kprintf("[sched-isr] %u -> %u\n", prev ? prev->id : 0, next ? next->id : 0);
+#endif
+
     return next->rsp;
 }
 
@@ -272,6 +293,9 @@ void thread_exit(void) {
 // --- Thread trampoline chain (Option B) ---
 __attribute__((noreturn, used))
 static void thread_start(void (*f)(void)) {
+#if SCHED_TRACE
+    kprintf("[thread] start %u\n", thread_self());
+#endif
     f();
     thread_exit();              // never returns
 }
@@ -454,15 +478,6 @@ static void init_thread_func(void) {
     static uint32_t init_tid = 0;
     init_tid = thread_self();
     thread_create_with_priority(login_thread_func, 180);
-    /*
-     * The init thread originally ran at a higher priority than the login
-     * server it launches.  Because the scheduler always selects the highest
-     * priority READY thread, the init thread would immediately pre-empt the
-     * newly created login thread on every yield, effectively starving it and
-     * preventing the login prompt from ever appearing.  Drop our priority to
-     * the minimum so other services, like the login server, can run.
-     */
-    thread_set_priority(thread_current(), MIN_PRIORITY);
     ipc_message_t msg;
     while (1) {
         if (ipc_receive_blocking(&init_queue, init_tid, &msg) == 0) {
@@ -490,4 +505,9 @@ void threads_init(void) {
     ipc_grant(&init_queue,  init->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
     // main_thread already installed in threads_early_init
+
+    // Hand off once timers/interrupts are enabled so we don't deadlock on a blocking path
+    if (timer_ready) {
+        thread_yield();
+    }
 }
