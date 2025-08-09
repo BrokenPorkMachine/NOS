@@ -9,6 +9,8 @@ CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUIL
         -I include -I boot/include -no-pie
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
+all: libc kernel boot disk.img
+
 # ===== Standalone Agents on Disk =====
 # Build all user/agents/* EXCEPT the ones linked into the kernel.
 AGENT_DIRS_ALL := $(filter-out user/agents/login,$(wildcard user/agents/*))
