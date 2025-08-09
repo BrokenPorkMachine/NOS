@@ -207,7 +207,8 @@ void init_main(ipc_queue_t *q, uint32_t self_id) {
      * init thread's default high priority would keep pre-empting them and the
      * user would never see the login prompt.
      */
-    thread_current()->priority = MIN_PRIORITY;
+    // Use the scheduler API to adjust our priority so other services can run.
+    thread_set_priority(thread_current(), MIN_PRIORITY);
 
     while (1) {
         thread_yield();
