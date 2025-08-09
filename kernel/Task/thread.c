@@ -1,3 +1,4 @@
+// thread.c
 #include "thread.h"
 #include "../IPC/ipc.h"
 #include "../../user/libc/libc.h"
@@ -139,25 +140,6 @@ void threads_early_init(void) {
     tail_cpu[0]    = &main_thread;
 }
 
-// --- Thread trampoline chain ---
-__attribute__((noreturn, used))
-static void thread_start(void (*f)(void)) {
-    f();
-    thread_t *cur = thread_current();
-    if (cur) cur->state = THREAD_EXITED;
-    thread_yield(); // should not return
-    for (;;) __asm__ volatile("hlt");
-}
-
-// Naked entry: pop arg into %rdi, call thread_start
-static void __attribute__((naked, noreturn)) thread_entry(void) {
-    __asm__ volatile(
-        "pop %rdi\n"          // arg_rdi -> %rdi
-        "call thread_start\n" // never returns
-        "hlt\n"
-    );
-}
-
 // --- Query current thread / id ---
 thread_t *thread_current(void) { return current_cpu[smp_cpu_index()]; }
 uint32_t  thread_self(void)    { thread_t *t = thread_current(); return t ? t->id : 0; }
@@ -181,149 +163,6 @@ static void thread_reap(void) {
         memset(t, 0, sizeof(thread_t)); // Wipe slot for reuse
         t = n;
     }
-}
-
-// --- Thread Creation ---
-thread_t *thread_create_with_priority(void (*func)(void), int priority) {
-    if (priority < MIN_PRIORITY) priority = MIN_PRIORITY;
-    if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
-
-    thread_t *t = NULL;
-    int index = -1;
-
-    for (int i = 0; i < (int)MAX_KERNEL_THREADS; i++) {
-        if (thread_pool[i].magic == 0) {
-            t = &thread_pool[i];
-            index = i;
-            break;
-        }
-    }
-    if (!t) return NULL;   // no free slots
-
-    // Paranoia: avoid bogus low pointer
-    if ((uintptr_t)t < 0x1000)
-        return NULL;
-
-    memset(t, 0, sizeof(thread_t));
-    t->magic = THREAD_MAGIC;
-    t->stack = stack_pool[index];
-
-    uintptr_t top = align16((uintptr_t)t->stack + STACK_SIZE);
-
-    // Build initial context frame to match your context_switch.asm contract
-    context_frame_t *cf = (context_frame_t *)(top - sizeof(*cf));
-    *cf = (context_frame_t){
-        .r15=0,.r14=0,.r13=0,.r12=0,.rbx=0,.rbp=0,
-        .rflags=0x202,             // IF=1 so the new thread starts with interrupts enabled
-        .rax_dummy=0,              // consumed by 'pop rax'
-        .rip=(uint64_t)thread_entry,
-        .arg_rdi=(uint64_t)func
-    };
-
-    t->rsp      = (uint64_t)cf;
-    t->func     = func;
-
-    int id = __atomic_fetch_add(&next_id, 1, __ATOMIC_RELAXED);
-    t->id       = id;
-    t->state    = THREAD_READY;
-    t->started  = 0;
-    t->priority = priority;
-    t->next     = NULL;
-
-    uint64_t rf = irq_save_disable();
-    int cpu = smp_cpu_index();
-    rq_insert_tail(cpu, t);
-    irq_restore(rf);
-
-    return t;
-}
-
-thread_t *thread_create(void (*func)(void)) {
-    return thread_create_with_priority(func, (MAX_PRIORITY + MIN_PRIORITY) / 2);
-}
-
-void thread_block(thread_t *t) {
-    if (!t || t->magic != THREAD_MAGIC) return;
-    uint64_t rf = irq_save_disable();
-    t->state = THREAD_BLOCKED;
-    irq_restore(rf);
-    if (t == thread_current())
-        schedule();
-}
-
-void thread_unblock(thread_t *t) {
-    if (!t || t->magic != THREAD_MAGIC) return;
-    uint64_t rf = irq_save_disable();
-    t->state = THREAD_READY;
-    thread_t *cur = thread_current();
-    int should_preempt = (cur && cur->state == THREAD_RUNNING && t->priority > cur->priority);
-    irq_restore(rf);
-    if (should_preempt)
-        schedule();
-}
-
-int thread_is_alive(thread_t *t) {
-    return t && t->magic == THREAD_MAGIC && t->state != THREAD_EXITED;
-}
-
-void thread_kill(thread_t *t) {
-    if (!t || t->magic != THREAD_MAGIC) return;
-
-    uint64_t rf = irq_save_disable();
-    t->state = THREAD_EXITED;
-
-    int cpu = smp_cpu_index();
-    thread_t *cur = current_cpu[cpu];
-
-    if (t == cur) {
-        irq_restore(rf);
-        schedule(); // will add to zombies on return path
-        return;
-    }
-
-    rq_remove(cpu, t);
-    add_to_zombie_list(t);
-    irq_restore(rf);
-}
-
-static void rq_on_priority_change(int cpu, thread_t *t) {
-    rq_requeue_tail(cpu, t);
-}
-
-void thread_set_priority(thread_t *t, int priority) {
-    if (!t || t->magic != THREAD_MAGIC) return;
-
-    if (priority < MIN_PRIORITY) priority = MIN_PRIORITY;
-    if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
-
-    uint64_t rf = irq_save_disable();
-    int old = t->priority;
-    t->priority = priority;
-
-    int cpu = smp_cpu_index();
-    rq_on_priority_change(cpu, t);
-
-    thread_t *cur = thread_current();
-    int should_yield =
-        ((t != cur && t->state == THREAD_READY && t->priority > (cur ? cur->priority : MIN_PRIORITY)) ||
-         (t == cur && priority < old));
-    irq_restore(rf);
-
-    if (should_yield)
-        schedule();
-}
-
-void thread_join(thread_t *t) {
-    if (!t || t->magic != THREAD_MAGIC) return;
-
-    while (thread_is_alive(t)) {
-        __asm__ volatile("pause");
-        thread_yield();
-    }
-}
-
-void thread_yield(void) {
-    schedule();
 }
 
 // --- Pick next runnable: choose highest-priority READY; fall back to main_thread ---
@@ -419,6 +258,178 @@ uint64_t schedule_from_isr(uint64_t *old_rsp) {
     current_cpu[cpu] = next;
 
     return next->rsp;
+}
+
+// --- Thread exit (Option B): mark EXITED and reschedule, never returns ---
+__attribute__((noreturn))
+void thread_exit(void) {
+    thread_t *t = thread_current();
+    if (t) t->state = THREAD_EXITED;
+    schedule();                 // switch away from this stack
+    __builtin_unreachable();
+}
+
+// --- Thread trampoline chain (Option B) ---
+__attribute__((noreturn, used))
+static void thread_start(void (*f)(void)) {
+    f();
+    thread_exit();              // never returns
+}
+
+// Naked entry: pop arg into %rdi, call thread_start (never returns)
+static void __attribute__((naked, noreturn)) thread_entry(void) {
+    __asm__ volatile(
+        "pop %rdi\n"          // arg_rdi -> %rdi
+        "call thread_start\n" // never returns
+        "jmp .\n"             // safety: unreachable
+    );
+}
+
+// --- Thread Creation ---
+thread_t *thread_create_with_priority(void (*func)(void), int priority) {
+    if (priority < MIN_PRIORITY) priority = MIN_PRIORITY;
+    if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
+
+    thread_t *t = NULL;
+    int index = -1;
+
+    for (int i = 0; i < (int)MAX_KERNEL_THREADS; i++) {
+        if (thread_pool[i].magic == 0) {
+            t = &thread_pool[i];
+            index = i;
+            break;
+        }
+    }
+    if (!t) return NULL;   // no free slots
+
+    // Paranoia: avoid bogus low pointer
+    if ((uintptr_t)t < 0x1000)
+        return NULL;
+
+    memset(t, 0, sizeof(thread_t));
+    t->magic = THREAD_MAGIC;
+    t->stack = stack_pool[index];
+
+    uintptr_t top = align16((uintptr_t)t->stack + STACK_SIZE);
+
+    // Build initial context frame to match your context_switch.asm contract
+    context_frame_t *cf = (context_frame_t *)(top - sizeof(*cf));
+    *cf = (context_frame_t){
+        .r15=0,.r14=0,.r13=0,.r12=0,.rbx=0,.rbp=0,
+        .rflags=0x202,             // IF=1 so the new thread starts with interrupts enabled
+        .rax_dummy=0,              // consumed by 'pop rax'
+        .rip=(uint64_t)thread_entry,
+        .arg_rdi=(uint64_t)func
+    };
+
+    t->rsp      = (uint64_t)cf;
+    t->func     = func;
+
+    int id = __atomic_fetch_add(&next_id, 1, __ATOMIC_RELAXED);
+    t->id       = id;
+    t->state    = THREAD_READY;
+    t->started  = 0;
+    t->priority = priority;
+    t->next     = NULL;
+
+    uint64_t rf = irq_save_disable();
+    int cpu = smp_cpu_index();
+    rq_insert_tail(cpu, t);
+    irq_restore(rf);
+
+    return t;
+}
+
+thread_t *thread_create(void (*func)(void)) {
+    return thread_create_with_priority(func, (MAX_PRIORITY + MIN_PRIORITY) / 2);
+}
+
+void thread_block(thread_t *t) {
+    if (!t || !t->magic == THREAD_MAGIC) return;
+
+    uint64_t rf = irq_save_disable();
+    t->state = THREAD_BLOCKED;
+    irq_restore(rf);
+
+    if (t == thread_current())
+        schedule();
+}
+
+void thread_unblock(thread_t *t) {
+    if (!t || t->magic != THREAD_MAGIC) return;
+
+    uint64_t rf = irq_save_disable();
+    t->state = THREAD_READY;
+    thread_t *cur = thread_current();
+    int should_preempt = (cur && cur->state == THREAD_RUNNING && t->priority > cur->priority);
+    irq_restore(rf);
+
+    if (should_preempt)
+        schedule();
+}
+
+int thread_is_alive(thread_t *t) {
+    return t && t->magic == THREAD_MAGIC && t->state != THREAD_EXITED;
+}
+
+void thread_kill(thread_t *t) {
+    if (!t || t->magic != THREAD_MAGIC) return;
+
+    uint64_t rf = irq_save_disable();
+    t->state = THREAD_EXITED;
+
+    int cpu = smp_cpu_index();
+    thread_t *cur = current_cpu[cpu];
+
+    if (t == cur) {
+        irq_restore(rf);
+        schedule(); // will add to zombies on return path
+        return;
+    }
+
+    rq_remove(cpu, t);
+    add_to_zombie_list(t);
+    irq_restore(rf);
+}
+
+static void rq_on_priority_change(int cpu, thread_t *t) {
+    rq_requeue_tail(cpu, t);
+}
+
+void thread_set_priority(thread_t *t, int priority) {
+    if (!t || t->magic != THREAD_MAGIC) return;
+
+    if (priority < MIN_PRIORITY) priority = MIN_PRIORITY;
+    if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
+
+    uint64_t rf = irq_save_disable();
+    int old = t->priority;
+    t->priority = priority;
+
+    int cpu = smp_cpu_index();
+    rq_on_priority_change(cpu, t);
+
+    thread_t *cur = thread_current();
+    int should_yield =
+        ((t != cur && t->state == THREAD_READY && t->priority > (cur ? cur->priority : MIN_PRIORITY)) ||
+         (t == cur && priority < old));
+    irq_restore(rf);
+
+    if (should_yield)
+        schedule();
+}
+
+void thread_join(thread_t *t) {
+    if (!t || t->magic != THREAD_MAGIC) return;
+
+    while (thread_is_alive(t)) {
+        __asm__ volatile("pause");
+        thread_yield();
+    }
+}
+
+void thread_yield(void) {
+    schedule();
 }
 
 // --- Example Service Threads ---
