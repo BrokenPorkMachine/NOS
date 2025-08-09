@@ -1,6 +1,17 @@
 #pragma once
 #include <stdint.h>
 
+// Optional: cacheline alignment helper
+#if defined(__GNUC__) || defined(__clang__)
+#  define THREAD_ALIGNED(N) __attribute__((aligned(N)))
+#else
+#  define THREAD_ALIGNED(N)
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MAX_CPUS      32
 #define MIN_PRIORITY   0   // Lowest priority
 #define MAX_PRIORITY 255   // Highest priority
@@ -18,25 +29,28 @@ typedef enum {
 } thread_state_t;
 
 /**
- * Kernel thread descriptor. Aligned and sized for fast scheduling.
+ * Kernel thread descriptor. Keep fields hot in scheduling path first.
+ * Layout matches thread.c expectations; no extra saved state here because
+ * context_switch.asm pushes/pops callee-saved regs & rflags on the stack.
  */
-typedef struct thread {
+typedef struct THREAD_ALIGNED(64) thread {
     uint64_t       rsp;       // Stack pointer for context switching
     void         (*func)(void); // Entry function
-    char          *stack;     // Kernel stack base (malloc'd)
+    char          *stack;     // Kernel stack base (from static pool)
     int            id;        // Thread ID (unique)
     thread_state_t state;     // Current state
     int            started;   // Has thread begun execution
     int            priority;  // Priority (0 = lowest, 255 = highest)
-    struct thread *next;      // Run queue link
+    struct thread *next;      // Run queue link (circular per-CPU)
     uint32_t       magic;     // Magic for corruption detection
 } thread_t;
 
+// Per-CPU currently running thread (head of that CPU's circular run-queue)
 extern thread_t *current_cpu[MAX_CPUS];
-
 
 /**
  * Reset scheduler bookkeeping before interrupts might fire.
+ * Installs the bootstrap "main" thread on CPU0.
  */
 void threads_early_init(void);
 
@@ -62,6 +76,7 @@ thread_t *thread_create(void (*func)(void));
 
 /**
  * Create a new kernel thread with an explicit priority.
+ * Priority is clamped to [MIN_PRIORITY, MAX_PRIORITY].
  */
 thread_t *thread_create_with_priority(void (*func)(void), int priority);
 
@@ -117,6 +132,15 @@ uint64_t schedule_from_isr(uint64_t *old_rsp);
 
 /**
  * Switch stack (old_rsp, new_rsp): implemented in asm and returns to caller.
+ *
+ * ABI contract (matches your context_switch.asm):
+ *   - Saves caller rflags and disables IF during the switch.
+ *   - Saves callee-saved regs: rbp, rbx, r12, r13, r14, r15 (in that order).
+ *   - Stores the previous RSP to *old_rsp if old_rsp != NULL.
+ *   - Loads new RSP, restores regs in reverse, popfq, pop rax (dummy), ret.
+ *
+ * Thread stack at entry (top -> bottom) must be:
+ *   r15, r14, r13, r12, rbx, rbp, rflags, rax_dummy, rip(thread_entry), arg
  */
 void context_switch(uint64_t *old_rsp, uint64_t new_rsp);
 
@@ -125,3 +149,7 @@ void context_switch(uint64_t *old_rsp, uint64_t new_rsp);
  * Does not return.
  */
 void enter_user_mode(uint64_t entry, uint64_t user_stack) __attribute__((noreturn));
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
