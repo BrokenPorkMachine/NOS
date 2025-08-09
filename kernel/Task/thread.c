@@ -14,18 +14,18 @@
 // --- Forward decls from low-level context switch asm ---
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
 
-// --- Minimal context frame saved on a thread's stack.
-// Layout matches how the scheduler expects to read/write rflags and resume via RIP.
+// --- Context frame expected by context_switch.S
+// Stack (top -> bottom at t->rsp):
+//   r15, r14, r13, r12, rbx, rbp, rip(thread_entry), arg_for_thread_entry
 typedef struct context_frame {
     uint64_t r15, r14, r13, r12, rbx, rbp;
-    uint64_t rflags;
-    uint64_t rip;           // return address to resume at (thread_entry)
-    uint64_t arg_rdi;       // consumed by 'pop %rdi' in thread_entry
+    uint64_t rip;       // -> thread_entry
+    uint64_t arg_rdi;   // consumed by 'pop %rdi' in thread_entry
 } context_frame_t;
 
 static inline uintptr_t align16(uintptr_t v) { return v & ~0xFULL; }
 
-// Zombie list to track exited threads (interrupts-off critical sections protect it)
+// Zombie list to track exited threads (IF-masked crit sections protect it)
 static thread_t *zombie_list = NULL;
 
 static thread_t thread_pool[MAX_KERNEL_THREADS];
@@ -43,7 +43,7 @@ static thread_t main_thread; // CPU0 bootstrap/idle
 // IPC queues for servers (exposed globally)
 ipc_queue_t fs_queue, pkg_queue, upd_queue, init_queue, regx_queue;
 
-// --- Optional: enable SSE/FXSR if you use floating point in kernel threads ---
+// --- Optional: enable SSE/FXSR if kernel code may use FP/SIMD
 static void enable_sse(void) {
 #if defined(__x86_64__)
     uint64_t cr0, cr4;
@@ -52,12 +52,12 @@ static void enable_sse(void) {
     cr0 |=  (1ULL << 1);  // set MP
     __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
     __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
-    cr4 |= (1ULL << 9) | (1ULL << 10); // set OSFXSR and OSXMMEXCPT
+    cr4 |= (1ULL << 9) | (1ULL << 10); // OSFXSR | OSXMMEXCPT
     __asm__ volatile("mov %0, %%cr4" :: "r"(cr4));
 #endif
 }
 
-// --- Tiny helpers to enter/leave per-CPU critical sections using IF masking ---
+// --- IRQ helpers ---
 static inline uint64_t irq_save_disable(void) {
     uint64_t rf;
     __asm__ volatile("pushfq; pop %0; cli" : "=r"(rf) :: "memory");
@@ -71,8 +71,8 @@ static inline void irq_restore(uint64_t rf) {
 static inline void rq_insert_tail(int cpu, thread_t *t) {
     if (!current_cpu[cpu]) {
         current_cpu[cpu] = t;
-        tail_cpu[cpu] = t;
-        t->next = t;
+        tail_cpu[cpu]    = t;
+        t->next          = t;
         return;
     }
     t->next = current_cpu[cpu];
@@ -134,7 +134,6 @@ void threads_early_init(void) {
 }
 
 // --- Thread trampoline chain ---
-// Call the user function, mark exited, and yield forever.
 __attribute__((noreturn, used))
 static void thread_start(void (*f)(void)) {
     f();
@@ -147,8 +146,8 @@ static void thread_start(void (*f)(void)) {
 // Naked entry: pop arg into %rdi, call thread_start
 static void __attribute__((naked, noreturn)) thread_entry(void) {
     __asm__ volatile(
-        "pop %rdi\n"
-        "call thread_start\n"
+        "pop %rdi\n"          // arg_rdi -> %rdi
+        "call thread_start\n" // never returns
         "hlt\n"
     );
 }
@@ -157,7 +156,7 @@ static void __attribute__((naked, noreturn)) thread_entry(void) {
 thread_t *thread_current(void) { return current_cpu[smp_cpu_index()]; }
 uint32_t  thread_self(void)    { thread_t *t = thread_current(); return t ? t->id : 0; }
 
-// --- Zombie management (interrupts-off around the list) ---
+// --- Zombie management ---
 static void add_to_zombie_list(thread_t *t) {
     uint64_t rf = irq_save_disable();
     t->next = zombie_list;
@@ -166,7 +165,6 @@ static void add_to_zombie_list(thread_t *t) {
 }
 
 static void thread_reap(void) {
-    // Take the whole list under IF-off, then clear slots outside the critical section
     uint64_t rf = irq_save_disable();
     thread_t *list = zombie_list;
     zombie_list = NULL;
@@ -206,11 +204,10 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
 
     uintptr_t top = align16((uintptr_t)t->stack + STACK_SIZE);
 
-    // Build initial context frame so that thread_entry sees %rdi = func and correct alignment.
+    // Build initial context frame to match context_switch.S contract
     context_frame_t *cf = (context_frame_t *)(top - sizeof(*cf));
     *cf = (context_frame_t){
         .r15=0,.r14=0,.r13=0,.r12=0,.rbx=0,.rbp=0,
-        .rflags=0x202, // IF=1
         .rip=(uint64_t)thread_entry,
         .arg_rdi=(uint64_t)func
     };
@@ -218,7 +215,6 @@ thread_t *thread_create_with_priority(void (*func)(void), int priority) {
     t->rsp      = (uint64_t)cf;
     t->func     = func;
 
-    // Atomic-ish fetch_add for SMP without needing a full atomic header
     int id = __atomic_fetch_add(&next_id, 1, __ATOMIC_RELAXED);
     t->id       = id;
     t->state    = THREAD_READY;
@@ -277,13 +273,11 @@ void thread_kill(thread_t *t) {
         return;
     }
 
-    // Remove from run-queue if present
     rq_remove(cpu, t);
     add_to_zombie_list(t);
     irq_restore(rf);
 }
 
-// Requeue a thread after priority changes to keep fairness inside level.
 static void rq_on_priority_change(int cpu, thread_t *t) {
     rq_requeue_tail(cpu, t);
 }
@@ -347,15 +341,13 @@ static thread_t *pick_next(int cpu) {
             best = start;
     }
 
-    // As an ultimate fallback, ensure we never return NULL while CPU has main_thread installed.
-    if (!best) best = &main_thread;
+    if (!best) best = &main_thread; // ultimate fallback
 
     return best;
 }
 
 void schedule(void) {
-    // Save rflags and mask interrupts for the whole scheduling operation
-    uint64_t rflags = irq_save_disable();
+    uint64_t rflags = irq_save_disable(); // mask interrupts during pick/switch
 
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
@@ -385,19 +377,18 @@ void schedule(void) {
     context_switch(&prev->rsp, next->rsp);
 
     // We resume here when 'prev' becomes current again later.
-    // Update the saved rflags in 'prev' context frame (no magic indices).
-    context_frame_t *prev_cf = (context_frame_t *)prev->rsp;
-    prev_cf->rflags = rflags;
 
     if (prev->state == THREAD_EXITED)
         add_to_zombie_list(prev);
 
-    // Reap outside of the IF-off window (but we don't need IF here)
+    // Reap outside the critical section
     thread_reap();
+    // Re-enable interrupts to what they were before schedule()
+    irq_restore(rflags);
 }
 
 uint64_t schedule_from_isr(uint64_t *old_rsp) {
-    // ISR path: we arrive with interrupts masked.
+    // ISR path: called with interrupts masked already.
     int cpu = smp_cpu_index();
     thread_t *prev = current_cpu[cpu];
     if (!prev)
@@ -457,20 +448,17 @@ static void init_thread_func(void) {
 
 // --- Init threading and launch core services ---
 void threads_init(void) {
-    // Queues
     ipc_init(&fs_queue); ipc_init(&pkg_queue); ipc_init(&upd_queue); ipc_init(&init_queue); ipc_init(&regx_queue);
 
-    // Create core services
     thread_t *regx = thread_create_with_priority(regx_thread_func, 220);
     thread_t *init = thread_create_with_priority(init_thread_func, 200);
     if (!regx || !init) {
         for (;;) __asm__ volatile("hlt");
     }
 
-    // Capabilities (grant what they need)
     ipc_grant(&regx_queue, regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&regx_queue, init->id, IPC_CAP_SEND | IPC_CAP_RECV);
     ipc_grant(&init_queue,  init->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
-    // main_thread was installed in threads_early_init and acts as idle; nothing else to do.
+    // main_thread already installed in threads_early_init
 }
