@@ -28,7 +28,19 @@ static thread_t main_thread;
 // IPC queues for servers (exposed globally)
 ipc_queue_t fs_queue, pkg_queue, upd_queue, init_queue, regx_queue;
 
+static void enable_sse(void) {
+    uint64_t cr0, cr4;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1ULL << 2);  // clear EM
+    cr0 |=  (1ULL << 1);  // set MP
+    __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (1ULL << 9) | (1ULL << 10); // set OSFXSR and OSXMMEXCPT
+    __asm__ volatile("mov %0, %%cr4" :: "r"(cr4));
+}
+
 void threads_early_init(void) {
+    enable_sse();
     zombie_list = NULL;
     next_id = 1;
     for (int i = 0; i < MAX_CPUS; ++i) {
