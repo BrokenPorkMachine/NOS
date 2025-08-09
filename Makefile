@@ -10,9 +10,9 @@ CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUIL
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
 # ===== Standalone Agents on Disk =====
-# Build all user/agents/* except the three linked into the kernel
+# Build all user/agents/* EXCEPT nosm/nosfs (linked into kernel).
 AGENT_DIRS_ALL := $(filter-out user/agents/login,$(wildcard user/agents/*))
-AGENT_DIRS_EXCL := user/agents/regx user/agents/nosm user/agents/nosfs
+AGENT_DIRS_EXCL := user/agents/nosm user/agents/nosfs
 AGENT_DIRS := $(filter-out $(AGENT_DIRS_EXCL),$(AGENT_DIRS_ALL))
 
 AGENT_SRCS := $(foreach d,$(AGENT_DIRS),$(wildcard $(d)/*.c))
@@ -46,7 +46,7 @@ $(AGENT_BINS): out/agents/%.bin : out/agents/%.elf
 		--remove-section=.note.gnu.property \
 		$< $@
 
-# Convenience: build all standalone agents (ELF+BIN)
+# Convenience
 agents: $(AGENT_ELFS) $(AGENT_BINS)
 
 kernel: libc agents
@@ -61,8 +61,8 @@ kernel: libc agents
 	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
 
-	# Link regx/nosm/nosfs *into* the kernel as threads
-	$(CC) $(CFLAGS) -c user/agents/regx/regx.c   -o user/agents/regx/regx.o
+	# Link the security gate + core service agents into the kernel:
+	$(CC) $(CFLAGS) -c src/agents/regx/regx.c   -o src/agents/regx/regx.o
 	$(CC) $(CFLAGS) -c user/agents/nosm/nosm.c   -o user/agents/nosm/nosm.o
 	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs.c -o user/agents/nosfs/nosfs.o
 
@@ -102,7 +102,7 @@ kernel: libc agents
             kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
-    user/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o \
+    src/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o \
     user/libc/libc.o -o kernel.bin
 
 	cp kernel.bin n2.bin
@@ -124,7 +124,6 @@ disk.img: boot kernel agents
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img O2.bin ::/
 	mcopy -i disk.img n2.bin ::/
-	# Place standalone agent binaries in /agents on the image
 	mmd   -i disk.img ::/agents || true
 	$(foreach b,$(AGENT_BINS), mcopy -i disk.img $(b) ::/agents/$(notdir $(b));)
 
@@ -139,7 +138,8 @@ clean:
             kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
             kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
-            $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS)
+            $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) \
+            src/agents/regx/regx.o user/agents/nosm/nosm.o user/agents/nosfs/nosfs.o
 	rm -rf out
 	make -C boot clean
 
