@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
-#include "../../kernel/drivers/Net/netstack.h"
+#include "../../nosm/drivers/Net/netstack.h"
 
 struct eth_hdr {
     uint8_t dst[6];

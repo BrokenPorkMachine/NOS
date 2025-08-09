@@ -1,7 +1,7 @@
 #include "server.h"
 #include "audio.h"
 #include "../../libc/libc.h"
-#include "../../../kernel/drivers/Audio/audio.h"
+#include "../../../nosm/drivers/Audio/audio.h"
 
 void audio_server(ipc_queue_t *q, uint32_t self_id) {
     ipc_message_t msg;

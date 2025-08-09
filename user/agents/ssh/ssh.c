@@ -1,7 +1,7 @@
 #include "ssh.h"
-#include "../../../kernel/drivers/IO/serial.h"
+#include "../../../nosm/drivers/IO/serial.h"
 #include "../../../kernel/Task/thread.h"
-#include "../../../kernel/drivers/Net/netstack.h"
+#include "../../../nosm/drivers/Net/netstack.h"
 #include <string.h>
 #include "../../../kernel/IPC/ipc.h"
 

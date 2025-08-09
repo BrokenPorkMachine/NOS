@@ -1,6 +1,7 @@
 #include "agent_loader.h"
 #include "regx.h"
 #include "json.h"
+#include "nosm.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -126,8 +127,7 @@ int load_agent_flat(const void *image, size_t size) {
 }
 
 int load_agent_nosm(const void *image, size_t size) {
-    (void)image; (void)size;
-    return -1;
+    return nosm_load(image, size) ? 0 : -1;
 }
 
 int load_agent_auto(const void *image, size_t size) {

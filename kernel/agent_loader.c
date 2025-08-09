@@ -4,6 +4,7 @@
 #include "../Task/thread.h"
 #include "../../user/libc/libc.h"
 #include <stdint.h>
+#include <nosm.h>
 
 extern int kprintf(const char *fmt, ...);
 
@@ -132,7 +133,31 @@ static int load_agent_elf(const void *image,size_t size,const char *path,int pri
 }
 static int load_agent_macho(const void *image,size_t size,const char *path,int prio){ (void)image;(void)size;(void)path;(void)prio; kprintf("[loader] Mach-O not implemented\n"); return -1; }
 static int load_agent_flat (const void *image,size_t size,const char *path,int prio){ (void)image;(void)size;(void)path;(void)prio; kprintf("[loader] flat loader stub\n"); return -1; }
-static int load_agent_nosm (const void *image,size_t size,const char *path,int prio){ (void)image;(void)size;(void)path;(void)prio; kprintf("[loader] NOSM loader stub\n"); return -1; }
+
+static int load_agent_nosm_impl(const void *image,size_t size,const char *path,int prio){
+    (void)prio;
+    if(!image || size<sizeof(nosm_header_t)) return -1;
+    const unsigned char *data=(const unsigned char*)image;
+    const nosm_header_t *hdr=(const nosm_header_t*)data;
+    if(hdr->magic!=NOSM_MAGIC || hdr->version!=1) return -1;
+    size_t needed=sizeof(nosm_header_t)+(size_t)hdr->num_segments*sizeof(nosm_segment_t);
+    if(size<needed || hdr->manifest_offset+hdr->manifest_size>size) return -1;
+    const nosm_manifest_t *manifest=(const nosm_manifest_t*)(data+hdr->manifest_offset);
+
+    if(g_gate_fn){
+        int ok=g_gate_fn(path?path:"(buffer)",manifest->name,manifest->version,"","nosm");
+        if(!ok){
+            kprintf("[loader] gate denied \"%s\"\n", manifest->name);
+            return -1;
+        }
+    }
+
+    if(!nosm_load(image,size)){
+        kprintf("[loader] nosm_load failed for \"%s\"\n", manifest->name);
+        return -1;
+    }
+    return 0;
+}
 
 int load_agent_auto_with_prio(const void *image,size_t size,int prio){
     return load_agent_macho2(image,size,"(buffer)",prio); // prefer O2-style; fallback handled above if needed
@@ -143,12 +168,13 @@ int load_agent_with_prio(const void *image,size_t size,agent_format_t fmt,int pr
         case AGENT_FORMAT_MACHO:  return load_agent_macho(image,size,"(buffer)",prio);
         case AGENT_FORMAT_ELF:    return load_agent_elf(image,size,"(buffer)",prio);
         case AGENT_FORMAT_FLAT:   return load_agent_flat(image,size,"(buffer)",prio);
-        case AGENT_FORMAT_NOSM:   return load_agent_nosm(image,size,"(buffer)",prio);
+        case AGENT_FORMAT_NOSM:   return load_agent_nosm_impl(image,size,"(buffer)",prio);
         default: return load_agent_auto_with_prio(image,size,prio);
     }
 }
 int load_agent_auto(const void *image,size_t size){ return load_agent_auto_with_prio(image,size,200); }
 int load_agent(const void *image,size_t size,agent_format_t fmt){ return load_agent_with_prio(image,size,fmt,200); }
+int load_agent_nosm(const void *image,size_t size){ return load_agent_nosm_impl(image,size,"(buffer)",200); }
 
 int agent_loader_run_from_path(const char *path,int prio){
     if(!g_read_file){ kprintf("[loader] no FS reader; cannot load \"%s\"\n", path?path:"(null)"); return -1; }
@@ -160,8 +186,8 @@ int agent_loader_run_from_path(const char *path,int prio){
         case AGENT_FORMAT_MACHO2: rc=load_agent_macho2(buf,sz,path,prio); break;
         case AGENT_FORMAT_MACHO:  rc=load_agent_macho (buf,sz,path,prio); break;
         case AGENT_FORMAT_ELF:    rc=load_agent_elf   (buf,sz,path,prio); break;
-        case AGENT_FORMAT_FLAT:   rc=load_agent_flat  (buf,sz,path,prio); break;
-        case AGENT_FORMAT_NOSM:   rc=load_agent_nosm  (buf,sz,path,prio); break;
+        case AGENT_FORMAT_FLAT:   rc=load_agent_flat      (buf,sz,path,prio); break;
+        case AGENT_FORMAT_NOSM:   rc=load_agent_nosm_impl(buf,sz,path,prio); break;
         default:                  rc=-1; break;
     }
 

@@ -1,8 +1,8 @@
 #include "server.h"
 #include "window.h"
 #include "../../libc/libc.h"
-#include "../../../kernel/drivers/IO/video.h"
-#include "../../../kernel/drivers/IO/keyboard.h"
+#include "../../../nosm/drivers/IO/video.h"
+#include "../../../nosm/drivers/IO/keyboard.h"
 
 #define MAX_WINDOWS 8
 

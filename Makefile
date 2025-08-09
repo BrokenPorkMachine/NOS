@@ -8,7 +8,7 @@ NASM    := nasm
 
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
           -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-          -I include -I boot/include -no-pie
+          -I include -I boot/include -I nosm -no-pie
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
 all: libc kernel boot disk.img
@@ -44,6 +44,17 @@ endef
 $(foreach n,$(AGENT_NAMES),$(eval $(call MAKE_AGENT_RULES,$(n))))
 
 agents: $(AGENT_ELFS) $(AGENT_BINS)
+
+# ===== NOSM modules =====
+nosm/drivers/example/hello/hello_nmod.o: nosm/drivers/example/hello/hello_nmod.c
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
+
+out/modules/hello.mo2: nosm/drivers/example/hello/hello_nmod.o user/libc/libc.o
+	@mkdir -p $(@D)
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $(@:.mo2=.elf)
+	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property $(@:.mo2=.elf) $@
+
+modules: out/modules/hello.mo2
 
 # ===== /bin user programs (single C file each under ./bin) =====
 # Provide a tiny crt0 so programs have a proper _start.
@@ -112,32 +123,10 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/VM/cow.c -o kernel/VM/cow.o
 	$(CC) $(CFLAGS) -c kernel/VM/numa.c -o kernel/VM/numa.o
 	$(CC) $(CFLAGS) -c kernel/VM/kheap.c -o kernel/VM/kheap.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/ps2.c -o kernel/drivers/IO/ps2.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/keyboard.c -o kernel/drivers/IO/keyboard.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/mouse.c -o kernel/drivers/IO/mouse.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/serial.c -o kernel/drivers/IO/serial.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/video.c -o kernel/drivers/IO/video.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/tty.c -o kernel/drivers/IO/tty.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/block.c -o kernel/drivers/IO/block.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/sata.c -o kernel/drivers/IO/sata.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/usb.c -o kernel/drivers/IO/usb.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/usbkbd.c -o kernel/drivers/IO/usbkbd.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/pic.c -o kernel/drivers/IO/pic.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/pit.c -o kernel/drivers/IO/pit.o
-	$(CC) $(CFLAGS) -c kernel/drivers/IO/pci.c -o kernel/drivers/IO/pci.o
-	$(CC) $(CFLAGS) -c kernel/drivers/Net/netstack.c -o kernel/drivers/Net/netstack.o
-	$(CC) $(CFLAGS) -c kernel/drivers/Net/e1000.c -o kernel/drivers/Net/e1000.o
 
 	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
-	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
-	    kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
-	    kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
-	    kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
-	    kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o \
-            kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
-            kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
     src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
     user/libc/libc.o -o kernel.bin
 
@@ -153,34 +142,31 @@ kernel: libc agents bins
 boot:
 	make -C boot
 
-disk.img: boot kernel agents bins
+disk.img: boot kernel agents bins modules
 	dd if=/dev/zero of=disk.img bs=1M count=64
 	mkfs.vfat -F 32 disk.img
 	mmd -i disk.img ::/EFI
 	mmd -i disk.img ::/EFI/BOOT
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img O2.bin ::/
-	mcopy -i disk.img n2.bin ::/
-	mmd -i disk.img ::/agents || true
+        mcopy -i disk.img n2.bin ::/
+        mmd -i disk.img ::/agents || true
 	$(foreach b,$(AGENT_BINS), mcopy -i disk.img $(b) ::/agents/$(notdir $(b));)
-	mmd -i disk.img ::/bin || true
+        mmd -i disk.img ::/bin || true
 	$(foreach b,$(BIN_BINS), mcopy -i disk.img $(b) ::/bin/$(notdir $(b));)
+        mmd -i disk.img ::/modules || true
+        mcopy -i disk.img out/modules/hello.mo2 ::/modules/hello.mo2
 
 # ===== utility =====
 clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
 	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
             kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
-	    kernel/drivers/IO/ps2.o kernel/drivers/IO/keyboard.o \
-	    kernel/drivers/IO/mouse.o kernel/drivers/IO/serial.o \
-	    kernel/drivers/IO/video.o kernel/drivers/IO/tty.o \
-            kernel/drivers/IO/block.o kernel/drivers/IO/sata.o kernel/drivers/IO/usb.o kernel/drivers/IO/usbkbd.o \
-            kernel/drivers/IO/pci.o kernel/drivers/IO/pic.o kernel/drivers/IO/pit.o \
             kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o \
-            kernel/drivers/Net/netstack.o kernel/drivers/Net/e1000.o \
             $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
             src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
-            user/rt/rt0_user.o user/rt/rt0_agent.o
+            user/rt/rt0_user.o user/rt/rt0_agent.o \
+            nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2
 	rm -rf out
 	make -C boot clean
 
