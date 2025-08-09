@@ -4,7 +4,8 @@
 #include "../../user/libc/libc.h"     // printf, memset, etc.
 #include <stdint.h>
 #include "../arch/CPU/smp.h"
-#include <stdio.h>   // for printf fallback if no kprintf
+
+extern int kprintf(const char *fmt, ...);
 
 // If you have a real kprintf, include its header instead of this macro.
 // e.g. #include "../Console/kprintf.h"
