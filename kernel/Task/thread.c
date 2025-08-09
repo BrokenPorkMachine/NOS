@@ -490,4 +490,5 @@ void threads_init(void) {
     ipc_grant(&init_queue,  init->id, IPC_CAP_SEND | IPC_CAP_RECV);
 
     // main_thread already installed in threads_early_init
+    thread_yield();
 }
