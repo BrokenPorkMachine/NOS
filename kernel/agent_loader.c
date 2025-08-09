@@ -1,7 +1,7 @@
 // kernel/agent_loader.c
 #include "agent_loader.h"
 #include "agent.h"
-#include "../Task/thread.h"
+#include "Task/thread.h"
 #include "../../user/libc/libc.h"
 #include <stdint.h>
 #include <nosm.h>
