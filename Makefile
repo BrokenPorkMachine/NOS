@@ -21,6 +21,7 @@ AGENT_DIRS_NONEMPTY := $(AGENT_DIRS)
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
 AGENT_ELFS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
 AGENT_BINS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).bin)
+AGENT_BINS  := $(filter-out out/agents/init.bin,$(AGENT_BINS)) out/agents/init.mo2
 AGENT_C_SRCS := $(foreach d,$(AGENT_DIRS_NONEMPTY),$(wildcard $(d)/*.c))
 AGENT_OBJS   := $(patsubst %.c,%.o,$(AGENT_C_SRCS))
 
@@ -39,6 +40,9 @@ out/agents/$(1).bin: out/agents/$(1).elf
 	cp $$< $$@
 endef
 $(foreach n,$(AGENT_NAMES),$(eval $(call MAKE_AGENT_RULES,$(n))))
+
+out/agents/init.mo2: out/agents/init.elf
+	cp $< $@
 
 agents: $(AGENT_ELFS) $(AGENT_BINS)
 
@@ -109,6 +113,8 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/proc_launch.c -o kernel/proc_launch.o
 	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
+	xxd -i out/agents/init.mo2 | \
+	sed 's/out_agents_init_mo2/init_bin/g; s/out_agents_init_mo2_len/init_bin_len/' > kernel/init_bin.h
 	$(CC) $(CFLAGS) -c kernel/stubs.c -o kernel/stubs.o
 	$(CC) $(CFLAGS) -c nosm/drivers/IO/serial.c -o nosm/drivers/IO/serial.o
 # Linked-in security gate + core agents:
