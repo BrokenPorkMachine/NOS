@@ -5,6 +5,20 @@
 #include <time.h>
 #include <stdarg.h>
 
+// -------- String safety guards (prevent #PF on bad pointers) --------
+static inline int __nitros_is_canonical_ptr(const void *p) {
+    uintptr_t x = (uintptr_t)p;
+    return ((x >> 48) == 0) || ((x >> 48) == 0xFFFF);
+}
+// limit any single string walk; 1MB is generous and prevents runaways
+#ifndef NITROS_STR_MAX
+#define NITROS_STR_MAX (1u<<20)
+#endif
+static inline size_t __nitros_safe_strnlen(const char *s, size_t max) {
+    if (!s || !__nitros_is_canonical_ptr(s)) return 0;
+    size_t n = 0; while (n < max) { char c = s[n]; if (!c) break; n++; } return n;
+}
+
 // ---- Your kernel-mode recursive spinlock mutex ----
 extern uint32_t thread_self(void);
 // Provide a weak default implementation for unit tests
@@ -79,9 +93,12 @@ int memcmp(const void *s1, const void *s2, size_t n) {
 }
 
 size_t strlen(const char *s) {
-    size_t len = 0;
-    while (s[len]) len++;
-    return len;
+    return __nitros_safe_strnlen(s, NITROS_STR_MAX);
+}
+
+size_t strnlen(const char *s, size_t max) {
+    if (max > NITROS_STR_MAX) max = NITROS_STR_MAX;
+    return __nitros_safe_strnlen(s, max);
 }
 
 char *strncpy(char *dest, const char *src, size_t n) {
@@ -92,7 +109,8 @@ char *strncpy(char *dest, const char *src, size_t n) {
 }
 
 size_t strlcpy(char *dst, const char *src, size_t size) {
-    size_t srclen = strlen(src);
+    size_t srclen = __nitros_safe_strnlen(src, NITROS_STR_MAX);
+    if (!__nitros_is_canonical_ptr(dst) || size == 0) return srclen;
     if (size) {
         size_t copylen = (srclen >= size) ? size - 1 : srclen;
         memcpy(dst, src, copylen);
@@ -102,15 +120,32 @@ size_t strlcpy(char *dst, const char *src, size_t size) {
 }
 
 int strcmp(const char *s1, const char *s2) {
-    while (*s1 && (*s1 == *s2)) { s1++; s2++; }
-    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+    size_t n1 = __nitros_safe_strnlen(s1, NITROS_STR_MAX);
+    size_t n2 = __nitros_safe_strnlen(s2, NITROS_STR_MAX);
+    size_t n  = (n1 < n2 ? n1 : n2);
+    for (size_t i = 0; i < n; ++i) {
+        unsigned char a = (unsigned char)s1[i];
+        unsigned char b = (unsigned char)s2[i];
+        if (a != b) return (int)a - (int)b;
+    }
+    if (n1 == n2) return 0;
+    return (n1 < n2) ? -1 : 1;
 }
 
 int strncmp(const char *s1, const char *s2, size_t n) {
-    for (size_t i = 0; i < n; ++i)
-        if (s1[i] != s2[i] || !s1[i] || !s2[i])
-            return (unsigned char)s1[i] - (unsigned char)s2[i];
-    return 0;
+    if (!n) return 0;
+    size_t cap = (n > NITROS_STR_MAX) ? NITROS_STR_MAX : n;
+    size_t n1 = __nitros_safe_strnlen(s1, cap);
+    size_t n2 = __nitros_safe_strnlen(s2, cap);
+    size_t m  = (n1 < n2 ? n1 : n2);
+    for (size_t i = 0; i < m; ++i) {
+        unsigned char a = (unsigned char)s1[i];
+        unsigned char b = (unsigned char)s2[i];
+        if (a != b) return (int)a - (int)b;
+    }
+    if (m == cap) return 0;        // equal up to cap
+    if (n1 == n2) return 0;        // both ended
+    return (n1 < n2) ? -1 : 1;
 }
 
 void *memchr(const void *s, int c, size_t n) {
@@ -159,7 +194,8 @@ int snprintf(char *str, size_t size, const char *fmt, ...) {
         ++p;
         if (*p == 's') {
             const char *s = va_arg(ap, const char *);
-            while (*s && pos + 1 < size) str[pos++] = *s++;
+            size_t slen = __nitros_safe_strnlen(s, NITROS_STR_MAX);
+            while (slen-- && pos + 1 < size) { str[pos++] = *s++; }
         } else if (*p == 'd') {
             char tmp[32];
             itoa_dec(tmp, sizeof(tmp), va_arg(ap, int));
@@ -514,4 +550,3 @@ __attribute__((weak)) int printf(const char *fmt, ...) {
     (void)fmt;
     return 0;
 }
-
