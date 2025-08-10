@@ -12,6 +12,8 @@
 int clock_gettime(int clk_id, struct timespec *tp);
 #endif
 
+void serial_putc(char c);  // <-- ADD THIS
+
 // ========== MUTEX SUPPORT ==========
 typedef struct {
     volatile int lock;
