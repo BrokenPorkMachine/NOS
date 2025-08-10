@@ -96,7 +96,13 @@ void serial_vprintf(const char *fmt, va_list ap) {
         }
 
         int long_flag = 0;
-        if (*p == 'l' || *p == 'z') {
+        if (*p == 'l') {
+            long_flag = 1;
+            ++p;
+            if (*p == 'l') {
+                ++p;
+            }
+        } else if (*p == 'z') {
             long_flag = 1;
             ++p;
         }
