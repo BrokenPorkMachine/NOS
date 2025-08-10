@@ -32,9 +32,19 @@ static inline bool user_ptr_valid(const void *p, size_t n) {
     return range_add_ok(a, n) && is_user_addr(a) && range_is_mapped_user(a, n);
 }
 
+/*
+ * Guard against non-canonical addresses before they make it to the MMU.
+ * A pointer is considered valid if its high bits form either the low or high
+ * canonical pattern (all zeros or all ones).  Previously the macro treated any
+ * pointer with the high bits set (e.g. kernel addresses) as non-canonical,
+ * which caused legitimate addresses to be flagged and still allowed truly
+ * malformed pointers through.  This version defers to is_canonical_u64() for
+ * the actual check, trapping only when the pointer is outside the canonical
+ * range.
+ */
 #define CANONICAL_GUARD(p) do { \
     uintptr_t __p = (uintptr_t)(p); \
-    if ((__p & HIGH_MASK) == HIGH_MASK && __p <= 0xFFFFFFFFFFFFFFFFULL) { \
+    if (!is_canonical_u64(__p)) { \
         __kernel_panic_noncanonical(__p, __FILE__, __LINE__); \
     } \
 } while (0)
