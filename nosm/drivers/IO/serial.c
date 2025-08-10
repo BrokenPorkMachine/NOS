@@ -38,6 +38,16 @@ void serial_puts(const char *s) {
     }
 }
 
+void serial_putsn(const char *s, size_t n) {
+    if (!s)
+        return;
+    for (size_t i = 0; i < n && s[i]; ++i) {
+        if (s[i] == '\n')
+            serial_write('\r');
+        serial_write(s[i]);
+    }
+}
+
 void serial_puthex(uint32_t value) {
     char buf[9];
     for (int i = 7; i >= 0; --i) {
