@@ -37,6 +37,9 @@ typedef struct context_frame {
     uint64_t arg_rdi;
 } context_frame_t;
 
+_Static_assert(sizeof(context_frame_t) == 80,
+               "context_frame_t layout mismatch");
+
 static inline uintptr_t align16(uintptr_t v){ return v & ~0xFULL; }
 
 static thread_t *zombie_list = NULL;
@@ -162,7 +165,10 @@ uint64_t schedule_from_isr(uint64_t *old_rsp){
 
 __attribute__((noreturn)) void thread_exit(void){ thread_t *t=thread_current(); if(t) t->state=THREAD_EXITED; schedule(); __builtin_unreachable(); }
 __attribute__((noreturn,used)) static void thread_start(void(*f)(void)){ kprintf("[thread] id=%u first timeslice\n", thread_self()); f(); thread_exit(); }
-static void __attribute__((naked,noreturn)) thread_entry(void){ __asm__ volatile("pop %rdi\ncall thread_start\njmp .\n"); }
+static void __attribute__((naked,noreturn,used))
+thread_entry(void){
+    __asm__ volatile("pop %rdi\ncall thread_start\njmp .\n");
+}
 
 thread_t *thread_create_with_priority(void(*func)(void), int priority){
     if(priority<MIN_PRIORITY) priority=MIN_PRIORITY;
@@ -176,8 +182,8 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
     context_frame_t *cf=(context_frame_t*)(top-sizeof(*cf));
     memset(cf, 0, sizeof(*cf));
     cf->rflags = 0x202;             // IF=1
-    cf->rip    = (uint64_t)thread_entry;
-    cf->arg_rdi = (uint64_t)func;   // entry function to call
+    cf->rip    = (uintptr_t)thread_entry;
+    cf->arg_rdi = (uintptr_t)func;  // entry function to call
     t->rsp=(uint64_t)cf; t->func=func; t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
     t->state=THREAD_READY; t->started=0; t->priority=priority; t->next=NULL;
     kprintf("[thread] spawn id=%d entry=%p stack=%p-%p prio=%d\n", t->id, func, t->stack, t->stack+STACK_SIZE, priority);
