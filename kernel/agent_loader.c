@@ -9,6 +9,7 @@
 #include <string.h>   // memcmp, memchr, strstr, strlen, strcmp, snprintf
 #include <limits.h>   // UINT32_MAX
 #include <nosm.h>
+#include <elf.h>
 
 extern int kprintf(const char *fmt, ...);
 
@@ -229,15 +230,63 @@ static int load_agent_macho2_impl(const void *image,size_t size,const char *path
 }
 
 static int load_agent_elf_impl(const void *image,size_t size,const char *path,int prio){
-    (void)path;
-    char manifest[512];
-    if (extract_manifest_elf(image,size,manifest,sizeof(manifest))==0){
-        char name[64]={0};
-        json_extract_string(manifest,"name",name,sizeof(name));
-        symbols_add(name[0]?name:"(anon)",(uintptr_t)image,size);
-        return register_and_spawn_from_manifest(manifest, path, prio);
+    if (!image || size < sizeof(Elf64_Ehdr))
+        return -1;
+
+    const Elf64_Ehdr *eh = (const Elf64_Ehdr *)image;
+    if (memcmp(eh->e_ident, ELFMAG, SELFMAG) != 0 || eh->e_ident[EI_CLASS] != ELFCLASS64)
+        return -1;
+    if (eh->e_phoff == 0 || eh->e_phnum == 0)
+        return -1;
+
+    const Elf64_Phdr *ph = (const Elf64_Phdr *)((const uint8_t *)image + eh->e_phoff);
+    uint64_t min_vaddr = UINT64_MAX, max_vaddr = 0;
+    for (uint16_t i = 0; i < eh->e_phnum; ++i) {
+        if (ph[i].p_type != PT_LOAD)
+            continue;
+        if (ph[i].p_vaddr < min_vaddr)
+            min_vaddr = ph[i].p_vaddr;
+        uint64_t end = ph[i].p_vaddr + ph[i].p_memsz;
+        if (end > max_vaddr)
+            max_vaddr = end;
     }
-    return -1;
+    if (min_vaddr == UINT64_MAX || max_vaddr <= min_vaddr)
+        return -1;
+
+    size_t memsz = (size_t)(max_vaddr - min_vaddr);
+    uint8_t *mem = (uint8_t *)malloc(memsz);
+    if (!mem)
+        return -1;
+    memset(mem, 0, memsz);
+
+    for (uint16_t i = 0; i < eh->e_phnum; ++i) {
+        if (ph[i].p_type != PT_LOAD)
+            continue;
+        if (ph[i].p_offset + ph[i].p_filesz > size) {
+            free(mem);
+            return -1;
+        }
+        memcpy(mem + (ph[i].p_vaddr - min_vaddr),
+               (const uint8_t *)image + ph[i].p_offset,
+               ph[i].p_filesz);
+    }
+
+    uint64_t entry = (uint64_t)(mem + (eh->e_entry - min_vaddr));
+
+    char manifest[512];
+    if (extract_manifest_elf(image, size, manifest, sizeof(manifest)) != 0) {
+        free(mem);
+        return -1;
+    }
+
+    char entry_name[64] = {0};
+    json_extract_string(manifest, "entry", entry_name, sizeof(entry_name));
+    if (!entry_name[0])
+        snprintf(entry_name, sizeof(entry_name), "agent_main");
+
+    agent_loader_register_entry(entry_name, (agent_entry_t)entry);
+    symbols_add(entry_name, (uintptr_t)mem, memsz);
+    return register_and_spawn_from_manifest(manifest, path, prio);
 }
 
 static int load_agent_macho_impl(const void *image,size_t size,const char *path,int prio){
