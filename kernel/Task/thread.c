@@ -29,22 +29,12 @@ extern void login_server(ipc_queue_t*, uint32_t);    // stubbed in stubs.c
 
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
 
-typedef struct context_frame {
-    uint64_t r15, r14, r13, r12, rbx, rbp;
-    uint64_t rflags;
-    uint64_t rax_dummy;
-    uint64_t rip;
-    uint64_t arg_rdi;
-} context_frame_t;
-
-_Static_assert(sizeof(context_frame_t) == 80,
-               "context_frame_t layout mismatch");
 
 static inline uintptr_t align16(uintptr_t v){ return v & ~0xFULL; }
 
 static thread_t *zombie_list = NULL;
 static thread_t thread_pool[MAX_KERNEL_THREADS];
-static char     stack_pool[MAX_KERNEL_THREADS][STACK_SIZE];
+static char     stack_pool[MAX_KERNEL_THREADS][STACK_SIZE] __attribute__((aligned(16)));
 
 thread_t *current_cpu[MAX_CPUS] = {0};
 static thread_t *tail_cpu[MAX_CPUS] = {0};
@@ -65,8 +55,13 @@ static inline int thread_ptr_ok(thread_t *t) {
 ipc_queue_t fs_queue, pkg_queue, upd_queue, init_queue, regx_queue, nosm_queue;
 int timer_ready = 0;
 
+#ifdef UNIT_TEST
+static inline uint64_t irq_save_disable(void){ return 0; }
+static inline void irq_restore(uint64_t rf){ (void)rf; }
+#else
 static inline uint64_t irq_save_disable(void){ uint64_t rf; __asm__ volatile("pushfq; pop %0; cli":"=r"(rf)::"memory"); return rf; }
 static inline void irq_restore(uint64_t rf){ __asm__ volatile("push %0; popfq"::"r"(rf):"memory"); }
+#endif
 
 static void enable_sse(void){
 #if defined(__x86_64__)
@@ -170,6 +165,10 @@ thread_entry(void){
     __asm__ volatile("pop %rdi\ncall thread_start\njmp .\n");
 }
 
+#ifdef UNIT_TEST
+uintptr_t thread_debug_get_entry_trampoline(void) { return (uintptr_t)thread_entry; }
+#endif
+
 thread_t *thread_create_with_priority(void(*func)(void), int priority){
     if(priority<MIN_PRIORITY) priority=MIN_PRIORITY;
     if(priority>MAX_PRIORITY) priority=MAX_PRIORITY;
@@ -178,13 +177,19 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
     if(!t) return NULL;
     if((uintptr_t)t<0x1000) return NULL;
     memset(t,0,sizeof(thread_t)); t->magic=THREAD_MAGIC; t->stack=stack_pool[idx];
-    uintptr_t top=align16((uintptr_t)t->stack+STACK_SIZE);
-    context_frame_t *cf=(context_frame_t*)(top-sizeof(*cf));
-    memset(cf, 0, sizeof(*cf));
-    cf->rflags = 0x202;             // IF=1
-    cf->rip    = (uintptr_t)thread_entry;
-    cf->arg_rdi = (uintptr_t)func;  // entry function to call
-    t->rsp=(uint64_t)cf; t->func=func; t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
+    uintptr_t top = align16((uintptr_t)t->stack + STACK_SIZE);
+    uint64_t *sp = (uint64_t *)top;
+    *(--sp) = (uint64_t)func;           // argument for thread_entry (rdi)
+    *(--sp) = (uint64_t)thread_entry;   // return address for first ret
+    *(--sp) = 0;                        // rax placeholder
+    *(--sp) = 0x202;                    // rflags with IF set
+    *(--sp) = 0;                        // rbp
+    *(--sp) = 0;                        // rbx
+    *(--sp) = 0;                        // r12
+    *(--sp) = 0;                        // r13
+    *(--sp) = 0;                        // r14
+    *(--sp) = 0;                        // r15
+    t->rsp=(uint64_t)sp; t->func=func; t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
     t->state=THREAD_READY; t->started=0; t->priority=priority; t->next=NULL;
     kprintf("[thread] spawn id=%d entry=%p stack=%p-%p prio=%d\n", t->id, func, t->stack, t->stack+STACK_SIZE, priority);
     uint64_t rf=irq_save_disable(); int cpu=smp_cpu_index(); rq_insert_tail(cpu,t); irq_restore(rf); return t;
