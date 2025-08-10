@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "../../kernel/Task/thread.h"
 #include "../../kernel/arch/CPU/lapic.h"
+#include "drivers/IO/serial.h"
 
 // Kernel console
 extern int kprintf(const char *fmt, ...);
@@ -26,7 +27,7 @@ static inline uint64_t rdtsc(void){
 
 static void watchdog_thread(void){
     for(;;){
-        kprintf(".");
+        serial_write('.');
         for(volatile uint64_t i=0;i<1000000;i++) __asm__ volatile("pause");
         thread_yield();
     }
