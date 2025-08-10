@@ -15,7 +15,7 @@ __attribute__((used, section("\"__O2INFO,__manifest\"")))
 static const char mo2_manifest[] =
 "{\n"
 "  \"name\": \"init\",\n"
-"  \"type\": \"service_launcher\",\n"
+"  \"type\": 4,\n"
 "  \"version\": \"1.0.0\",\n"
 "  \"entry\": \"agent_main\"\n"
 "}\n";
