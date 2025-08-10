@@ -1,5 +1,4 @@
 #include "libc.h"
-#include "printf.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <time.h>
@@ -462,9 +461,9 @@ time_t time(time_t *t) {
 // ================== FILE I/O (NOSFS) ===================
 // Minimal syscall-backed FILE I/O implementation.
 
-typedef struct FILE {
+struct FILE {
     int fd;
-} FILE;
+};
 
 #define O_RDONLY 0
 #define O_WRONLY 1

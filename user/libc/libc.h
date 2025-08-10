@@ -31,7 +31,10 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex);
 // ===================
 // FILE API
 // ===================
+#ifndef __FILE_defined
 typedef struct FILE FILE;
+#define __FILE_defined 1
+#endif
 
 // Basic file I/O functions (implemented in your libc.c)
 FILE   *fopen(const char *path, const char *mode);
