@@ -5,6 +5,7 @@
 #include "../../kernel/Task/thread.h"
 #include "../../kernel/arch/CPU/lapic.h"
 #include "drivers/IO/serial.h"
+#include "uaccess.h"
 extern void serial_putc(char c);  // <-- ADD THIS
 
 // Kernel console
@@ -88,26 +89,29 @@ static int regx_policy_gate(const char *path,
 {
     (void)version;
 
+    // Validate pointers before any string ops.  Guard entire potential range so
+    // safe_strnlen/strcmp won't page-fault on bogus kernel or user addresses.
+    if (!user_ptr_valid(path, 256) ||
+        !user_ptr_valid(name, 32) ||
+        !user_ptr_valid(entry, 64) ||
+        (capabilities && !user_ptr_valid(capabilities, 128))) {
+        kprintf("[regx] deny: bad pointer(s) path=%p name=%p entry=%p caps=%p\n",
+                path, name, entry, capabilities);
+        return 0;
+    }
+
     uint32_t tid = thread_self();
     void *caller = __builtin_return_address(0);
     uint64_t ts = rdtsc();
 
     // De-dupe "init" spammy log across very short window
     static _Atomic uint64_t last_init_log = 0;
-    if (name && is_canonical(name) && strcmp(name, "init") == 0) {
+    if (strcmp(name, "init") == 0) {
         uint64_t prev = atomic_load(&last_init_log);
         if (ts - prev > 1000000ULL) {
             kprintf("[regx] allow call tid=%u pc=%p ts=%llu\n", tid, caller, ts);
             atomic_store(&last_init_log, ts);
         }
-    }
-
-    // Validate pointers before any string ops
-    if (!is_canonical(path) || !is_canonical(name) || !is_canonical(entry) ||
-        (capabilities && !is_canonical(capabilities))) {
-        kprintf("[regx] deny: bad pointer(s) path=%p name=%p entry=%p caps=%p\n",
-                path, name, entry, capabilities);
-        return 0;
     }
 
     size_t path_len = safe_strnlen(path, 256);
