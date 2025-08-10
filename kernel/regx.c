@@ -41,6 +41,19 @@ static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
 static size_t regx_count = 0;
 static uint64_t regx_next_id = 1;
 
+static inline void strnzcpy(char *dst, const char *src, size_t cap) {
+    if (!dst || cap == 0)
+        return;
+    if (!src) {
+        dst[0] = 0;
+        return;
+    }
+    size_t i = 0;
+    for (; i + 1 < cap && src[i]; ++i)
+        dst[i] = src[i];
+    dst[i] = 0;
+}
+
 uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id) {
     CANONICAL_GUARD(m);
     lock_acquire("registry");
@@ -48,11 +61,25 @@ uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id) {
         lock_release("registry");
         return 0;
     }
+    for (size_t i = 0; i < regx_count; ++i) {
+        if (regx_registry[i].manifest.type == m->type &&
+            strncmp(regx_registry[i].manifest.name, m->name,
+                    sizeof(m->name)) == 0) {
+            lock_release("registry");
+            return regx_registry[i].id;
+        }
+    }
     kprintf("[regx] entries before=%zu\n", regx_count);
     regx_entry_t *e = &regx_registry[regx_count++];
+    memset(e, 0, sizeof(*e));
     e->id = regx_next_id++;
     e->parent_id = parent_id;
-    e->manifest = *m;
+    strnzcpy(e->manifest.name, m->name, sizeof(e->manifest.name));
+    e->manifest.type = m->type;
+    strnzcpy(e->manifest.version, m->version, sizeof(e->manifest.version));
+    strnzcpy(e->manifest.abi, m->abi, sizeof(e->manifest.abi));
+    strnzcpy(e->manifest.capabilities, m->capabilities,
+             sizeof(e->manifest.capabilities));
     kprintf("[regx] entries after=%zu\n", regx_count);
     lock_release("registry");
     return e->id;

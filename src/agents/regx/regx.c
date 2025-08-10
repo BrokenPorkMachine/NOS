@@ -1,6 +1,7 @@
 // src/agents/regx/regx.c
 #include "../../user/libc/libc.h"   // adjust include if your libc path differs when linked into kernel
 #include <stdint.h>
+#include <stdatomic.h>
 #include "../../kernel/Task/thread.h"
 #include "../../kernel/arch/CPU/lapic.h"
 #include "drivers/IO/serial.h"
@@ -23,6 +24,17 @@ extern int  agent_loader_run_from_path(const char *path, int prio);
 static inline uint64_t rdtsc(void){
     uint32_t lo,hi; __asm__ volatile("rdtsc":"=a"(lo),"=d"(hi));
     return ((uint64_t)hi<<32)|lo;
+}
+
+static _Atomic int init_spawned = 0;
+
+static void spawn_init_once(void) {
+    int expected = 0;
+    if (!atomic_compare_exchange_strong(&init_spawned, &expected, 1))
+        return;
+    kprintf("[regx] launching init (boot:init:regx)\n");
+    if (agent_loader_run_from_path("/agents/init.bin", 200) < 0)
+        kprintf("[regx] failed to launch /agents/init.bin\n");
 }
 
 static void watchdog_thread(void){
@@ -90,7 +102,13 @@ static int regx_policy_gate(const char *path,
         }
     }
 
-    kprintf("[regx] allow: %s (entry=%s caps=%s)\n", name, entry, capabilities?capabilities:"");
+    serial_puts("[regx] allow: ");
+    serial_puts(name);
+    serial_puts(" (entry=");
+    serial_puts(entry);
+    serial_puts(" caps=");
+    serial_putsn(capabilities ? capabilities : "", 64);
+    serial_puts(")\n");
     return 1;
 }
 
@@ -102,10 +120,7 @@ void regx_main(void){
 
     // Kick off init as standalone; it will load the rest (subject to gate)
     thread_create_with_priority(watchdog_thread, 250);
-    kprintf("[regx] launching init (boot:init:regx)\n");
-    if (agent_loader_run_from_path("/agents/init.bin", 200) < 0) {
-        kprintf("[regx] failed to launch /agents/init.bin\n");
-    }
+    spawn_init_once();
 
     // Idle loop; yield so other agents can run
     for(;;) thread_yield();
