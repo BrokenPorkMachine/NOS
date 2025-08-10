@@ -64,8 +64,11 @@ static void spawn_init_once(void) {
     if (!atomic_compare_exchange_strong(&init_spawned, &expected, 1))
         return;
     kprintf("[regx] launching init (boot:init:regx)\n");
-    if (agent_loader_run_from_path("/agents/init.mo2", 200) < 0)
-        kprintf("[regx] failed to launch /agents/init.mo2\n");
+    int rc = agent_loader_run_from_path("/agents/init.mo2", 200);
+    if (rc < 0)
+        kprintf("[regx] failed to launch /agents/init.mo2 rc=%d\n", rc);
+    else
+        kprintf("[regx] init agent launched rc=%d\n", rc);
 }
 
 static void watchdog_thread(void){
