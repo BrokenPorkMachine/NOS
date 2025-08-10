@@ -58,15 +58,27 @@ static const void *memmem_local(const void *hay, size_t haylen,
 /*                             Minimal JSON helpers                          */
 /* ------------------------------------------------------------------------- */
 
+static const char *skip_ws(const char *p){
+    while(*p==' '||*p=='\t'||*p=='\n'||*p=='\r') p++;
+    return p;
+}
+
 static int json_extract_string(const char *json, const char *key, char *out, size_t out_sz){
     if (!json || !key || !out || out_sz == 0) return -1;
     char pattern[64];
-    snprintf(pattern,sizeof(pattern),"\"%s\":\"",key);
+    snprintf(pattern,sizeof(pattern),"\"%s\"",key);
     const char *p = strstr(json,pattern);
     if(!p) return -1;
     p += strlen(pattern);
+    p = skip_ws(p);
+    if(*p!=':') return -1;
+    p++;
+    p = skip_ws(p);
+    if(*p!='"') return -1;
+    p++;
     size_t i=0;
     while(*p && *p!='"' && i<out_sz-1) out[i++]=*p++;
+    if(*p!='"') return -1;
     out[i]=0;
     return 0;
 }
@@ -74,10 +86,14 @@ static int json_extract_string(const char *json, const char *key, char *out, siz
 static int json_extract_int(const char *json, const char *key){
     if (!json || !key) return -1;
     char pattern[64];
-    snprintf(pattern,sizeof(pattern),"\"%s\":",key);
+    snprintf(pattern,sizeof(pattern),"\"%s\"",key);
     const char *p = strstr(json,pattern);
     if(!p) return -1;
     p += strlen(pattern);
+    p = skip_ws(p);
+    if(*p!=':') return -1;
+    p++;
+    p = skip_ws(p);
     return (int)strtol(p,NULL,10);
 }
 
