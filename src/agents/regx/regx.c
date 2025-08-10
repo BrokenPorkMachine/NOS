@@ -2,6 +2,7 @@
 #include "../../user/libc/libc.h"   // snprintf, strcmp, etc.
 #include <stdint.h>
 #include <stdatomic.h>
+#include <uaccess.h>
 #include "../../kernel/Task/thread.h"
 #include "../../kernel/arch/CPU/lapic.h"
 #include "drivers/IO/serial.h"
@@ -28,14 +29,9 @@ static inline uint64_t rdtsc(void){
     return ((uint64_t)hi<<32)|lo;
 }
 
-static inline int is_canonical(const void *p) {
-    uintptr_t x = (uintptr_t)p;
-    return ((x >> 48) == 0) || ((x >> 48) == 0xFFFF);
-}
-
-// Bounded strlen that never scans past `max`; refuses non-canonical pointers.
+// Bounded strlen that never scans past `max`; refuses invalid pointers.
 static size_t safe_strnlen(const char *s, size_t max) {
-    if (!s || !is_canonical(s)) return 0;
+    if (!s || !user_ptr_valid(s, max)) return 0;
     size_t n = 0;
     while (n < max) { char c = s[n]; if (!c) break; n++; }
     return n;
@@ -44,7 +40,7 @@ static size_t safe_strnlen(const char *s, size_t max) {
 // Always NUL-terminates; never reads more than cap-1 bytes.
 static void strnzcpy_cap(char *dst, const char *src, size_t cap) {
     if (!dst || cap == 0) return;
-    if (!src || !is_canonical(src)) { dst[0] = 0; return; }
+    if (!src || !user_ptr_valid(src, cap - 1)) { dst[0] = 0; return; }
     size_t n = safe_strnlen(src, cap - 1);
     for (size_t i = 0; i < n; ++i) dst[i] = src[i];
     dst[n] = 0;
@@ -94,7 +90,7 @@ static int regx_policy_gate(const char *path,
 
     // De-dupe "init" spammy log across very short window
     static _Atomic uint64_t last_init_log = 0;
-    if (name && is_canonical(name) && strcmp(name, "init") == 0) {
+    if (name && user_ptr_valid(name, 5) && strcmp(name, "init") == 0) {
         uint64_t prev = atomic_load(&last_init_log);
         if (ts - prev > 1000000ULL) {
             kprintf("[regx] allow call tid=%u pc=%p ts=%llu\n", tid, caller, ts);
@@ -103,8 +99,9 @@ static int regx_policy_gate(const char *path,
     }
 
     // Validate pointers before any string ops
-    if (!is_canonical(path) || !is_canonical(name) || !is_canonical(entry) ||
-        (capabilities && !is_canonical(capabilities))) {
+    if (!user_ptr_valid(path, 1) || !user_ptr_valid(name, 1) ||
+        !user_ptr_valid(entry, 1) ||
+        (capabilities && !user_ptr_valid(capabilities, 1))) {
         kprintf("[regx] deny: bad pointer(s) path=%p name=%p entry=%p caps=%p\n",
                 path, name, entry, capabilities);
         return 0;
