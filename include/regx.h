@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #define REGX_MAX_ENTRIES 256
-
+void serial_putc(char c);
 // regx.h
 typedef enum {
     REGX_TYPE_UNSPEC = 0,
