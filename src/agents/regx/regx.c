@@ -5,7 +5,7 @@
 #include "../../kernel/Task/thread.h"
 #include "../../kernel/arch/CPU/lapic.h"
 #include "drivers/IO/serial.h"
-void serial_putc(char c);  // <-- ADD THIS
+extern void serial_putc(char c);  // <-- ADD THIS
 
 // Kernel console
 extern int kprintf(const char *fmt, ...);
