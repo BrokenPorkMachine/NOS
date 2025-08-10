@@ -30,7 +30,7 @@ int block_write(uint32_t lba, const uint8_t *buf, size_t count) { (void)lba; (vo
 int fs_read_all(const char *path, void **out, size_t *out_sz) {
     if (!path || !out || !out_sz)
         return -1;
-    if (strcmp(path, "/agents/init.bin") == 0) {
+    if (strcmp(path, "/agents/init.mo2") == 0) {
         *out = (void *)init_bin;
         *out_sz = init_bin_len;
         return 0;

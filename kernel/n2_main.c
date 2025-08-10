@@ -79,6 +79,9 @@ void n2_main(bootinfo_t *bootinfo) {
     buddy_init(bootinfo);      // replaces old pmm_init
     kheap_init();              // kernel heap backed by buddy allocator
 
+    /* Temporarily keep hardware interrupts disabled until IDT is in place */
+    __asm__ volatile("cli");
+
     // --- USB support (early, before TTY) ---
     vprint("[N2] Initializing USB stack...\r\n");
     usb_init();       // Initialize USB controller(s)

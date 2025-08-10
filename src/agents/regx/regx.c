@@ -64,8 +64,8 @@ static void spawn_init_once(void) {
     if (!atomic_compare_exchange_strong(&init_spawned, &expected, 1))
         return;
     kprintf("[regx] launching init (boot:init:regx)\n");
-    if (agent_loader_run_from_path("/agents/init.bin", 200) < 0)
-        kprintf("[regx] failed to launch /agents/init.bin\n");
+    if (agent_loader_run_from_path("/agents/init.mo2", 200) < 0)
+        kprintf("[regx] failed to launch /agents/init.mo2\n");
 }
 
 static void watchdog_thread(void){
@@ -77,7 +77,7 @@ static void watchdog_thread(void){
 }
 
 // ---- Security policy ----
-// 1) Only allow files under /agents/ with .bin suffix
+// 1) Only allow files under /agents/ with .bin or .mo2 suffix
 // 2) Require a non-empty name + entry
 // 3) Capabilities must be a subset of a small allowlist
 static int regx_policy_gate(const char *path,
@@ -115,8 +115,9 @@ static int regx_policy_gate(const char *path,
         kprintf("[regx] deny: path %s outside /agents/\n", path?path:"(null)");
         return 0;
     }
-    if (path_len < 5 || strcmp(path + (path_len - 4), ".bin") != 0) {
-        kprintf("[regx] deny: path %s not .bin\n", path);
+    if (path_len < 5 || (strcmp(path + (path_len - 4), ".bin") != 0 &&
+                         strcmp(path + (path_len - 4), ".mo2") != 0)) {
+        kprintf("[regx] deny: path %s not .bin/.mo2\n", path);
         return 0;
     }
     if (!name || !name[0] || !entry || !entry[0]) {
@@ -163,10 +164,9 @@ void regx_main(void){
     // Install gate so future agent loads are mediated
     agent_loader_set_gate(regx_policy_gate);
 
-    // Kick off init (one-shot). Watchdog just keeps the core responsive.
-    thread_create_with_priority(watchdog_thread, 250);
+    // Kick off init agent once we're online
     spawn_init_once();
 
-    // Idle loop; yield so other agents can run
-    for(;;) thread_yield();
+    // Idle loop; halt CPU while regx waits for work
+    for(;;) __asm__ volatile("hlt");
 }
