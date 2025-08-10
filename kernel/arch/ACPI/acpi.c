@@ -164,7 +164,7 @@ void acpi_init(bootinfo_t *bootinfo) {
         if (entry_size == 8)
             addr = ((uint64_t*)((uintptr_t)sdt + sizeof(*sdt)))[i];
         else
-            addr = ((uint32_t*)((uintptr_t)sdt + sizeof(*sdt)))[i];
+            addr = (uint64_t)(((uint32_t*)((uintptr_t)sdt + sizeof(*sdt)))[i]);
 
         if (!addr) continue;
 
@@ -184,7 +184,7 @@ void acpi_init(bootinfo_t *bootinfo) {
         if (ACPI_SIGNATURE_EQ(hdr, "FACP")) {
             if (hdr->length >= ACPI_FADT_MIN_LEN) {
                 uint32_t dsdt32 = *(uint32_t*)((uint8_t*)hdr + ACPI_DSDT32_OFFSET);
-                uint64_t dsdt   = dsdt32;
+                uint64_t dsdt   = (uint64_t)dsdt32;
                 if (hdr->length >= ACPI_FADT_2_MIN_LEN) {
                     uint64_t dsdt64 = *(uint64_t*)((uint8_t*)hdr + ACPI_DSDT64_OFFSET);
                     if (dsdt64) dsdt = dsdt64;
@@ -201,7 +201,7 @@ void acpi_init(bootinfo_t *bootinfo) {
         /* MADT/APIC → LAPIC base and CPU list */
         else if (ACPI_SIGNATURE_EQ(hdr, "APIC")) {
             struct madt *m = (struct madt *)hdr;
-            lapic_base = (uintptr_t)m->lapic_addr; /* may be overridden by type 5 */
+            lapic_base = (uintptr_t)(uint32_t)m->lapic_addr; /* may be overridden by type 5 */
 
             uint8_t *p   = m->entries;
             uint8_t *end = ((uint8_t*)m) + m->header.length;

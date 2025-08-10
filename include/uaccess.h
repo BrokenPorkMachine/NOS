@@ -27,6 +27,11 @@ bool range_is_mapped_user(uint64_t start, size_t len) {
     return true;
 }
 
+static inline bool user_ptr_valid(const void *p, size_t n) {
+    uintptr_t a = (uintptr_t)p;
+    return range_add_ok(a, n) && is_user_addr(a) && range_is_mapped_user(a, n);
+}
+
 #define CANONICAL_GUARD(p) do { \
     uintptr_t __p = (uintptr_t)(p); \
     if ((__p & HIGH_MASK) == HIGH_MASK && __p <= 0xFFFFFFFFFFFFFFFFULL) { \
