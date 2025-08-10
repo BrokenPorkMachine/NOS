@@ -169,6 +169,8 @@ void login_server(ipc_queue_t *fs_q, uint32_t self_id)
     /* Launch NitroShell; pass NULL queues for now (keep ABI stable). */
     nsh_main(NULL, NULL, NULL, self_id);
 
-    /* nsh_main should not return; if it does, idle safely */
+    /* nsh_main should not return; in unit tests allow graceful exit */
+#ifndef LOGIN_UNIT_TEST
     for (;;) thread_yield();
+#endif
 }

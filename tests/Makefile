@@ -4,7 +4,9 @@ CFLAGS=-Wall -Wextra -std=gnu11 \
     -I../user/agents/nosfs -I../user/agents/login -I../user/agents/ftp \
     -I../user/libc -I../nosm/drivers/IO -I../nosm/drivers/Audio \
     -I../nosm/drivers/Net -I../kernel/arch/GDT
+
 LIBC_SRC=../user/libc/libc.c thread_stub.c smp_stub.c gdt_stub.c kprintf_stub.c ../kernel/uaccess.c
+
 UNIT_TESTS=test_ipc test_pmm test_login test_ftp test_login_keyboard test_net test_gdt test_nosm test_nosfs test_regx
 
 all: $(UNIT_TESTS)
@@ -17,11 +19,11 @@ test_pmm: unit/test_pmm.c ../kernel/VM/pmm_buddy.c ../kernel/VM/numa.c $(LIBC_SR
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_login: unit/test_login.c ../user/agents/login/login.c $(LIBC_SRC) ../kernel/IPC/ipc.c ../kernel/agent.c
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) -DLOGIN_UNIT_TEST $^ -o $@
 
 test_login_keyboard: unit/test_login_keyboard.c ../user/agents/login/login.c \
 ../nosm/drivers/IO/tty.c $(LIBC_SRC) ../kernel/IPC/ipc.c ../kernel/agent.c
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) -DLOGIN_UNIT_TEST $^ -o $@
 
 test_ftp: unit/test_ftp.c ../user/agents/ftp/ftp.c ../kernel/IPC/ipc.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
