@@ -65,7 +65,6 @@ static void spawn_init_once(void) {
         return;
 
     for (;;) {
-        thread_yield();
         kprintf("[regx] launching init (boot:init:regx)\n");
         int rc = agent_loader_run_from_path("/agents/init.mo2", 200);
         if (rc >= 0) {
@@ -73,6 +72,7 @@ static void spawn_init_once(void) {
             break;
         }
         kprintf("[regx] failed to launch /agents/init.mo2 rc=%d; retrying...\n", rc);
+        thread_yield();
     }
 }
 
