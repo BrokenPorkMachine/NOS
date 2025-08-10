@@ -211,10 +211,10 @@ int ipc_peek_type(ipc_queue_t *q) {
 #ifdef IPC_SMP
     size_t head = load_head(q), tail = load_tail(q);
     if (head == tail) return -1;
-    return q->msgs[tail].type;
+    return (int)q->msgs[tail].type;
 #else
     if (q->tail == q->head) return -1;
-    return q->msgs[q->tail].type;
+    return (int)q->msgs[q->tail].type;
 #endif
 }
 

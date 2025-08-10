@@ -1,6 +1,7 @@
 #include <regx.h>
 #include <string.h>
 #include "Task/thread.h"
+#include "uaccess.h"
 
 extern int kprintf(const char *fmt, ...);
 
@@ -41,6 +42,7 @@ static size_t regx_count = 0;
 static uint64_t regx_next_id = 1;
 
 uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id) {
+    CANONICAL_GUARD(m);
     lock_acquire("registry");
     if (regx_count >= REGX_MAX_ENTRIES) {
         lock_release("registry");
@@ -82,6 +84,8 @@ const regx_entry_t *regx_query(uint64_t id) {
 }
 
 size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max) {
+    CANONICAL_GUARD(sel);
+    CANONICAL_GUARD(out);
     if (!out || max == 0)
         return 0;
 

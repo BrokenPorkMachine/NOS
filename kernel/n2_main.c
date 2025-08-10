@@ -18,6 +18,7 @@
 #include "VM/pmm_buddy.h"
 #include "VM/kheap.h"
 #include "arch/CPU/lapic.h"
+#include "uaccess.h"
 
 // ... (previous kprint, strcspn_local, syscall infrastructure, sandboxing, module loading helpers, hardware/system query helpers, scheduler_loop, etc unchanged) ...
 
@@ -49,8 +50,14 @@ void n2_main(bootinfo_t *bootinfo) {
     vprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
     vprint("[N2] Booted by: ");
     const char *bl = bootinfo->bootloader_name;
-    if (bl && ((uintptr_t)bl < 0x100000000ULL)) {
-        vprint(bl);
+    if (bl) {
+        uintptr_t p = (uintptr_t)bl;
+        if (is_user_addr(p)) {
+            CANONICAL_GUARD(p);
+            vprint((const char *)p);
+        } else {
+            vprint("unknown");
+        }
     } else {
         vprint("unknown");
     }
