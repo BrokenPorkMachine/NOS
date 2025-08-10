@@ -36,10 +36,7 @@ out/agents/$(1).elf: $$(AGENT_$(1)_OBJS) user/rt/rt0_agent.o user/libc/libc.o
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
 
 out/agents/$(1).bin: out/agents/$(1).elf
-	$(OBJCOPY) -O binary \
-		--remove-section=.note.gnu.build-id \
-		--remove-section=.note.gnu.property \
-		$$< $$@
+	cp $$< $$@
 endef
 $(foreach n,$(AGENT_NAMES),$(eval $(call MAKE_AGENT_RULES,$(n))))
 
