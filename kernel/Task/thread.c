@@ -48,6 +48,17 @@ static thread_t *tail_cpu[MAX_CPUS] = {0};
 static int next_id = 1;
 static thread_t main_thread;
 
+/*
+ * Validate that a thread pointer references either the bootstrap
+ * main_thread or an element within the static thread_pool.  Run-queue
+ * corruption could otherwise send the scheduler chasing bogus pointers
+ * which would crash with a page fault when dereferenced.
+ */
+static inline int thread_ptr_ok(thread_t *t) {
+    return t && (t == &main_thread ||
+                 (t >= thread_pool && t < thread_pool + MAX_KERNEL_THREADS));
+}
+
 ipc_queue_t fs_queue, pkg_queue, upd_queue, init_queue, regx_queue, nosm_queue;
 int timer_ready = 0;
 
@@ -104,11 +115,25 @@ static void thread_reap(void){ uint64_t rf=irq_save_disable(); thread_t *list=zo
     for(thread_t *t=list;t;){ thread_t *n=t->next; memset(t,0,sizeof(thread_t)); t=n; } }
 
 static thread_t *pick_next(int cpu){
-    thread_t *start=current_cpu[cpu]; if(!start) return NULL;
+    thread_t *start=current_cpu[cpu];
+    if(!thread_ptr_ok(start))
+        return NULL;
+
     thread_t *t=start,*best=NULL;
-    do{ if(t->state==THREAD_READY && (!best || t->priority>best->priority)) best=t; t=t->next; } while(t&&t!=start);
+    int iter=0;
+    do{
+        if(!thread_ptr_ok(t))
+            break;
+        if(t->state==THREAD_READY && (!best || t->priority>best->priority))
+            best=t;
+        t=t->next;
+        if(++iter > MAX_KERNEL_THREADS)
+            break; /* prevent infinite loops on corruption */
+    }while(t && t!=start);
+
     if(!best){
-        if(start->state==THREAD_READY||start->state==THREAD_RUNNING)
+        if(thread_ptr_ok(start) &&
+           (start->state==THREAD_READY || start->state==THREAD_RUNNING))
             best=start;
     }
     if(!best) best=&main_thread;
