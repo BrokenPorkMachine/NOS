@@ -149,7 +149,10 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
     memset(t,0,sizeof(thread_t)); t->magic=THREAD_MAGIC; t->stack=stack_pool[idx];
     uintptr_t top=align16((uintptr_t)t->stack+STACK_SIZE);
     context_frame_t *cf=(context_frame_t*)(top-sizeof(*cf));
-    *cf=(context_frame_t){ .r15=0,.r14=0,.r13=0,.r12=0,.rbx=0,.rbp=0, .rflags=0x202,.rax_dummy=0, .rip=(uint64_t)thread_entry, .arg_rdi=(uint64_t)func };
+    memset(cf, 0, sizeof(*cf));
+    cf->rflags = 0x202;             // IF=1
+    cf->rip    = (uint64_t)thread_entry;
+    cf->arg_rdi = (uint64_t)func;   // entry function to call
     t->rsp=(uint64_t)cf; t->func=func; t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
     t->state=THREAD_READY; t->started=0; t->priority=priority; t->next=NULL;
     kprintf("[thread] spawn id=%d entry=%p stack=%p-%p prio=%d\n", t->id, func, t->stack, t->stack+STACK_SIZE, priority);
