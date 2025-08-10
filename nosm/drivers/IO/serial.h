@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 void serial_init(void);
+void serial_putc(char c);  // <-- ADD THIS
 void serial_write(char c);
 void serial_puts(const char *s);
 void serial_putsn(const char *s, size_t n);
