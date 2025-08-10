@@ -3,6 +3,7 @@
 #include "agent.h"
 #include "Task/thread.h"
 #include "../../user/libc/libc.h"
+#include "VM/kheap.h"
 #include "symbols.h"
 
 #include <stdint.h>
@@ -274,7 +275,7 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
         return -1;
 
     size_t memsz = (size_t)(max_vaddr - min_vaddr);
-    uint8_t *mem = (uint8_t *)malloc(memsz);
+    uint8_t *mem = (uint8_t *)kalloc(memsz);
     if (!mem)
         return -1;
     memset(mem, 0, memsz);
@@ -283,7 +284,7 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
         if (ph[i].p_type != PT_LOAD)
             continue;
         if (ph[i].p_offset + ph[i].p_filesz > size) {
-            free(mem);
+            kfree(mem);
             return -1;
         }
         memcpy(mem + (ph[i].p_vaddr - min_vaddr),
@@ -325,7 +326,10 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
 
     agent_loader_register_entry(entry_name, (agent_entry_t)entry);
     symbols_add(entry_name, (uintptr_t)mem, memsz);
-    return register_and_spawn_from_manifest(manifest, path, prio);
+    int rc = register_and_spawn_from_manifest(manifest, path, prio);
+    if (rc != 0)
+        kfree(mem);
+    return rc;
 }
 
 static int load_agent_macho_impl(const void *image,size_t size,const char *path,int prio){
