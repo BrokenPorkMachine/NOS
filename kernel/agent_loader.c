@@ -279,8 +279,27 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
 
     char manifest[512];
     if (extract_manifest_elf(image, size, manifest, sizeof(manifest)) != 0) {
-        free(mem);
-        return -1;
+        /*
+         * If no embedded manifest is found, derive a minimal one from the
+         * path so agents without metadata can still launch (e.g. init).
+         */
+        char name[32] = {0};
+        if (path) {
+            const char *base = path;
+            for (const char *p = path; *p; ++p)
+                if (*p == '/') base = p + 1;
+            snprintf(name, sizeof(name), "%s", base);
+            char *dot = NULL;
+            for (char *p = name; *p; ++p)
+                if (*p == '.') dot = p;
+            if (dot) *dot = 0;
+        } else {
+            snprintf(name, sizeof(name), "elf");
+        }
+        snprintf(manifest, sizeof(manifest),
+                 "{\"name\":\"%s\",\"type\":4,\"version\":\"0\"," \
+                 "\"entry\":\"agent_main\",\"capabilities\":\"\"}",
+                 name);
     }
 
     char entry_name[64] = {0};
