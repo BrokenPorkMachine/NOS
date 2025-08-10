@@ -19,6 +19,7 @@
 #include "VM/kheap.h"
 #include "arch/CPU/lapic.h"
 #include "uaccess.h"
+#include "symbols.h"
 
 // ... (previous kprint, strcspn_local, syscall infrastructure, sandboxing, module loading helpers, hardware/system query helpers, scheduler_loop, etc unchanged) ...
 
@@ -44,6 +45,9 @@ static void scheduler_loop(void) { while (1) schedule(); }
 void n2_main(bootinfo_t *bootinfo) {
     if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI)
         return;
+
+    extern char _start, _end;
+    symbols_add("kernel", (uintptr_t)&_start, (uintptr_t)&_end - (uintptr_t)&_start);
 
     threads_early_init();
     serial_init();

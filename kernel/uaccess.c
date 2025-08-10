@@ -8,20 +8,18 @@ extern void *memset(void *dst, int c, size_t n);
 extern void kprintf(const char *fmt, ...);
 
 int copy_from_user(void *dst, const void *user_src, size_t n) {
-    uintptr_t a = (uintptr_t)user_src;
-    if (!range_add_ok(a, n) || !is_user_addr(a) || !range_is_mapped_user(a, n)) {
+    if (!user_ptr_valid(user_src, n)) {
         return -14; /* -EFAULT */
     }
-    memcpy(dst, (const void *)a, n);
+    memcpy(dst, (const void *)(uintptr_t)user_src, n);
     return 0;
 }
 
 int copy_to_user(void *user_dst, const void *src, size_t n) {
-    uintptr_t a = (uintptr_t)user_dst;
-    if (!range_add_ok(a, n) || !is_user_addr(a) || !range_is_mapped_user(a, n)) {
+    if (!user_ptr_valid(user_dst, n)) {
         return -14; /* -EFAULT */
     }
-    memcpy((void *)a, src, n);
+    memcpy((void *)(uintptr_t)user_dst, src, n);
     return 0;
 }
 

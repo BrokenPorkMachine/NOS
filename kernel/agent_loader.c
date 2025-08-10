@@ -3,6 +3,7 @@
 #include "agent.h"
 #include "Task/thread.h"
 #include "../../user/libc/libc.h"
+#include "symbols.h"
 
 #include <stdint.h>
 #include <string.h>   // memcmp, memchr, strstr, strlen, strcmp, snprintf
@@ -218,16 +219,24 @@ static int register_and_spawn_from_manifest(const char *json, const char *path, 
 static int load_agent_macho2_impl(const void *image,size_t size,const char *path,int prio){
     (void)path;
     char manifest[512];
-    if (extract_manifest_macho2(image,size,manifest,sizeof(manifest))==0)
+    if (extract_manifest_macho2(image,size,manifest,sizeof(manifest))==0){
+        char name[64]={0};
+        json_extract_string(manifest,"name",name,sizeof(name));
+        symbols_add(name[0]?name:"(anon)",(uintptr_t)image,size);
         return register_and_spawn_from_manifest(manifest, path, prio);
+    }
     return -1;
 }
 
 static int load_agent_elf_impl(const void *image,size_t size,const char *path,int prio){
     (void)path;
     char manifest[512];
-    if (extract_manifest_elf(image,size,manifest,sizeof(manifest))==0)
+    if (extract_manifest_elf(image,size,manifest,sizeof(manifest))==0){
+        char name[64]={0};
+        json_extract_string(manifest,"name",name,sizeof(name));
+        symbols_add(name[0]?name:"(anon)",(uintptr_t)image,size);
         return register_and_spawn_from_manifest(manifest, path, prio);
+    }
     return -1;
 }
 
@@ -265,6 +274,7 @@ static int load_agent_flat_impl(const void *image, size_t size, const char *path
 
     /* Register entry and fabricate minimal manifest */
     agent_loader_register_entry("agent_main", (agent_entry_t)image);
+    symbols_add(name, (uintptr_t)image, size);
     char manifest[128];
     snprintf(manifest, sizeof(manifest),
              "{\"name\":\"%s\",\"type\":4,\"version\":\"0\",\"entry\":\"agent_main\",\"capabilities\":\"\"}",
@@ -296,6 +306,8 @@ static int load_agent_nosm_impl(const void *image, size_t size, const char *path
                 rc, path ? path : "(buffer)");
         return -1;
     }
+
+    symbols_add(path ? path : "(nosm)", (uintptr_t)image, size);
 
     // If you need to unload later:
     // nosm_unload(mod_id);
