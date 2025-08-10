@@ -1,5 +1,5 @@
 // src/agents/regx/regx.c
-#include "../../user/libc/libc.h"   // adjust include if your libc path differs when linked into kernel
+#include "../../user/libc/libc.h"   // snprintf, strcmp, etc.
 #include <stdint.h>
 #include <stdatomic.h>
 #include "../../kernel/Task/thread.h"
@@ -21,9 +21,39 @@ typedef int (*agent_gate_fn)(const char *path,
 extern void agent_loader_set_gate(agent_gate_fn gate);
 extern int  agent_loader_run_from_path(const char *path, int prio);
 
+// --- utils ---
 static inline uint64_t rdtsc(void){
     uint32_t lo,hi; __asm__ volatile("rdtsc":"=a"(lo),"=d"(hi));
     return ((uint64_t)hi<<32)|lo;
+}
+
+static inline int is_canonical(const void *p) {
+    uintptr_t x = (uintptr_t)p;
+    return ((x >> 48) == 0) || ((x >> 48) == 0xFFFF);
+}
+
+// Bounded strlen that never scans past `max`; refuses non-canonical pointers.
+static size_t safe_strnlen(const char *s, size_t max) {
+    if (!s || !is_canonical(s)) return 0;
+    size_t n = 0;
+    while (n < max) { char c = s[n]; if (!c) break; n++; }
+    return n;
+}
+
+// Always NUL-terminates; never reads more than cap-1 bytes.
+static void strnzcpy_cap(char *dst, const char *src, size_t cap) {
+    if (!dst || cap == 0) return;
+    if (!src || !is_canonical(src)) { dst[0] = 0; return; }
+    size_t n = safe_strnlen(src, cap - 1);
+    for (size_t i = 0; i < n; ++i) dst[i] = src[i];
+    dst[n] = 0;
+}
+
+// Local bounded serial print (no implicit strlen)
+static void serial_putsn_bounded(const char *s, size_t max) {
+    if (!s) return;
+    size_t n = safe_strnlen(s, max);
+    for (size_t i = 0; i < n; ++i) serial_putc(s[i]);
 }
 
 static _Atomic int init_spawned = 0;
@@ -61,15 +91,30 @@ static int regx_policy_gate(const char *path,
     void *caller = __builtin_return_address(0);
     uint64_t ts = rdtsc();
 
-    if (name && strcmp(name, "init") == 0)
-        kprintf("[regx] allow call tid=%u pc=%p ts=%llu\n", tid, caller, ts);
+    // De-dupe "init" spammy log across very short window
+    static _Atomic uint64_t last_init_log = 0;
+    if (name && is_canonical(name) && strcmp(name, "init") == 0) {
+        uint64_t prev = atomic_load(&last_init_log);
+        if (ts - prev > 1000000ULL) {
+            kprintf("[regx] allow call tid=%u pc=%p ts=%llu\n", tid, caller, ts);
+            atomic_store(&last_init_log, ts);
+        }
+    }
 
-    if (!path || strncmp(path, "/agents/", 8) != 0) {
+    // Validate pointers before any string ops
+    if (!is_canonical(path) || !is_canonical(name) || !is_canonical(entry) ||
+        (capabilities && !is_canonical(capabilities))) {
+        kprintf("[regx] deny: bad pointer(s) path=%p name=%p entry=%p caps=%p\n",
+                path, name, entry, capabilities);
+        return 0;
+    }
+
+    size_t path_len = safe_strnlen(path, 256);
+    if (path_len < 8 || strncmp(path, "/agents/", 8) != 0) {
         kprintf("[regx] deny: path %s outside /agents/\n", path?path:"(null)");
         return 0;
     }
-    size_t L = strlen(path);
-    if (L < 5 || strcmp(path + (L - 4), ".bin") != 0) {
+    if (path_len < 5 || strcmp(path + (path_len - 4), ".bin") != 0) {
         kprintf("[regx] deny: path %s not .bin\n", path);
         return 0;
     }
@@ -81,9 +126,8 @@ static int regx_policy_gate(const char *path,
     // Allowed capabilities (comma-separated): fs,net,pkg,upd,tty,gui
     const char *allowed[] = {"fs","net","pkg","upd","tty","gui"};
     if (capabilities && capabilities[0]) {
-        // crude check: ensure every token appears in allowed list
         char caps[128];
-        snprintf(caps, sizeof(caps), "%s", capabilities);
+        strnzcpy_cap(caps, capabilities, sizeof(caps)); // bounded copy-in
         char *p = caps;
         while (*p){
             char *tok = p;
@@ -98,16 +142,16 @@ static int regx_policy_gate(const char *path,
                 kprintf("[regx] deny: cap \"%s\" not allowed for %s\n", tok, name);
                 return 0;
             }
-            if (saved == ',') p++; /* skip comma */
+            if (saved == ',') p++;
         }
     }
 
     serial_puts("[regx] allow: ");
-    serial_puts(name);
+    serial_putsn_bounded(name, 64);
     serial_puts(" (entry=");
-    serial_puts(entry);
+    serial_putsn_bounded(entry, 64);
     serial_puts(" caps=");
-    serial_putsn(capabilities ? capabilities : "", 64);
+    if (capabilities && capabilities[0]) serial_putsn_bounded(capabilities, 64);
     serial_puts(")\n");
     return 1;
 }
@@ -115,10 +159,10 @@ static int regx_policy_gate(const char *path,
 void regx_main(void){
     kprintf("[regx] security gate online\n");
 
-    // Install gate so future agent loads (by init or others) are mediated
+    // Install gate so future agent loads are mediated
     agent_loader_set_gate(regx_policy_gate);
 
-    // Kick off init as standalone; it will load the rest (subject to gate)
+    // Kick off init (one-shot). Watchdog just keeps the core responsive.
     thread_create_with_priority(watchdog_thread, 250);
     spawn_init_once();
 
