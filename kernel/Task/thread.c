@@ -64,9 +64,12 @@ static inline void irq_restore(uint64_t rf){ __asm__ volatile("push %0; popfq"::
 static void enable_sse(void){
 #if defined(__x86_64__)
     uint64_t cr0, cr4;
-    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0)); cr0 &= ~(1ULL<<2); cr0 |= (1ULL<<1);
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1ULL<<2);  // clear EM
+    cr0 |=  (1ULL<<1);  // set MP
     __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
-    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4)); cr4 |= (1ULL<<9)|(1ULL<<10);
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (1ULL<<9)|(1ULL<<10); // OSFXSR|OSXMMEXCPT
     __asm__ volatile("mov %0, %%cr4" :: "r"(cr4));
 #endif
 }
@@ -99,7 +102,8 @@ void threads_early_init(void){
     memset(&main_thread,0,sizeof(main_thread));
     main_thread.magic=THREAD_MAGIC; main_thread.id=0; main_thread.state=THREAD_RUNNING; main_thread.started=1;
     main_thread.priority=MIN_PRIORITY; main_thread.next=&main_thread;
-    uint64_t rsp; __asm__ volatile("mov %%rsp,%0":"=r"(rsp)); main_thread.rsp=rsp;
+    uint64_t rsp; __asm__ volatile("mov %%rsp,%0":"=r"(rsp));
+    main_thread.rsp=rsp;
     current_cpu[0]=tail_cpu[0]=&main_thread;
 }
 
@@ -107,8 +111,10 @@ thread_t *thread_current(void){ return current_cpu[smp_cpu_index()]; }
 uint32_t  thread_self(void){ thread_t *t=thread_current(); return t? t->id:0; }
 
 static void add_to_zombie_list(thread_t *t){ uint64_t rf=irq_save_disable(); t->next=zombie_list; zombie_list=t; irq_restore(rf); }
-static void thread_reap(void){ uint64_t rf=irq_save_disable(); thread_t *list=zombie_list; zombie_list=NULL; irq_restore(rf);
-    for(thread_t *t=list;t;){ thread_t *n=t->next; memset(t,0,sizeof(thread_t)); t=n; } }
+static void thread_reap(void){
+    uint64_t rf=irq_save_disable(); thread_t *list=zombie_list; zombie_list=NULL; irq_restore(rf);
+    for(thread_t *t=list;t;){ thread_t *n=t->next; memset(t,0,sizeof(thread_t)); t=n; }
+}
 
 static thread_t *pick_next(int cpu){
     thread_t *start=current_cpu[cpu];
@@ -148,6 +154,7 @@ void schedule(void){
     if(prev->state==THREAD_EXITED) add_to_zombie_list(prev);
     thread_reap();
 }
+
 uint64_t schedule_from_isr(uint64_t *old_rsp){
     int cpu=smp_cpu_index(); thread_t *prev=current_cpu[cpu]; if(!prev) return (uint64_t)old_rsp;
     prev->rsp=(uint64_t)old_rsp; if(prev->state==THREAD_RUNNING) prev->state=THREAD_READY;
@@ -171,6 +178,7 @@ __attribute__((noreturn,used)) static void thread_start(void (*f)(void)){
     thread_exit();
 }
 
+/* Safer trampoline: tail-jump into thread_start (no stray return address). */
 static void __attribute__((naked, noinline, used))
 thread_entry(void){
     __asm__ volatile(
@@ -191,9 +199,18 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
     for(int i=0;i<(int)MAX_KERNEL_THREADS;i++){ if(thread_pool[i].magic==0){ t=&thread_pool[i]; idx=i; break; } }
     if(!t) return NULL;
     if((uintptr_t)t<0x1000) return NULL;
-    memset(t,0,sizeof(thread_t)); t->magic=THREAD_MAGIC; t->stack=stack_pool[idx];
+
+    memset(t,0,sizeof(thread_t));
+    t->magic=THREAD_MAGIC;
+    t->stack=stack_pool[idx];
+
     uintptr_t top = align16((uintptr_t)t->stack + STACK_SIZE);
     uint64_t *sp = (uint64_t *)top;
+
+    /* Seed stack to match context_switch's restore order:
+       pop r15,r14,r13,r12,rbx,rbp; popfq; pop rax; ret
+       So stack (top→bottom): [r15][r14][r13][r12][rbx][rbp][rflags][rax][RET=thread_entry][ARG=func]
+    */
     *(--sp) = (uint64_t)func;           // argument for thread_entry (rdi)
     *(--sp) = (uint64_t)thread_entry;   // return address for first ret
     *(--sp) = 0;                        // rax placeholder
@@ -204,18 +221,57 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
     *(--sp) = 0;                        // r13
     *(--sp) = 0;                        // r14
     *(--sp) = 0;                        // r15
-    t->rsp=(uint64_t)sp; t->func=func; t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
-    t->state=THREAD_READY; t->started=0; t->priority=priority; t->next=NULL;
-    kprintf("[thread] spawn id=%d entry=%p stack=%p-%p prio=%d\n", t->id, func, t->stack, t->stack+STACK_SIZE, priority);
-    uint64_t rf=irq_save_disable(); int cpu=smp_cpu_index(); rq_insert_tail(cpu,t); irq_restore(rf); return t;
+
+    t->rsp=(uint64_t)sp;
+    t->func=func;
+    t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
+    t->state=THREAD_READY;
+    t->started=0;
+    t->priority=priority;
+    t->next=NULL;
+
+    kprintf("[thread] spawn id=%d entry=%p stack=%p-%p prio=%d\n",
+            t->id, func, t->stack, t->stack+STACK_SIZE, priority);
+
+    uint64_t rf=irq_save_disable(); int cpu=smp_cpu_index(); rq_insert_tail(cpu,t); irq_restore(rf);
+    return t;
 }
+
 thread_t *thread_create(void(*func)(void)){ return thread_create_with_priority(func,(MAX_PRIORITY+MIN_PRIORITY)/2); }
-void thread_block(thread_t *t){ if(!t||t->magic!=THREAD_MAGIC) return; uint64_t rf=irq_save_disable(); t->state=THREAD_BLOCKED; irq_restore(rf); if(t==thread_current()) schedule(); }
-void thread_unblock(thread_t *t){ if(!t||t->magic!=THREAD_MAGIC) return; uint64_t rf=irq_save_disable(); t->state=THREAD_READY; thread_t *cur=thread_current(); int pre=(cur&&cur->state==THREAD_RUNNING&&t->priority>cur->priority); irq_restore(rf); if(pre) schedule(); }
+
+void thread_block(thread_t *t){
+    if(!t||t->magic!=THREAD_MAGIC) return;
+    uint64_t rf=irq_save_disable();
+    t->state=THREAD_BLOCKED;
+    irq_restore(rf);
+    if(t==thread_current()) schedule();
+}
+
+void thread_unblock(thread_t *t){
+    if(!t||t->magic!=THREAD_MAGIC) return;
+    uint64_t rf=irq_save_disable();
+    t->state=THREAD_READY;
+    thread_t *cur=thread_current();
+    int pre=(cur&&cur->state==THREAD_RUNNING&&t->priority>cur->priority);
+    irq_restore(rf);
+    if(pre) schedule();
+}
+
 int  thread_is_alive(thread_t *t){ return t && t->magic==THREAD_MAGIC && t->state!=THREAD_EXITED; }
-void thread_kill(thread_t *t){ if(!t||t->magic!=THREAD_MAGIC) return; uint64_t rf=irq_save_disable(); t->state=THREAD_EXITED; int cpu=smp_cpu_index(); thread_t *cur=current_cpu[cpu];
-    if(t==cur){ irq_restore(rf); schedule(); return; } rq_remove(cpu,t); add_to_zombie_list(t); irq_restore(rf); }
+
+void thread_kill(thread_t *t){
+    if(!t||t->magic!=THREAD_MAGIC) return;
+    uint64_t rf=irq_save_disable();
+    t->state=THREAD_EXITED;
+    int cpu=smp_cpu_index(); thread_t *cur=current_cpu[cpu];
+    if(t==cur){ irq_restore(rf); schedule(); return; }
+    rq_remove(cpu,t);
+    add_to_zombie_list(t);
+    irq_restore(rf);
+}
+
 static void rq_on_priority_change(int cpu, thread_t *t){ rq_requeue_tail(cpu,t); }
+
 void thread_set_priority(thread_t *t,int prio){
     if(!t||t->magic!=THREAD_MAGIC) return;
     if(prio<MIN_PRIORITY) prio=MIN_PRIORITY;
@@ -230,7 +286,15 @@ void thread_set_priority(thread_t *t,int prio){
     irq_restore(rf);
     if(yield) schedule();
 }
-void thread_join(thread_t *t){ if(!t||t->magic!=THREAD_MAGIC) return; while(thread_is_alive(t)){ __asm__ volatile("pause"); thread_yield(); } }
+
+void thread_join(thread_t *t){
+    if(!t||t->magic!=THREAD_MAGIC) return;
+    while(thread_is_alive(t)){
+        __asm__ volatile("pause");
+        thread_yield();
+    }
+}
+
 void thread_yield(void){ schedule(); }
 
 int thread_runqueue_length(int cpu){
@@ -268,13 +332,14 @@ void threads_init(void){
     if(!t_regx){ kprintf("[boot] failed to spawn regx\n"); for(;;)__asm__ volatile("hlt"); }
     if(!t_nosm)  kprintf("[boot] failed to spawn nosm\n");
 
+    // Capabilities: ensure clients that need the FS queue have access
     if (t_nosfs){
         ipc_grant(&fs_queue,   t_nosfs->id, IPC_CAP_SEND | IPC_CAP_RECV);
         ipc_grant(&regx_queue, t_nosfs->id, IPC_CAP_SEND | IPC_CAP_RECV);
     }
     if (t_regx){
         ipc_grant(&regx_queue, t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
-        ipc_grant(&fs_queue,   t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);   // <-- give regx FS access
+        ipc_grant(&fs_queue,   t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);   // regx needs FS to load /agents/init.mo2
     }
     if (t_nosm){
         ipc_grant(&nosm_queue, t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);
