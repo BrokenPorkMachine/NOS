@@ -197,31 +197,61 @@ static size_t apply_relocations_rela(uint8_t *load_base, uint64_t lo_for_exec,
  * Hex dump helpers
  * -------------------------------------------------------------------------------- */
 #if VERBOSE
+/* addr is the address of p[0] in memory; prints n bytes */
 static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n) {
-    char line[96], hex[3*16+1], asc[17];
-    for (size_t i = 0; i < n; i += 16) {
-        size_t k = (n - i) < 16 ? (n - i) : 16;
-        for (size_t j = 0; j < k; ++j) {
-            unsigned v = p[i + j];
-            hex[3*j+0] = "0123456789abcdef"[v >> 4];
-            hex[3*j+1] = "0123456789abcdef"[v & 0xF];
-            hex[3*j+2] = ' ';
-            asc[j]     = (v >= 32 && v < 127) ? (char)v : '.';
+    size_t i = 0;
+    while (i < n) {
+        /* Address prefix */
+        serial_puts("[dump] 0x");
+        print_hex64(addr + i);
+        serial_puts(" : ");
+
+        /* Hex bytes */
+        size_t j = 0;
+        for (; j < 16 && i + j < n; ++j) {
+            print_hex8(p[i + j]);
+            serial_putc(' ');
         }
-        hex[3*k] = 0; asc[k] = 0;
-        int m = snprintf(line, sizeof(line),
-                         "[dump] %016lx : %s |%s|\r\n",
-                         (unsigned long)(addr + i), hex, asc);
-        if (m > 0) serial_puts(line);
+        /* pad if short line */
+        for (; j < 16; ++j) serial_puts("   ");
+
+        /* ASCII */
+        serial_puts(" |");
+        j = 0;
+        for (; j < 16 && i + j < n; ++j) {
+            uint8_t c = p[i + j];
+            serial_putc((c >= 32 && c < 127) ? c : '.');
+        }
+        serial_puts("|\r\n");
+        i += 16;
     }
 }
-static inline void hexdump_window(const void *entry) {
+
+/* Centered 64-byte window around entry (clamped at start) */
+static void hexdump_window(const void *entry) {
     const uint8_t *p = (const uint8_t *)entry;
-    if (!p) return;
-    const uint8_t *win = (p >= (const uint8_t *)0x20) ? (p - 0x20) : p;
-    size_t n = (p == win) ? 0x40 : 0x40; // always 64B; adjust if you want boundaries
-    dump_bytes((uintptr_t)win, win, n);
+
+    /* First 4 bytes */
+    serial_puts("[loader] entry first bytes: ");
+    for (int i = 0; i < 4; ++i) {
+        print_hex8(p[i]);
+        if (i != 3) serial_putc(' ');
+    }
+    serial_puts("\r\n");
+
+    /* 64B window */
+    uintptr_t ep = (uintptr_t)p;
+    const uint8_t *start = (ep >= 0x20) ? (p - 0x20) : p;
+    size_t head = (size_t)(p - start);
+    size_t total = head + 0x40;             /* 32 before + 32 after */
+
+    serial_puts("[loader] dumping 64B around entry 0x");
+    print_hex64((uint64_t)ep);
+    serial_puts("\r\n");
+
+    dump_bytes((uintptr_t)start, start, total);
 }
+
 #else
 static inline void dump_bytes(uintptr_t a, const uint8_t *p, size_t n) { (void)a; (void)p; (void)n; }
 static inline void hexdump_window(const void *entry) { (void)entry; }
