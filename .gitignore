@@ -11,4 +11,7 @@ qemu.log
 qemu_output.txt
 *.img
 
+# Generated headers
+kernel/login_bin.h
+
 tests/test_*
