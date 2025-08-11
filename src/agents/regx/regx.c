@@ -14,6 +14,8 @@ extern void serial_putc(char c);
 extern int kprintf(const char *fmt, ...);
 // Cooperative scheduler hook
 extern void thread_yield(void);
+// Flag set by nosfs server when filesystem is ready
+extern _Atomic int nosfs_ready;
 
 // Loader APIs (exported by kernel)
 typedef int (*agent_gate_fn)(const char *path,
@@ -66,6 +68,10 @@ static void spawn_init_once(void) {
     int expected = 0;
     if (!atomic_compare_exchange_strong(&init_spawned, &expected, 1))
         return;
+
+    // Wait for filesystem to be initialized before loading init agent
+    while (!atomic_load(&nosfs_ready))
+        thread_yield();
 
     for (;;) {
         kprintf("[regx] launching init (boot:init:regx)\n");
