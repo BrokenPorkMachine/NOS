@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "VM/kheap.h"     // kalloc()
-#include "printf.h"       // serial_printf()
+#include "../../include/printf.h"
 
 // Loader<->registry gate: set by agent_loader_set_gate() in agent_loader_pub.c
 extern int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
