@@ -2,8 +2,10 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include "../user/libc/libc.h"
-#include "init_bin.h"
-#include "login_bin.h"
+extern unsigned char init_bin[];
+extern unsigned int init_bin_len;
+extern unsigned char login_bin[];
+extern unsigned int login_bin_len;
 
 /* Basic kernel logging helper */
 extern int kprintf(const char *fmt, ...);
