@@ -26,11 +26,14 @@ extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.
 
 #define THREAD_MAGIC 0x74687264UL
 
-// Exposed by linker script (n2.ld); if you don’t have these, see fallback below
+// Exposed by linker script (n2.ld); fallback range used if absent
 extern char __text_start[];
 extern char __text_end[];
 
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
+
+// Forward decl of the trampoline we define later
+static void thread_entry(void);
 
 static inline uintptr_t align16(uintptr_t v){ return v & ~0xFULL; }
 
@@ -158,8 +161,9 @@ void schedule(void){
            [r15][r14][r13][r12][rbx][rbp][rflags][rax][RET=thread_entry][ARG=func]
            RET is at offset 8*(6 + 1 + 1) = 64 bytes below current new_rsp.
          */
-        uint64_t *new_sp = (uint64_t *)next->rsp;
+        uint64_t *new_sp   = (uint64_t *)next->rsp;
         uint64_t *ret_slot = (uint64_t *)((uintptr_t)new_sp - 8*8);
+
         /* Determine kernel text range. If linker symbols absent, use a conservative fallback. */
         uintptr_t text_lo = (uintptr_t)__text_start;
         uintptr_t text_hi = (uintptr_t)__text_end;
@@ -167,8 +171,8 @@ void schedule(void){
             text_lo = 0x0000000000100000ULL;        // typical base
             text_hi = 0x0000000002000000ULL;        // generous upper cap
         }
+
         /* If RET is outside .text, heal it to thread_entry. */
-        static void thread_entry(void);
         uint64_t ret_val = *ret_slot;
         if (!(ret_val >= text_lo && ret_val < text_hi)) {
             *ret_slot = (uint64_t)(uintptr_t)&thread_entry;
