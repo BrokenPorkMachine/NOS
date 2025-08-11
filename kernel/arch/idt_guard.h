@@ -1,9 +1,9 @@
+// kernel/arch/idt_guard.h
 #pragma once
-#include <stdint.h>
-
-// Install a fresh IDT with safe handlers; idempotent.
-void idt_guard_init_once(void);
-
-// Optionally replace the muxed handlers after your real trap code is ready.
-void idt_guard_install_real_handlers(void (*ud_noerr)(void*),
-                                     void (*gp_err)(void*, uint64_t));
+#ifdef __cplusplus
+extern "C" {
+#endif
+void idt_guard_init_once(void); // no-op if you don’t link the .c
+#ifdef __cplusplus
+}
+#endif
