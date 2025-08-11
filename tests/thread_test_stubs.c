@@ -11,3 +11,5 @@ int fs_read_all(const char *path, void **out, size_t *out_sz) { (void)path; (voi
 void agent_loader_set_read(int (*reader)(const char*, void**, size_t*), void (*freer)(void*)) { (void)reader; (void)freer; }
 void ipc_init(void *q) { (void)q; }
 void ipc_grant(void *q, uint32_t id, uint32_t caps) { (void)q; (void)id; (void)caps; }
+int agent_loader_run_from_path(const char *path, int prio) { (void)path; (void)prio; return -1; }
+void serial_puts(const char *s) { (void)s; }
