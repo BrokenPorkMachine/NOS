@@ -59,6 +59,8 @@ int extract_manifest_macho2(const void *image, size_t size,
 int extract_manifest_elf(const void *image, size_t size,
                          char *out_json, size_t out_sz);
 
+// Add near the other declarations
+int agent_loader_run_from_path(const char *path, int prio);
 /*
  * Register an entry point by symbolic name so the loader can resolve "entry"
  * from a manifest to a real function pointer.
