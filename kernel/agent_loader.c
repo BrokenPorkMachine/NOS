@@ -1,4 +1,4 @@
-// kernel/agent_loader.c — BYPASS + C trampoline (no regx/gate/logs)
+// kernel/agent_loader.c — BYPASS + C trampoline that calls thread_exit()
 #include "agent_loader.h"
 #include "Task/thread.h"
 #include "VM/kheap.h"
@@ -20,13 +20,13 @@ void agent_loader_set_gate(agent_gate_fn g){ (void)g; /* bypass: no gate */ }
 
 /* Global to hand entry into trampoline (API has no arg) */
 static agent_entry_t g_agent_entry = 0;
+extern void thread_exit(void);
 static void agent_trampoline(void){
 	agent_entry_t fn = g_agent_entry;
 	if(fn) fn();
-	/* Never return: halt forever */
-	for(;;){
-		__asm__ __volatile__("cli; hlt" ::: "memory");
-	}
+	/* Cleanly terminate the thread instead of returning */
+	thread_exit();
+	for(;;){ __asm__ __volatile__("cli; hlt" ::: "memory"); }
 }
 
 /* 1 MiB arena fallback */
@@ -116,7 +116,7 @@ static int elf_map_and_spawn(const void* img, size_t sz, int prio){
 	if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
 	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
 
-	/* Use a C trampoline so the entry can never return */
+	/* Use a C trampoline so the entry can never return to garbage */
 	g_agent_entry = (agent_entry_t)(void*)entry_addr;
 	thread_t* t=thread_create_with_priority(agent_trampoline, prio>0?prio:200);
 	return t ? 0 : -1;
