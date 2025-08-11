@@ -7,6 +7,12 @@
 #include "printf.h"         // serial_printf, serial_puts/putc
 #include "agent_loader.h"   // agent_format_t, prototypes, agent_gate_fn, agent_loader_get_gate
 #include "VM/kheap.h"       // kalloc/kfree
+#include <stdlib.h>  // for strtol (even in freestanding this is fine as a decl)
+
+// Fallback decls in case printf.h/serial.h didn’t prototype them:
+int  serial_printf(const char *fmt, ...);
+void serial_puts(const char *s);
+void serial_putc(char c);
 
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 4096UL
