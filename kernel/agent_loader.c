@@ -17,7 +17,8 @@
 #include <stdlib.h>
 #include <limits.h>
 
-
+// Forward from our helper:
+int nosfs_get_file(const char* path, const void** out_ptr, size_t* out_sz);
 
 typedef void (*agent_entry_t)(void);
 
@@ -145,20 +146,18 @@ int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio)
 int load_agent_auto(const void* img, size_t sz){ return elf_map_and_spawn(img, sz, 200); }
 int load_agent(const void* img, size_t sz, agent_format_t f){ (void)f; return elf_map_and_spawn(img,  sz, 200); }
 
-// kernel/agent_loader.c
-// Thin wrapper that forwards to the existing path-based loader.
-// We support a few possible symbol names/signatures via weak refs.
-
 __attribute__((weak)) int loader_run_from_path(const char *path, int prio);
 __attribute__((weak)) int run_from_path(const char *path, int prio);
 __attribute__((weak)) int loader_run_from_path_simple(const char *path);
 __attribute__((weak)) int run_from_path_simple(const char *path);
 
+// Add/replace the previous weak-wrapper with this definitive version:
 int agent_loader_run_from_path(const char *path, int prio) {
-    if (loader_run_from_path)            return loader_run_from_path(path, prio);
-    if (run_from_path)                   return run_from_path(path, prio);
-    if (loader_run_from_path_simple)     return loader_run_from_path_simple(path);
-    if (run_from_path_simple)            return run_from_path_simple(path);
-    // No known symbol present:
-    return -38; // ENOSYS-ish
+    const void* img = NULL;
+    size_t sz = 0;
+    int rc = nosfs_get_file(path, &img, &sz);
+    if (rc != 0) return rc; // -2 if not found
+
+    // The .mo2 blobs are O2/MACHO2 with embedded manifest.
+    return load_agent_with_prio(img, sz, AGENT_FORMAT_MACHO2, prio);
 }
