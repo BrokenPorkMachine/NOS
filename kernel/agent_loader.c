@@ -1,9 +1,13 @@
-// kernel/agent_loader.c — ultra-verbose PIE/ET_EXEC loader (pure C)
-// - Rebase entry for BOTH ET_DYN and ET_EXEC (we always map at a fresh base)
-// - Applies R_X86_64_RELATIVE relocations
-// - 1 MiB arena fallback if kalloc() fails (so agents still run)
-// - Very chatty logging around mapping, relocations, and entry bytes
-// Toggle verbosity: set LOADER_VERBOSE to 0/1 below
+// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C) with arena fallback,
+// RELATIVE relocs, and ultra-verbose tracing. Spawns BEFORE any optional bookkeeping.
+//
+// Safety toggles:
+#ifndef LOADER_VERBOSE
+#define LOADER_VERBOSE 1  /* 1=chatty logs, 0=quiet */
+#endif
+#ifndef LOADER_ADD_SYMBOLS
+#define LOADER_ADD_SYMBOLS 0  /* 1=call symbols_add after spawn, 0=skip (default: skip) */
+#endif
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -21,10 +25,6 @@
 
 extern int kprintf(const char *fmt, ...);
 
-/* ---------- Tuning ---------- */
-#ifndef LOADER_VERBOSE
-#define LOADER_VERBOSE 1
-#endif
 #if LOADER_VERBOSE
   #define LOGV(...) kprintf(__VA_ARGS__)
 #else
@@ -39,77 +39,46 @@ static agent_gate_fn      g_gate_fn   = 0;
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
 void agent_loader_set_gate(agent_gate_fn g){ g_gate_fn=g; }
 
-/* ---------- Small utils ---------- */
+/* ---------- Utils ---------- */
 static const void* memmem_local(const void* hay, size_t haylen, const void* nee, size_t neelen){
 	if(!hay || !nee || neelen==0 || haylen<neelen) return NULL;
 	const uint8_t *h=(const uint8_t*)hay, *n=(const uint8_t*)nee;
-	for(size_t i=0;i+neelen<=haylen;i++){
-		if(memcmp(h+i,n,neelen)==0) return h+i;
-	}
+	for(size_t i=0;i+neelen<=haylen;i++) if(memcmp(h+i,n,neelen)==0) return h+i;
 	return NULL;
 }
 static const char* skip_ws(const char* p){ while(p && (*p==' '||*p=='\t'||*p=='\n'||*p=='\r')) p++; return p; }
 
 static int json_get_str(const char* json, const char* key, char* out, size_t osz){
 	if(!json || !key || !out || osz==0) return -1;
-	char pat[64];
-	snprintf(pat,sizeof(pat),"\"%s\"",key);
-	const char* p = strstr(json, pat);
-	if(!p) return -1;
-	p += strlen(pat);
-	p = skip_ws(p);
-	if(*p!=':') return -1;
-	p++;
-	p = skip_ws(p);
-	if(*p!='\"') return -1;
-	p++;
-	size_t i=0;
-	while(*p && *p!='\"' && i<osz-1){
-		out[i++] = *p++;
-	}
-	if(*p!='\"') return -1;
-	out[i]=0;
-	return 0;
+	char pat[64]; snprintf(pat,sizeof(pat),"\"%s\"",key);
+	const char* p = strstr(json, pat); if(!p) return -1;
+	p += strlen(pat); p = skip_ws(p); if(*p!=':') return -1; p++; p = skip_ws(p);
+	if(*p!='\"') return -1; p++;
+	size_t i=0; while(*p && *p!='\"' && i<osz-1) out[i++]=*p++;
+	if(*p!='\"') return -1; out[i]=0; return 0;
 }
-
 static int json_get_int(const char* json, const char* key){
 	if(!json || !key) return -1;
-	char pat[64];
-	snprintf(pat,sizeof(pat),"\"%s\"",key);
-	const char* p = strstr(json, pat);
-	if(!p) return -1;
-	p += strlen(pat);
-	p = skip_ws(p);
-	if(*p!=':') return -1;
-	p++;
-	p = skip_ws(p);
+	char pat[64]; snprintf(pat,sizeof(pat),"\"%s\"",key);
+	const char* p = strstr(json, pat); if(!p) return -1;
+	p += strlen(pat); p = skip_ws(p); if(*p!=':') return -1; p++; p = skip_ws(p);
 	return (int)strtol(p, NULL, 10);
 }
-
 static void basename_noext(const char* path, char* out, size_t osz){
 	if(!out || osz==0){ return; }
-	out[0]=0;
-	if(!path){ return; }
-	const char* b=path;
-	for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
+	out[0]=0; if(!path){ return; }
+	const char* b=path; for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
 	snprintf(out,osz,"%s",b);
-	char* dot=NULL;
-	for(char* p=out; *p; ++p) if(*p=='.') dot=p;
+	char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p;
 	if(dot) *dot=0;
 }
-
 static int extract_manifest_blob(const void* buf, size_t sz, char* out, size_t osz){
 	if(!buf || !sz || !out || !osz) return -1;
-	const char* s=(const char*)memchr(buf,'{',sz);
-	if(!s) return -1;
+	const char* s=(const char*)memchr(buf,'{',sz); if(!s) return -1;
 	size_t remain = sz - (size_t)(s - (const char*)buf);
-	const char* e=(const char*)memchr(s,'}',remain);
-	if(!e || e<=s) return -1;
-	size_t len=(size_t)(e-s+1);
-	if(len+1>osz) return -1;
-	memcpy(out,s,len);
-	out[len]=0;
-	return 0;
+	const char* e=(const char*)memchr(s,'}',remain); if(!e || e<=s) return -1;
+	size_t len=(size_t)(e-s+1); if(len+1>osz) return -1;
+	memcpy(out,s,len); out[len]=0; return 0;
 }
 
 /* ---------- Entry registry (name -> fn*) ---------- */
@@ -120,13 +89,8 @@ static size_t g_ec=0;
 
 static void reg_entry(const char* name, agent_entry_t fn){
 	if(!name||!fn) return;
-	for(size_t i=0;i<g_ec;i++){
-		if(strcmp(g_entries[i].name,name)==0){ g_entries[i].fn=fn; return; }
-	}
-	if(g_ec<MAX_ENTRIES){
-		snprintf(g_entries[g_ec].name,sizeof(g_entries[g_ec].name),"%s",name);
-		g_entries[g_ec].fn=fn; g_ec++;
-	}
+	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0){ g_entries[i].fn=fn; return; }
+	if(g_ec<MAX_ENTRIES){ snprintf(g_entries[g_ec].name,sizeof(g_entries[g_ec].name),"%s",name); g_entries[g_ec].fn=fn; g_ec++; }
 }
 static agent_entry_t find_entry(const char* name){
 	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0) return g_entries[i].fn;
@@ -137,7 +101,6 @@ static agent_entry_t find_entry(const char* name){
 #define AGENT_ARENA_SIZE (1<<20) /* 1 MiB */
 static uint8_t g_agent_arena[AGENT_ARENA_SIZE];
 static size_t  g_agent_bump = 0;
-
 static void* arena_alloc(size_t sz){
 	const size_t align = 0x1000;
 	size_t off = (g_agent_bump + (align-1)) & ~(align-1);
@@ -147,26 +110,19 @@ static void* arena_alloc(size_t sz){
 
 /* ---------- Hex dump (entry window, clamped to image) ---------- */
 static void hexdump_window(const uint8_t* img_base, size_t img_span,
-                           const uint8_t* p, size_t before, size_t after)
-{
+                           const uint8_t* p, size_t before, size_t after){
 	if(!p || !img_base || img_span==0) return;
 	const uint8_t* img_end = img_base + img_span;
-	const uint8_t* start   = p > img_base + before ? p - before : img_base;
+	const uint8_t* start   = (p > img_base + before) ? (p - before) : img_base;
 	const uint8_t* endwant = p + after;
-	const uint8_t* end     = endwant < img_end ? endwant : img_end;
+	const uint8_t* end     = (endwant < img_end) ? endwant : img_end;
 	if(end <= start) return;
-
 	for(const uint8_t* row = start; row < end; row += 16){
 		size_t n = (size_t)((end - row) > 16 ? 16 : (end - row));
 		kprintf("[dump] %016llx : ", (unsigned long long)(uintptr_t)row);
-		for(size_t j=0;j<16;j++){
-			if(j<n) kprintf("%02x ", row[j]); else kprintf("   ");
-		}
+		for(size_t j=0;j<16;j++){ if(j<n) kprintf("%02x ", row[j]); else kprintf("   "); }
 		kprintf(" |");
-		for(size_t j=0;j<n;j++){
-			uint8_t c = row[j];
-			kprintf("%c", (c>=32 && c<127)?c:'.');
-		}
+		for(size_t j=0;j<n;j++){ uint8_t c=row[j]; kprintf("%c", (c>=32 && c<127)?c:'.'); }
 		kprintf("|\n");
 	}
 }
@@ -177,7 +133,6 @@ static int register_and_spawn_from_manifest(const char* json, const char* path, 
 	char entry[64]={0};
 
 	(void)path;
-
 	json_get_str(json,"name",m.name,sizeof(m.name));
 	m.type = json_get_int(json,"type");
 	json_get_str(json,"version",m.version,sizeof(m.version));
@@ -191,23 +146,14 @@ static int register_and_spawn_from_manifest(const char* json, const char* path, 
 
 	if(g_gate_fn){
 		int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry);
-		if(!ok){
-			kprintf("[loader] gate denied %s (entry=%s)\n", m.name[0]?m.name:"(unnamed)", entry);
-			return -1;
-		}
+		if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name[0]?m.name:"(unnamed)", entry); return -1; }
 	}
 
 	uint64_t id = regx_register(&m,0);
-	if(!id){
-		kprintf("[loader] regx_register failed for %s\n", m.name[0]?m.name:"(unnamed)");
-		return -1;
-	}
+	if(!id){ kprintf("[loader] regx_register failed for %s\n", m.name[0]?m.name:"(unnamed)"); return -1; }
 
 	agent_entry_t fn=find_entry(entry);
-	if(!fn){
-		kprintf("[loader] entry not resolved: %s\n", entry);
-		return -1;
-	}
+	if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry); return -1; }
 
 	n2_agent_t agent; memset(&agent,0,sizeof(agent));
 	snprintf(agent.name,sizeof(agent.name),"%s", m.name[0]?m.name:"(unnamed)");
@@ -218,24 +164,17 @@ static int register_and_spawn_from_manifest(const char* json, const char* path, 
 
 	LOGV("[loader] spawning thread at %p for \"%s\"\n", (void*)fn, agent.name);
 	thread_t* t=thread_create_with_priority((void(*)(void))fn, prio>0?prio:200);
-	if(!t){
-		kprintf("[loader] thread create failed for %s\n", agent.name);
-		return -1;
-	}
+	if(!t){ kprintf("[loader] thread create failed for %s\n", agent.name); return -1; }
 	return 0;
 }
 
 /* ---------- Relocations (RELATIVE only) ---------- */
-static size_t apply_relocations_rela_table(uint8_t* base, uint64_t lo,
-                                           Elf64_Addr tab, Elf64_Addr tsz)
-{
+static size_t apply_relocations_rela_table(uint8_t* base, uint64_t lo, Elf64_Addr tab, Elf64_Addr tsz){
 	if(!tab || !tsz) return 0;
 	if (tab < lo) return 0;
 	uint64_t off = tab - lo;
 	Elf64_Rela* rela_tbl = (Elf64_Rela*)(base + off);
-	size_t cnt = (size_t)(tsz / sizeof(Elf64_Rela));
-	size_t applied = 0;
-
+	size_t cnt = (size_t)(tsz / sizeof(Elf64_Rela)), applied=0;
 	for(size_t i=0;i<cnt;i++){
 		uint32_t type = (uint32_t)ELF64_R_TYPE(rela_tbl[i].r_info);
 		if(type == R_X86_64_RELATIVE){
@@ -247,15 +186,10 @@ static size_t apply_relocations_rela_table(uint8_t* base, uint64_t lo,
 	}
 	return applied;
 }
-
-static size_t apply_relocations_rela(uint8_t* base, uint64_t lo,
-                                     const Elf64_Ehdr* eh, const void* img, size_t sz)
-{
+static size_t apply_relocations_rela(uint8_t* base, uint64_t lo, const Elf64_Ehdr* eh, const void* img, size_t sz){
 	(void)sz;
 	const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
-	Elf64_Addr rela   = 0, rela_sz = 0, rela_ent = sizeof(Elf64_Rela);
-	Elf64_Addr jmprel = 0, pltrel_sz = 0;
-
+	Elf64_Addr rela=0,rela_sz=0,rela_ent=sizeof(Elf64_Rela), jmprel=0,pltrel_sz=0;
 	for(uint16_t i=0;i<eh->e_phnum;i++){
 		if(ph[i].p_type != PT_DYNAMIC) continue;
 		const Elf64_Dyn* dyn = (const Elf64_Dyn*)((const uint8_t*)img + ph[i].p_offset);
@@ -271,13 +205,9 @@ static size_t apply_relocations_rela(uint8_t* base, uint64_t lo,
 			}
 		}
 	}
-
-	(void)rela_ent; // not needed; we assume sizeof(Elf64_Rela)
-
-	size_t a = 0;
-	a += apply_relocations_rela_table(base, lo, rela,     rela_sz);
-	a += apply_relocations_rela_table(base, lo, jmprel,   pltrel_sz);
-	return a;
+	(void)rela_ent;
+	return apply_relocations_rela_table(base, lo, rela, rela_sz)
+	     + apply_relocations_rela_table(base, lo, jmprel, pltrel_sz);
 }
 
 /* ---------- ELF loader ---------- */
@@ -310,28 +240,19 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	if(!base){
 		kprintf("[loader] kalloc %zu failed, trying arena\n", span);
 		base = (uint8_t*)arena_alloc(span);
-		if(!base){
-			kprintf("[loader] arena OOM (%zu)\n", span);
-			return -1;
-		}
+		if(!base){ kprintf("[loader] arena OOM (%zu)\n", span); return -1; }
 	}
 	memset(base, 0, span);
 	LOGV("[loader] load_base=%p\n", base);
 
 	for(uint16_t i=0;i<eh->e_phnum;i++){
 		if(ph[i].p_type!=PT_LOAD) continue;
-		if(ph[i].p_offset + ph[i].p_filesz > sz){
-			kprintf("[loader] ELF bounds\n");
-			return -1;
-		}
+		if(ph[i].p_offset + ph[i].p_filesz > sz){ kprintf("[loader] ELF bounds\n"); return -1; }
 		uintptr_t dst = (uintptr_t)(base + (ph[i].p_vaddr - lo));
 		LOGV("[loader] PT_LOAD[%u]: vaddr=0x%llx file=%llu mem=%llu fl=0x%x -> [%p..%p)\n",
-		     (unsigned)i,
-		     (unsigned long long)ph[i].p_vaddr,
-		     (unsigned long long)ph[i].p_filesz,
-		     (unsigned long long)ph[i].p_memsz,
-		     (unsigned)ph[i].p_flags,
-		     (void*)dst, (void*)(dst + ph[i].p_memsz));
+		     (unsigned)i,(unsigned long long)ph[i].p_vaddr,
+		     (unsigned long long)ph[i].p_filesz,(unsigned long long)ph[i].p_memsz,
+		     (unsigned)ph[i].p_flags,(void*)dst,(void*)(dst + ph[i].p_memsz));
 		memcpy((void*)dst, (const uint8_t*)img + ph[i].p_offset, ph[i].p_filesz);
 	}
 
@@ -339,25 +260,20 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	LOGV("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", nrel);
 
 	/* Rebase entry for BOTH ET_DYN and ET_EXEC (we map at a fresh base). */
-	if (eh->e_entry < lo || eh->e_entry >= hi) {
-		kprintf("[loader] FATAL: e_entry (0x%llx) out of PT_LOAD span [0x%llx..0x%llx)\n",
-		        (unsigned long long)eh->e_entry,
-		        (unsigned long long)lo, (unsigned long long)hi);
+	if (eh->e_entry < lo || eh->e_entry >= hi){
+		kprintf("[loader] FATAL: e_entry (0x%llx) out of PT_LOAD span [0x%llx..%llx)\n",
+		        (unsigned long long)eh->e_entry,(unsigned long long)lo,(unsigned long long)hi);
 		return -1;
 	}
 	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
-	if(eh->e_type == ET_DYN){
-		LOGV("[loader] runtime entry (ET_DYN)  = %p (e_entry-lo=0x%llx)\n",
-		     (void*)entry_addr, (unsigned long long)(eh->e_entry - lo));
-	}else{
-		LOGV("[loader] runtime entry (ET_EXEC) = %p (e_entry-lo=0x%llx, base=%p)\n",
-		     (void*)entry_addr, (unsigned long long)(eh->e_entry - lo), base);
-	}
+	if(eh->e_type == ET_DYN)
+		LOGV("[loader] runtime entry (ET_DYN)  = %p (e_entry-lo=0x%llx)\n",(void*)entry_addr,(unsigned long long)(eh->e_entry - lo));
+	else
+		LOGV("[loader] runtime entry (ET_EXEC) = %p (e_entry-lo=0x%llx, base=%p)\n",(void*)entry_addr,(unsigned long long)(eh->e_entry - lo),base);
 
 	/* Guard: entry must be inside mapped image */
 	if(entry_addr < (uintptr_t)base || entry_addr >= (uintptr_t)(base + span)){
-		kprintf("[loader] FATAL: entry %p outside image [%p..%p)\n",
-		        (void*)entry_addr, base, base+span);
+		kprintf("[loader] FATAL: entry %p outside image [%p..%p)\n",(void*)entry_addr, base, base+span);
 		return -1;
 	}
 
@@ -365,12 +281,8 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	{
 		uint8_t *entry_ptr = (uint8_t*)entry_addr;
 		uint32_t first4 = *(volatile uint32_t*)entry_ptr;
-		if (first4 == 0xFA1E0FF3u){
-			LOGV("[loader] entry starts with ENDBR64 (CET)\n");
-		}else{
-			LOGV("[loader] entry first bytes: %02x %02x %02x %02x\n",
-			     entry_ptr[0], entry_ptr[1], entry_ptr[2], entry_ptr[3]);
-		}
+		if (first4 == 0xFA1E0FF3u) LOGV("[loader] entry starts with ENDBR64 (CET)\n");
+		else LOGV("[loader] entry first bytes: %02x %02x %02x %02x\n", entry_ptr[0],entry_ptr[1],entry_ptr[2],entry_ptr[3]);
 		LOGV("[loader] dumping 64B around entry %p\n", (void*)entry_addr);
 		hexdump_window(base, span, entry_ptr, 32, 32);
 	}
@@ -386,27 +298,38 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 		LOGV("[loader] manifest found for %s\n", path?path:"(buffer)");
 	}
 
+	/* Resolve entry symbol BEFORE any optional bookkeeping */
 	char entry_name[64]={0};
 	if(json_get_str(manifest,"entry",entry_name,sizeof(entry_name))!=0)
 		snprintf(entry_name,sizeof(entry_name),"agent_main");
 
-	/* Register concrete pointer and symbol region */
+	LOGV("[loader] binding entry symbol \"%s\" -> %p\n", entry_name, (void*)entry_addr);
 	reg_entry(entry_name, (agent_entry_t)(void*)entry_addr);
-	char symname[96]; char nm2[64]={0}; basename_noext(path?path:"elf", nm2, sizeof(nm2));
-	snprintf(symname,sizeof(symname),"%s:%s", nm2[0]?nm2:"elf", entry_name);
-	symbols_add(symname, (uintptr_t)base, span);
 
-	return register_and_spawn_from_manifest(manifest, path, prio);
+	LOGV("[loader] invoking register_and_spawn...\n");
+	int rc = register_and_spawn_from_manifest(manifest, path, prio);
+	LOGV("[loader] register_and_spawn rc=%d\n", rc);
+	if (rc != 0) return rc;
+
+	/* Optional: add symbol region AFTER successful spawn (guarded) */
+#if LOADER_ADD_SYMBOLS
+	{
+		char symname[96]; char nm2[64]={0}; basename_noext(path?path:"elf", nm2, sizeof(nm2));
+		snprintf(symname,sizeof(symname),"%s:%s", nm2[0]?nm2:"elf", entry_name);
+		LOGV("[loader] symbols_add %s base=%p span=%zu\n", symname, base, span);
+		symbols_add(symname, (uintptr_t)base, span);
+	}
+#endif
+	return 0;
 }
 
-/* ---------- MACHO2 wrapper (looks for embedded ELF) ---------- */
+/* ---------- MACHO2 wrapper (embedded ELF) ---------- */
 static int load_agent_macho2_impl(const void* img, size_t sz, const char* path, int prio){
 	LOGV("[loader] MACHO2 wrapper for %s\n", path?path:"(buffer)");
 	const uint8_t* p = (const uint8_t*)memmem_local(img, sz, "\x7F""ELF", 4);
 	if(p){
 		size_t remain = sz - (size_t)(p - (const uint8_t*)img);
-		LOGV("[loader] embedded ELF detected at +0x%zx (remain=%zu)\n",
-		     (size_t)(p - (const uint8_t*)img), remain);
+		LOGV("[loader] embedded ELF detected at +0x%zx (remain=%zu)\n",(size_t)(p - (const uint8_t*)img), remain);
 		return load_agent_elf_impl(p, remain, path, prio);
 	}
 	char manifest[512]={0};
@@ -431,9 +354,7 @@ static int load_agent_flat_impl(const void* img, size_t sz, const char* path, in
 	return register_and_spawn_from_manifest(manifest, path, prio);
 }
 
-/* ---------- Public API ---------- */
-/* Use the enum + prototypes from agent_loader.h (no redefinitions here) */
-
+/* ---------- Public API (use enum/prototypes from header) ---------- */
 static agent_format_t detect_fmt(const void* img, size_t sz){
 	const uint8_t* d=(const uint8_t*)img;
 	if(sz>=4 && memcmp(d,"\x7F""ELF",4)==0) return AGENT_FORMAT_ELF;
@@ -450,11 +371,10 @@ int load_agent_auto_with_prio(const void* img, size_t sz, int prio){
 		case AGENT_FORMAT_ELF:    return load_agent_elf_impl(img,sz,"(buffer)",prio);
 		case AGENT_FORMAT_MACHO2: return load_agent_macho2_impl(img,sz,"(buffer)",prio);
 		case AGENT_FORMAT_FLAT:   return load_agent_flat_impl(img,sz,"(buffer)",prio);
-		case AGENT_FORMAT_NOSM:   /* handled elsewhere */ return -1;
+		case AGENT_FORMAT_NOSM:   return -1;
 		default: return -1;
 	}
 }
-
 int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio){
 	LOGV("[loader] fmt=%d size=%zu path=\"(buffer)\" prio=%d\n", (int)f, sz, prio);
 	switch(f){
@@ -465,28 +385,15 @@ int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio)
 		default: return load_agent_auto_with_prio(img,sz,prio);
 	}
 }
-
-int load_agent_auto(const void* img, size_t sz){
-	return load_agent_auto_with_prio(img,sz,200);
-}
-
-int load_agent(const void* img, size_t sz, agent_format_t f){
-	return load_agent_with_prio(img,sz,f,200);
-}
+int load_agent_auto(const void* img, size_t sz){ return load_agent_auto_with_prio(img,sz,200); }
+int load_agent(const void* img, size_t sz, agent_format_t f){ return load_agent_with_prio(img,sz,f,200); }
 
 int agent_loader_run_from_path(const char* path, int prio){
-	if(!g_read_file){
-		kprintf("[loader] no FS reader for %s\n", path?path:"(null)");
-		return -1;
-	}
+	if(!g_read_file){ kprintf("[loader] no FS reader for %s\n", path?path:"(null)"); return -1; }
 	void* buf=0; size_t sz=0;
 	int rc=g_read_file(path,&buf,&sz);
-	if(rc<0){
-		kprintf("[loader] read failed: %s\n", path?path:"(null)");
-		return rc;
-	}
+	if(rc<0){ kprintf("[loader] read failed: %s\n", path?path:"(null)"); return rc; }
 	LOGV("[loader] run_from_path \"%s\" size=%zu\n", path?path:"(null)", sz);
-
 	int out = -1;
 	switch(detect_fmt(buf,sz)){
 		case AGENT_FORMAT_ELF:    out=load_agent_elf_impl(buf,sz,path,prio); break;
