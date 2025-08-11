@@ -54,7 +54,7 @@ static inline void gate_set(struct idt_gate64* g, uint16_t cs, uint64_t off, uin
     g->zero = 0;
 }
 
-void idt_guard_init_once(void)
+static void idt_guard_init_once(void)
 {
     if (s_done) return;
 
