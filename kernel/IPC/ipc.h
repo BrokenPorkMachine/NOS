@@ -4,6 +4,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* Forward declaration to avoid pulling in kernel thread headers for
+ * user-space builds. The queue only stores an opaque pointer which the
+ * kernel interprets as a thread waiting on the queue. */
+struct thread;
+
 /* --- IPC compile-time options --- */
 /*
  * Define IPC_SMP=1 to enable atomic head/tail updates for
@@ -61,6 +66,7 @@ typedef struct {
     size_t tail;
 #endif
     uint32_t caps[IPC_MAX_TASKS];
+    struct thread *waiting_thread;     /* Thread blocked on empty queue */
 } ipc_queue_t;
 
 /* --- API --- */
@@ -97,7 +103,7 @@ int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg);
 
 /**
  * Receive a message from the queue, blocking until available.
- * - Calls thread_yield() between polls.
+ * - Blocks the calling thread until a message arrives.
  * @return 0 on success, <0 on fatal error.
  */
 int ipc_receive_blocking(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg);

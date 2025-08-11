@@ -1,6 +1,12 @@
 #include "nosfs.h"
 #include "../../../nosm/drivers/IO/block.h"
 
+// Global in-memory filesystem used by both the server thread and
+// the fs_read_all() helper for the agent loader.
+nosfs_fs_t nosfs_root;
+// Simple readiness flag so fs_read_all can fail gracefully before init
+static volatile int nosfs_ready = 0;
+
 // ---------- Quota helpers ----------
 void nosfs_set_quota(nosfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes) {
     pthread_mutex_lock(&fs->mutex);
@@ -119,6 +125,7 @@ void nosfs_init(nosfs_fs_t *fs) {
     pthread_mutex_init(&fs->mutex, NULL);
     nosfs_journal_init();
     undo_log.type = NOSFS_UNDO_NONE;
+    nosfs_ready = 1;
 }
 
 void nosfs_destroy(nosfs_fs_t *fs) {
@@ -133,6 +140,7 @@ void nosfs_destroy(nosfs_fs_t *fs) {
     pthread_mutex_destroy(&fs->mutex);
     nosfs_journal_init();
     undo_log.type = NOSFS_UNDO_NONE;
+    nosfs_ready = 0;
 }
 
 // ========== Helper: Name Valid ==========
@@ -227,8 +235,6 @@ int nosfs_resize(nosfs_fs_t *fs, int handle, uint32_t new_capacity) {
     pthread_mutex_unlock(&fs->mutex);
     return 0;
 }
-
-// ... rest of your previously posted functions unchanged ...
 
 int nosfs_write(nosfs_fs_t *fs, int handle, uint32_t offset, const void *buf, uint32_t len) {
     if (!fs || handle < 0 || (size_t)handle >= fs->file_count || !buf)
@@ -452,4 +458,45 @@ int nosfs_load_device(nosfs_fs_t *fs, uint32_t start_lba) {
 
 int nosfs_journal_undo_last(nosfs_fs_t *fs) { (void)fs; return -1; }
 
-// --------- End of file ---------
+// Helper for the kernel agent loader: fetch entire file contents
+// into a newly allocated buffer.  Accept both "/agents/foo" and "agents/foo".
+int fs_read_all(const char *path, void **out, size_t *out_sz) {
+    if (!nosfs_ready || !path || !out || !out_sz)
+        return -1;
+
+    const char *original = path;
+    const char *normalized = (*path == '/') ? path + 1 : path;
+
+    pthread_mutex_lock(&nosfs_root.mutex);
+
+    // First try WITHOUT leading slash (canonical in our store)
+    for (size_t i = 0; i < nosfs_root.file_count; ++i) {
+        nosfs_file_t *f = &nosfs_root.files[i];
+        if (strcmp(f->name, normalized) == 0) {
+            void *buf = malloc(f->size);
+            if (!buf) { pthread_mutex_unlock(&nosfs_root.mutex); return -1; }
+            memcpy(buf, f->data, f->size);
+            *out = buf; *out_sz = f->size;
+            pthread_mutex_unlock(&nosfs_root.mutex);
+            return 0;
+        }
+    }
+
+    // If caller passed a name WITHOUT slash while the store has WITH slash (unlikely but safe):
+    if (normalized == original) { // there was no leading slash in input
+        for (size_t i = 0; i < nosfs_root.file_count; ++i) {
+            nosfs_file_t *f = &nosfs_root.files[i];
+            if (f->name[0] == '/' && strcmp(f->name + 1, normalized) == 0) {
+                void *buf = malloc(f->size);
+                if (!buf) { pthread_mutex_unlock(&nosfs_root.mutex); return -1; }
+                memcpy(buf, f->data, f->size);
+                *out = buf; *out_sz = f->size;
+                pthread_mutex_unlock(&nosfs_root.mutex);
+                return 0;
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&nosfs_root.mutex);
+    return -1;
+}

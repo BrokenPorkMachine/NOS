@@ -1,12 +1,15 @@
 #include "ipc.h"
 #include "../../user/libc/libc.h"
+#include "../Task/thread.h"
+
+/* schedule() is implemented in the thread subsystem but not declared in a
+ * public header. Declare it here to allow ipc_receive_blocking to yield
+ * via the scheduler when necessary. */
+extern void schedule(void);
 
 #ifdef IPC_DEBUG
 #include "../drivers/IO/serial.h"
 #endif
-
-// --- Weak stubs that the kernel can override ---
-__attribute__((weak)) void thread_yield(void) {}
 
 #ifdef IPC_DEBUG
 // Print uint32_t as decimal string
@@ -155,6 +158,13 @@ int ipc_send(ipc_queue_t *q, uint32_t sender_id, ipc_message_t *msg) {
 
     // Advance head
     store_head(q, idx_next(head));
+
+    // If a thread was blocked waiting on this queue, wake it now that a
+    // message is available.
+    if (q->waiting_thread) {
+        thread_unblock((thread_t *)q->waiting_thread);
+        q->waiting_thread = NULL;
+    }
     return 0;
 }
 
@@ -201,7 +211,9 @@ int ipc_receive(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
 int ipc_receive_blocking(ipc_queue_t *q, uint32_t receiver_id, ipc_message_t *msg) {
     int ret;
     while ((ret = ipc_receive(q, receiver_id, msg)) == -1) {
-        thread_yield();
+        q->waiting_thread = thread_current();
+        thread_block((thread_t *)q->waiting_thread);
+        schedule();
     }
     return ret;
 }

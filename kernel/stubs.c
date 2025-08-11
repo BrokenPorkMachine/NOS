@@ -1,8 +1,12 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include "../user/libc/libc.h"
-#include "init_bin.h"
+extern unsigned char init_bin[];
+extern unsigned int init_bin_len;
+extern unsigned char login_bin[];
+extern unsigned int login_bin_len;
 
 /* Basic kernel logging helper */
 extern int kprintf(const char *fmt, ...);
@@ -11,6 +15,9 @@ extern int kprintf(const char *fmt, ...);
 extern void thread_yield(void);
 
 typedef struct ipc_queue ipc_queue_t;
+
+// Stub build always considers filesystem ready
+_Atomic int nosfs_ready = 1;
 
 void usb_init(void) {}
 void usb_kbd_init(void) {}
@@ -35,6 +42,11 @@ int fs_read_all(const char *path, void **out, size_t *out_sz) {
         *out_sz = init_bin_len;
         return 0;
     }
+    if (strcmp(path, "/agents/login.bin") == 0) {
+        *out = (void *)login_bin;
+        *out_sz = login_bin_len;
+        return 0;
+    }
     /* No real filesystem; return not found */
     *out = NULL;
     *out_sz = 0;
@@ -53,9 +65,3 @@ void nosm_entry(void) {
     for (;;) thread_yield();
 }
 
-void login_server(ipc_queue_t *q, uint32_t self_id) {
-    (void)q; (void)self_id;
-    kprintf("[login] server starting\n");
-    kprintf("[login] launching nsh...\n");
-    for (;;) thread_yield();
-}
