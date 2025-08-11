@@ -32,8 +32,8 @@ static void *kalloc_aligned_or_arena(size_t bytes, size_t align);
 static size_t apply_relocations_rela(uint8_t *load_base, uint64_t lo_for_exec,
                                      const Elf64_Ehdr *eh, const void *img, size_t sz);
 static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int prio);
-static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n);
-static void hexdump_window(uintptr_t addr, const uint8_t *p, size_t prefix);
+//static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n);
+//static void hexdump_window(uintptr_t addr, const uint8_t *p, size_t prefix);
 
 /* --------------------------------------------------------------------------------
  * Minimal JSON helpers (optional; kept as static so they can be optimized out)
@@ -180,8 +180,8 @@ static size_t apply_relocations_rela(uint8_t *load_base, uint64_t lo_for_exec,
 /* --------------------------------------------------------------------------------
  * Hex dump helpers
  * -------------------------------------------------------------------------------- */
-static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n) {
 #if VERBOSE
+static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n) {
     char line[96], hex[3*16+1], asc[17];
     for (size_t i = 0; i < n; i += 16) {
         size_t k = (n - i) < 16 ? (n - i) : 16;
@@ -193,19 +193,23 @@ static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n) {
             asc[j]     = (v >= 32 && v < 127) ? (char)v : '.';
         }
         hex[3*k] = 0; asc[k] = 0;
-
-        // build the whole line with snprintf, then emit with serial_puts (no variadics at call site)
         int m = snprintf(line, sizeof(line),
                          "[dump] %016lx : %s |%s|\r\n",
                          (unsigned long)(addr + i), hex, asc);
         if (m > 0) serial_puts(line);
     }
+}
+static inline void hexdump_window(const void *entry) {
+    const uint8_t *p = (const uint8_t *)entry;
+    if (!p) return;
+    const uint8_t *win = (p >= (const uint8_t *)0x20) ? (p - 0x20) : p;
+    size_t n = (p == win) ? 0x40 : 0x40; // always 64B; adjust if you want boundaries
+    dump_bytes((uintptr_t)win, win, n);
+}
+#else
+static inline void dump_bytes(uintptr_t a, const uint8_t *p, size_t n) { (void)a; (void)p; (void)n; }
+static inline void hexdump_window(const void *entry) { (void)entry; }
 #endif
-}
-static void hexdump_window(uintptr_t addr, const uint8_t *p, size_t prefix) {
-    (void)addr; (void)prefix;
-    dump_bytes(p - 0x20, 0x40);
-}
 
 /* --------------------------------------------------------------------------------
  * ELF mapper + spawner
