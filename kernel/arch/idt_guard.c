@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "../drivers/IO/serial.h"
+#include "../../nosm/drivers/IO/serial.h"
 #include "idt_guard.h"
 
 struct __attribute__((packed)) idtr_t {
