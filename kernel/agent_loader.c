@@ -15,6 +15,8 @@ extern int serial_printf(const char *fmt, ...);
 extern int register_and_spawn(const char *name, void *entry, int prio);
 #endif
 
+extern int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
+
 // ---- Minimal ELF64 bits ----
 typedef struct {
     unsigned char e_ident[16];
