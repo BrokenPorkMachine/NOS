@@ -69,6 +69,12 @@ static int json_get_int(const char *json, const char *key, long *out) {
     return 0;
 }
 
+// Auto-detects agent type and spawns with default priority 0
+int load_agent_auto(const void *buf, size_t len) {
+    // AGENT_FORMAT_ELF is usually 0 in this codebase, but use a detection if needed
+    return load_agent_with_prio(buf, len, AGENT_FORMAT_ELF, 0);
+}
+
 /* --------------------------------------------------------------------------------
  * Loader-local tiny low-memory arena fallback (used if kalloc fails)
  * -------------------------------------------------------------------------------- */
