@@ -3,7 +3,7 @@
 #include "pic.h"
 #include <stddef.h>
 #include <stdint.h>
-#include "../../arch/IDT/context.h"
+#include "../../../kernel/arch/IDT/context.h"
 
 // ========================
 // Config and Static State
