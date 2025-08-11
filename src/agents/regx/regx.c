@@ -77,7 +77,7 @@ static void spawn_init_once(void) {
         int rc = agent_loader_run_from_path("/agents/init.mo2", 200);
         if (rc < 0) {
         kprintf("[regx] falling back to built-in init image\n");
-        rc = load_agent(init_bin, init_bin_len, AGENT_FORMAT_MACHO2);
+        rc = load_agent(init_bin, init_bin_len, AGENT_FORMAT_ELF);
         }
         if (rc >= 0) {
             kprintf("[regx] init agent launched rc=%d\n", rc);
