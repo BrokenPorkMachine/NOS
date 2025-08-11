@@ -15,8 +15,6 @@ extern void serial_putc(char c);
 extern int kprintf(const char *fmt, ...);
 // Cooperative scheduler hook
 extern void thread_yield(void);
-// Flag set by nosfs server when filesystem is ready
-extern _Atomic int nosfs_ready;
 
 // Loader APIs (exported by kernel)
 typedef int (*agent_gate_fn)(const char *path,
