@@ -1,6 +1,7 @@
-// kernel/agent_loader.c — SILENT patch IDT[6] + IDT[13] and BYPASS loader
+// kernel/agent_loader.c — IDT clone+patch (#UD/#GP) + BYPASS loader + C trampoline
 // - No printing/serial I/O and no regx/gate usage.
-// - Patches #UD and #GP handlers if they point to legacy low memory (0xA0000..0xFFFFF).
+// - Clones the current IDT into a kernel-writable static buffer, patches vectors 6/13
+//   if they point to legacy low memory (0xA0000..0xFFFFF), and then LIDT to the clone.
 // - Maps ELF ET_EXEC as PIE, applies RELATIVE RELA, spawns agent via a C trampoline
 //   that calls thread_exit() so it never returns into garbage.
 
@@ -46,34 +47,56 @@ __attribute__((naked)) void gp_safe_stub(void){
 	);
 }
 
-static void ensure_vector_safe(int vec, void (*stub)(void)){
+static inline uint64_t make_gate_offset(const volatile struct idt_entry64* e){
+	return ((uint64_t)e->off_hi<<32) | ((uint64_t)e->off_mid<<16) | e->off_lo;
+}
+static inline void fill_gate(struct idt_entry64* e, uint64_t handler, uint16_t cs){
+	e->off_lo   = (uint16_t)(handler & 0xFFFF);
+	e->sel      = cs;
+	e->ist      = 0;        // no IST
+	e->type_attr= 0x8E;     // present, DPL=0, 64-bit interrupt gate
+	e->off_mid  = (uint16_t)((handler>>16)&0xFFFF);
+	e->off_hi   = (uint32_t)((handler>>32)&0xFFFFFFFF);
+	e->zero     = 0;
+}
+
+/* Writable cloned IDT (max 4 KiB, enough for 256 entries * 16 bytes) */
+static __attribute__((aligned(16))) uint8_t g_idt_clone[4096];
+static struct idt_desc64 g_idtr_clone;
+static void idt_clone_patch_and_load_once(void){
+	static int done=0; if(done) return; done=1;
+
+	/* Read current IDT */
 	struct idt_desc64 idtr = {0};
 	__asm__ volatile("sidt %0" : "=m"(idtr));
 	if(!idtr.base) return;
-	size_t need = (size_t)(vec+1) * sizeof(struct idt_entry64);
-	if((size_t)idtr.limit + 1 < need) return;
-	volatile struct idt_entry64* idt = (volatile struct idt_entry64*)(uintptr_t)idtr.base;
-	volatile struct idt_entry64 e = idt[vec];
-	uint64_t off = ((uint64_t)e.off_hi<<32) | ((uint64_t)e.off_mid<<16) | e.off_lo;
-	if(off>=0x00000000000A0000ULL && off<=0x00000000000FFFFFULL){
-		uint64_t h = (uint64_t)(uintptr_t)stub;
-		uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs));
-		struct idt_entry64 ne;
-		ne.off_lo   = (uint16_t)(h & 0xFFFF);
-		ne.sel      = cs;
-		ne.ist      = 0;        // no IST
-		ne.type_attr= 0x8E;     // present, DPL=0, 64-bit interrupt gate
-		ne.off_mid  = (uint16_t)((h>>16)&0xFFFF);
-		ne.off_hi   = (uint32_t)((h>>32)&0xFFFFFFFF);
-		ne.zero     = 0;
-		idt[vec] = ne;
-	}
-}
+	uint16_t limit = idtr.limit;
+	if(limit >= sizeof(g_idt_clone)) limit = sizeof(g_idt_clone) - 1; /* clamp */
 
-static void ensure_core_vectors_safe_once(void){
-	static int done=0; if(done) return; done=1;
-	ensure_vector_safe(6,  ud_safe_stub); /* #UD */
-	ensure_vector_safe(13, gp_safe_stub); /* #GP */
+	/* Copy to writable clone */
+	memcpy(g_idt_clone, (const void*)(uintptr_t)idtr.base, (size_t)limit + 1);
+
+	/* Patch vectors 6 and 13 if they point to legacy low memory */
+	uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs));
+	if(limit + 1 >= (6+1)*sizeof(struct idt_entry64)){
+		struct idt_entry64* v6 = (struct idt_entry64*)(g_idt_clone + 6*sizeof(struct idt_entry64));
+		uint64_t off6 = make_gate_offset(v6);
+		if(off6>=0x00000000000A0000ULL && off6<=0x00000000000FFFFFULL){
+			fill_gate(v6, (uint64_t)(uintptr_t)&ud_safe_stub, cs);
+		}
+	}
+	if(limit + 1 >= (13+1)*sizeof(struct idt_entry64)){
+		struct idt_entry64* v13 = (struct idt_entry64*)(g_idt_clone + 13*sizeof(struct idt_entry64));
+		uint64_t off13 = make_gate_offset(v13);
+		if(off13>=0x00000000000A0000ULL && off13<=0x00000000000FFFFFULL){
+			fill_gate(v13, (uint64_t)(uintptr_t)&gp_safe_stub, cs);
+		}
+	}
+
+	/* Load cloned IDT */
+	g_idtr_clone.base  = (uint64_t)(uintptr_t)g_idt_clone;
+	g_idtr_clone.limit = limit;
+	__asm__ volatile("lidt %0" :: "m"(g_idtr_clone));
 }
 
 /* ===== Loader internals ===== */
@@ -183,8 +206,8 @@ static int elf_map_and_spawn(const void* img, size_t sz, int prio){
 	if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
 	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
 
-	/* Ensure #UD and #GP handlers won't vector to legacy memory */
-	ensure_core_vectors_safe_once();
+	/* Install cloned IDT with safe #UD/#GP vectors */
+	idt_clone_patch_and_load_once();
 
 	/* Use a C trampoline so the entry can never return to garbage */
 	g_agent_entry = (agent_entry_t)(void*)entry_addr;
