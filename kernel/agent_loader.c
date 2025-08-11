@@ -1,13 +1,8 @@
-// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C), manifestless hot path.
-// - Rebase entry for BOTH ET_DYN and ET_EXEC (we always map at a fresh base).
-// - Applies R_X86_64_RELATIVE relocations.
-// - 1 MiB arena fallback if kalloc() fails.
-// - Ultra-verbose tracing around mapping, relocations, and entry bytes.
-// - NO JSON parsing or string scanning of the payload; assumes entry="agent_main".
-// - Spawns BEFORE any optional bookkeeping (symbols disabled by default).
-//
-// If you later want to re-enable manifest parsing, wrap that code
-// behind a compile-time flag (not included here).
+// kernel/agent_loader.c — manifestless, libc-minimal loader
+// - No snprintf/strcmp/strstr/memchr/strtol
+// - No temporary entry registry; we spawn directly with the function pointer
+// - Rebase ET_EXEC like PIE; apply RELATIVE relocs
+// - Arena fallback; ultra-verbose breadcrumbs
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -45,7 +40,7 @@ static agent_gate_fn      g_gate_fn   = 0;
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
 void agent_loader_set_gate(agent_gate_fn g){ g_gate_fn=g; }
 
-/* ---------- Tiny safe string helpers (no varargs) ---------- */
+/* ---------- Tiny safe string helpers ---------- */
 static size_t cstr_len(const char* s){ size_t n=0; if(!s) return 0; while(s[n]) n++; return n; }
 static void cstr_copy(char* dst, size_t cap, const char* src){
 	if(!dst||cap==0){ return; }
@@ -64,22 +59,6 @@ static void path_basename_noext(const char* path, char* out, size_t cap){
 	const char* b=path; for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
 	size_t i=0; while(b[i] && i+1<cap){ out[i]=b[i]; i++; } out[i]=0;
 	char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p; if(dot) *dot=0;
-}
-
-/* ---------- Entry registry (name -> fn*) ---------- */
-typedef void (*agent_entry_t)(void);
-#define MAX_ENTRIES 64
-static struct { char name[64]; agent_entry_t fn; } g_entries[MAX_ENTRIES];
-static size_t g_ec=0;
-
-static void reg_entry(const char* name, agent_entry_t fn){
-	if(!name||!fn) return;
-	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0){ g_entries[i].fn=fn; return; }
-	if(g_ec<MAX_ENTRIES){ cstr_copy(g_entries[g_ec].name,sizeof(g_entries[g_ec].name),name); g_entries[g_ec].fn=fn; g_ec++; }
-}
-static agent_entry_t find_entry(const char* name){
-	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0) return g_entries[i].fn;
-	return NULL;
 }
 
 /* ---------- Arena (OOM fallback) ---------- */
@@ -112,14 +91,18 @@ static void hexdump_window(const uint8_t* img_base, size_t img_span,
 	}
 }
 
-/* ---------- Minimal register + spawn (manifestless) ---------- */
-static int register_and_spawn_direct(const char* name,
-                                     const char* version,
-                                     const char* capabilities,
-                                     const char* entry,
-                                     const char* path,
-                                     int prio)
+/* ---------- Minimal register + spawn (no lookups) ---------- */
+typedef void (*agent_entry_t)(void);
+static int register_and_spawn_direct_fn(const char* name,
+                                        const char* version,
+                                        const char* capabilities,
+                                        agent_entry_t fn,
+                                        const char* entry_name,
+                                        const char* path,
+                                        int prio)
 {
+	if(!fn){ kprintf("[loader] register_and_spawn: null fn\n"); return -1; }
+
 	regx_manifest_t m; memset(&m,0,sizeof(m));
 	cstr_copy(m.name, sizeof(m.name), name?name:"(unnamed)");
 	m.type = 4;
@@ -128,15 +111,12 @@ static int register_and_spawn_direct(const char* name,
 	cstr_copy(m.capabilities, sizeof(m.capabilities), capabilities?capabilities:"");
 
 	if(g_gate_fn){
-		int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry?entry:"agent_main");
-		if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name, entry?entry:"agent_main"); return -1; }
+		int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry_name?entry_name:"agent_main");
+		if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name, entry_name?entry_name:"agent_main"); return -1; }
 	}
 
 	uint64_t id = regx_register(&m,0);
 	if(!id){ kprintf("[loader] regx_register failed for %s\n", m.name); return -1; }
-
-	agent_entry_t fn=find_entry(entry?entry:"agent_main");
-	if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry?entry:"agent_main"); return -1; }
 
 	n2_agent_t agent; memset(&agent,0,sizeof(agent));
 	cstr_copy(agent.name, sizeof(agent.name), m.name);
@@ -270,18 +250,14 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 		hexdump_window(base, span, entry_ptr, 32, 32);
 	}
 
-	/* Manifestless: assume "agent_main" entry */
-	char entry_name[64]; cstr_copy(entry_name,sizeof(entry_name),"agent_main");
-	LOGV("[loader] binding entry symbol \"%s\" -> %p\n", entry_name, (void*)entry_addr);
-	reg_entry(entry_name, (agent_entry_t)(void*)entry_addr);
-
 	/* Build minimal info for registry/gate */
 	char agent_name[64]={0};
 	path_basename_noext(path?path:"init", agent_name, sizeof(agent_name));
 	if(!agent_name[0]) cstr_copy(agent_name,sizeof(agent_name),"init");
 
+	const char* entry_name = "agent_main";
 	LOGV("[loader] invoking register_and_spawn (name=\"%s\", entry=\"%s\")...\n", agent_name, entry_name);
-	int rc = register_and_spawn_direct(agent_name, "0", "", entry_name, path, prio);
+	int rc = register_and_spawn_direct_fn(agent_name, "0", "", (agent_entry_t)(void*)entry_addr, entry_name, path, prio);
 	LOGV("[loader] register_and_spawn rc=%d\n", rc);
 	if (rc != 0) return rc;
 
@@ -310,21 +286,19 @@ static int load_agent_macho2_impl(const void* img, size_t sz, const char* path, 
 		LOGV("[loader] embedded ELF detected at +0x%zx (remain=%zu)\n", (size_t)i, remain);
 		return load_agent_elf_impl(d+i, remain, path, prio);
 	}
-	/* No embedded ELF; do not parse manifest here to stay safe */
-	return -1;
+	return -1; /* stay safe */
 }
 
 /* ---------- FLAT loader ---------- */
 static int load_agent_flat_impl(const void* img, size_t sz, const char* path, int prio){
 	if(!img||!sz) return -1;
 	char nm[64]={0}; path_basename_noext(path?path:"flat", nm, sizeof(nm));
-	const char* entry="agent_main";
+	const char* entry_name="agent_main";
 	LOGV("[loader] FLAT image %s at %p (%zu bytes)\n", nm[0]?nm:"(flat)", img, sz);
-	reg_entry(entry, (agent_entry_t)img);
-	return register_and_spawn_direct(nm[0]?nm:"flat", "0", "", entry, path, prio);
+	return register_and_spawn_direct_fn(nm[0]?nm:"flat", "0", "", (agent_entry_t)img, entry_name, path, prio);
 }
 
-/* ---------- Public API (use enum/prototypes from header) ---------- */
+/* ---------- Public API ---------- */
 static agent_format_t detect_fmt(const void* img, size_t sz){
 	const uint8_t* d=(const uint8_t*)img;
 	if(sz>=4 && d[0]==0x7F && d[1]=='E' && d[2]=='L' && d[3]=='F') return AGENT_FORMAT_ELF;
