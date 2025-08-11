@@ -264,20 +264,17 @@ static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int p
     if (!img || sz < sizeof(Elf64_Ehdr)) return -1;
 
     const Elf64_Ehdr *eh = (const Elf64_Ehdr *)img;
-    if (memcmp(eh->e_ident, ELFMAG, SELFMAG) != 0 || eh->e_ident[EI_CLASS] != ELFCLASS64) {
-        return -1;
-    }
-    if (eh->e_type != ET_EXEC && eh->e_type != ET_DYN) {
-        return -1;
-    }
+    if (memcmp(eh->e_ident, ELFMAG, SELFMAG) != 0 || eh->e_ident[EI_CLASS] != ELFCLASS64) return -1;
+    if (eh->e_type != ET_EXEC && eh->e_type != ET_DYN) return -1;
     if (eh->e_phoff == 0 || eh->e_phnum == 0) return -1;
 
     const Elf64_Phdr *ph = (const Elf64_Phdr *)((const uint8_t *)img + eh->e_phoff);
 
-    // Find the span of PT_LOAD segments
+    /* Find the span of PT_LOAD segments */
     uint64_t lo = UINT64_MAX, hi = 0;
     for (uint16_t i = 0; i < eh->e_phnum; ++i) {
         if (ph[i].p_type != PT_LOAD) continue;
+        if (ph[i].p_memsz == 0) continue;
         lo = MIN(lo, ph[i].p_vaddr);
         hi = MAX(hi, ph[i].p_vaddr + ph[i].p_memsz);
     }
@@ -289,11 +286,11 @@ static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int p
     serial_printf("[loader] span: lo=0x%lx hi=0x%lx span=%lu\n",
                   (unsigned long)lo, (unsigned long)hi, (unsigned long)span);
 
-    // Allocate a contiguous region
+    /* Allocate a contiguous region */
     uint8_t *load_base = (uint8_t *)kalloc_aligned_or_arena((size_t)align_up_u64(span, PAGE_SIZE), PAGE_SIZE);
-    if (!load_base) return -7; // ENOMEM(-12) but we've been using negatives like -7 in logs
+    if (!load_base) return -7; /* ENOMEM-ish */
 
-    // Map PT_LOAD
+    /* Map PT_LOAD segments */
     for (uint16_t i = 0; i < eh->e_phnum; ++i) {
         if (ph[i].p_type != PT_LOAD) continue;
         uint64_t dst_off = ph[i].p_vaddr - lo;
@@ -303,68 +300,95 @@ static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int p
 
         if (ph[i].p_offset + fsz > sz) return -1;
 
-        // zero entire memsz, then copy filesz
         memset(dst, 0, msz);
         if (fsz) memcpy(dst, (const uint8_t *)img + ph[i].p_offset, fsz);
 
-        serial_printf("[loader] PT_LOAD: vaddr=0x%lx file=%zu mem=%zu fl=0x%lx -> [%p..%p)\n",
+        serial_printf("[loader] PT_LOAD: vaddr=0x%lx file=%lu mem=%lu fl=0x%lx -> [%p..%p)\n",
                       (unsigned long)ph[i].p_vaddr,
                       (unsigned long)fsz, (unsigned long)msz,
                       (unsigned long)ph[i].p_flags,
                       dst, dst + msz);
     }
 
-    // Relocations (only RELATIVE handled; harmless if absent)
+    /* Apply RELA (RELATIVE only) */
     size_t applied = apply_relocations_rela(load_base, lo, eh, img, sz);
-    serial_printf("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", applied);
+    serial_printf("[loader] relocations: applied %lu R_X86_64_RELATIVE\n", (unsigned long)applied);
 
-    // Compute runtime entry
-    uintptr_t runtime_entry = 0;
-    if (eh->e_type == ET_EXEC) {
-        runtime_entry = (uintptr_t)load_base + (uintptr_t)(eh->e_entry - lo);
-        serial_printf("[loader] runtime entry (ET_EXEC) = 0x%016lx\n", (unsigned long)runtime_entry);
-    } else { // ET_DYN
-        runtime_entry = (uintptr_t)load_base + (uintptr_t)eh->e_entry;
-        serial_printf("[loader] runtime entry (ET_DYN)  = 0x%016lx\n", (unsigned long)runtime_entry);
-    }
+    /* Compute runtime entry */
+    uintptr_t runtime_entry =
+        (eh->e_type == ET_EXEC)
+            ? (uintptr_t)load_base + (uintptr_t)(eh->e_entry - lo)
+            : (uintptr_t)load_base + (uintptr_t)eh->e_entry;
 
-    // Small peek around entry
+    /* Print runtime entry without width/length specifiers */
+    serial_puts("[loader] runtime entry (");
+    serial_puts((eh->e_type == ET_EXEC) ? "ET_EXEC" : "ET_DYN");
+    serial_puts(") = 0x");
+    print_hex64((uint64_t)runtime_entry);
+    serial_puts("\r\n");
+
+    /* Peek around entry safely (no varargs) */
     const uint8_t *entry_ptr = (const uint8_t *)runtime_entry;
-    serial_printf("[loader] entry first bytes: %02x %02x %02x %02x\n",
-                  entry_ptr[0], entry_ptr[1], entry_ptr[2], entry_ptr[3]);
-    serial_printf("[loader] dumping 64B around entry 0x%016lx\n", (unsigned long)runtime_entry);
-    hexdump_window((const void*)entry_ptr);
+    serial_puts("[loader] entry first bytes: ");
+    for (int i = 0; i < 4; ++i) {
+        print_hex8(entry_ptr[i]);
+        if (i != 3) serial_putc(' ');
+    }
+    serial_puts("\r\n");
 
-    // Inform the RegX security gate (if present)
+    serial_puts("[loader] dumping 64B around entry 0x");
+    print_hex64((uint64_t)runtime_entry);
+    serial_puts("\r\n");
+    hexdump_window((const void *)entry_ptr);
+
+    /* Notify RegX gate (if installed) */
     agent_gate_fn gate = agent_loader_get_gate();
     if (gate) {
         char name[32] = {0};
         if (path && *path) {
             const char *b = path, *p = path;
-            while (*p) { if (*p == '/' || *p == '\\') b = p + 1; p++; }
+            while (*p) { if (*p == '/' || *p == '\\') b = p + 1; ++p; }
             size_t i = 0;
             while (b[i] && b[i] != '.' && i < sizeof(name) - 1) { name[i] = b[i]; ++i; }
-            if (i == 0) snprintf(name, sizeof(name), "(elf)");
+            if (name[0] == '\0') { name[0] = '('; name[1] = 'e'; name[2] = 'l'; name[3] = 'f'; name[4] = ')'; }
         } else {
-            snprintf(name, sizeof(name), "(elf)");
+            name[0] = '('; name[1] = 'e'; name[2] = 'l'; name[3] = 'f'; name[4] = ')';
         }
+
+        char entry_hex[2 + 16 + 1]; /* "0x" + 16 nibbles + NUL */
+        entry_hex[0] = '0'; entry_hex[1] = 'x';
+        uint64_t v = (uint64_t)runtime_entry;
+        for (int i = 0; i < 16; ++i) {
+            entry_hex[2 + 15 - i] = hexdig((unsigned)(v & 0xF));
+            v >>= 4;
+        }
+        entry_hex[18] = '\0';
+
         const char *entry_sym = "agent_main";
-        char entry_hex[32]; snprintf(entry_hex, sizeof(entry_hex), "%p", (void *)runtime_entry);
         const char *caps = "";
-        serial_printf("[loader] gate: name=\"%s\" entry=\"%s\" @ %s caps=\"%s\" path=\"%s\"\n",
-                      name, entry_sym, entry_hex, caps, path ? path : "(null)");
+        serial_puts("[loader] gate: name=\"");
+        serial_puts(name);
+        serial_puts("\" entry=\"");
+        serial_puts(entry_sym);
+        serial_puts("\" @ ");
+        serial_puts(entry_hex);
+        serial_puts(" caps=\"\" path=\"");
+        serial_puts(path ? path : "(null)");
+        serial_puts("\"\r\n");
+
         gate(name, entry_sym, entry_hex, caps, path ? path : "(null)");
     }
 
-    // Spawn via bridge provided by agent_loader_pub.c
+    /* Bridge to thread spawn (set by agent_loader_pub.c) */
     extern int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
-    int rc = -38; // default "no bridge"
+    int rc = -38; /* default if bridge missing */
     if (__agent_loader_spawn_fn) {
         rc = __agent_loader_spawn_fn(path ? path : "(elf)", (void *)runtime_entry, prio);
         serial_printf("[loader] register_and_spawn rc=%d\n", rc);
     }
     return rc;
 }
+
 
 /* --------------------------------------------------------------------------------
  * Public API
