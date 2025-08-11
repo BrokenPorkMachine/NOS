@@ -34,6 +34,22 @@ static size_t apply_relocations_rela(uint8_t *load_base, uint64_t lo_for_exec,
 static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int prio);
 //static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n);
 //static void hexdump_window(uintptr_t addr, const uint8_t *p, size_t prefix);
+/* ===== Safe, varargs-free hex helpers ===== */
+static inline char hexdig(unsigned v) {
+    static const char H[16] = "0123456789abcdef";
+    return H[v & 0xF];
+}
+
+static void print_hex64(uint64_t x) {
+    char b[16];
+    for (int i = 15; i >= 0; --i) { b[i] = hexdig(x); x >>= 4; }
+    serial_puts(b);
+}
+
+static void print_hex8(uint8_t v) {
+    serial_putc(hexdig(v >> 4));
+    serial_putc(hexdig(v));
+}
 
 /* --------------------------------------------------------------------------------
  * Minimal JSON helpers (optional; kept as static so they can be optimized out)
