@@ -32,6 +32,7 @@ typedef int (*agent_gate_fn)(const char *path,
 static agent_read_file_fn g_read_file = 0;
 static agent_free_fn      g_free_fn   = 0;
 static agent_gate_fn      g_gate_fn   = 0;
+static uint8_t init_fallback_buf[200*1024];
 
 void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer){ g_read_file=reader; g_free_fn=freer; }
 void agent_loader_set_gate(agent_gate_fn gate){ g_gate_fn = gate; }
@@ -278,6 +279,7 @@ static int load_agent_macho2_impl(const void *image,size_t size,const char *path
     return -1;
 }
 
+static int load_agent_elf_impl(const void *image,size_t size,const char *path,int prio) __attribute__((force_align_arg_pointer));
 static int load_agent_elf_impl(const void *image,size_t size,const char *path,int prio){
     if (!image || size < sizeof(Elf64_Ehdr))
         return -1;
@@ -304,8 +306,14 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
 
     size_t memsz = (size_t)(max_vaddr - min_vaddr);
     uint8_t *mem = (uint8_t *)kalloc(memsz);
-    if (!mem)
-        return -1;
+    if (!mem){
+        if (memsz <= sizeof(init_fallback_buf)){
+            mem = init_fallback_buf;
+        } else {
+            kprintf("[loader] kalloc failed %zu bytes\n", memsz);
+            return -1;
+        }
+    }
     memset(mem, 0, memsz);
 
     for (uint16_t i = 0; i < eh->e_phnum; ++i) {
@@ -331,7 +339,14 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
          */
         char name[32] = {0};
         path_basename_noext(path, name, sizeof(name));
-        if (!name[0]) snprintf(name, sizeof(name), "elf");
+        if (!name[0])
+            snprintf(name, sizeof(name), "elf");
+        /* When loading from an in-memory buffer (path="(buffer)") the
+         * basename won't be "init" even though this is our builtin init
+         * fallback. Treat that special case as "init" so the manifest-less
+         * ELF can be trusted and launched. */
+        if (strcmp(name, "(buffer)") == 0)
+            snprintf(name, sizeof(name), "init");
 
         if (strcmp(name, "init") != 0) {
             kfree(mem);
@@ -343,6 +358,8 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
                  "{\"name\":\"%s\",\"type\":4,\"version\":\"0\","
                  "\"entry\":\"agent_main\",\"capabilities\":\"\"}",
                  name);
+    } else {
+        kprintf("[loader] manifest found for %s\n", path?path:"(null)");
     }
 
     char entry_name[64] = {0};
@@ -353,6 +370,7 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
     agent_loader_register_entry(entry_name, (agent_entry_t)entry);
     symbols_add(entry_name, (uintptr_t)mem, memsz);
     int rc = register_and_spawn_from_manifest(manifest, path, prio);
+    kprintf("[loader] register_and_spawn rc=%d\n", rc);
     if (rc != 0)
         kfree(mem);
     return rc;
