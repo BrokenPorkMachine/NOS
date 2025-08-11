@@ -243,6 +243,11 @@ void threads_init(void){
 
     // Bring up NOSFS before other core agents so init.mo2 can be served.
     thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 230);
+
+    // Start filesystem server first so init.mo2 can load safely
+    thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 230);
+
+    // Then bring up security gate and other helpers
     thread_t *t_regx  = thread_create_with_priority(regx_thread_wrapper, 220);
     thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, 210);
 

@@ -17,6 +17,9 @@ int nosfs_is_ready(void) {
     return atomic_load(&nosfs_ready);
 }
 
+// Global flag indicating when the filesystem is initialized
+_Atomic int nosfs_ready = 0;
+
 // Simple message-driven filesystem server. Each request is handled
 // sequentially and the response is sent back on the same queue.
 void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
@@ -31,6 +34,7 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
         nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
 
     // Make filesystem contents visible to other threads.
+    // Signal readiness so other agents can safely access the filesystem
     atomic_store(&nosfs_ready, 1);
 
     ipc_message_t msg, resp;

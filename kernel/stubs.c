@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include "../user/libc/libc.h"
 extern unsigned char init_bin[];
 extern unsigned int init_bin_len;
@@ -14,6 +15,9 @@ extern int kprintf(const char *fmt, ...);
 extern void thread_yield(void);
 
 typedef struct ipc_queue ipc_queue_t;
+
+// Stub build always considers filesystem ready
+_Atomic int nosfs_ready = 1;
 
 void usb_init(void) {}
 void usb_kbd_init(void) {}

@@ -15,6 +15,8 @@ extern void serial_putc(char c);
 extern int kprintf(const char *fmt, ...);
 // Cooperative scheduler hook
 extern void thread_yield(void);
+// Flag set by nosfs server when filesystem is ready
+extern _Atomic int nosfs_ready;
 
 // Loader APIs (exported by kernel)
 typedef int (*agent_gate_fn)(const char *path,
@@ -69,7 +71,7 @@ static void spawn_init_once(void) {
         return;
 
     // Wait until the filesystem server has preloaded core agents.
-    while (!nosfs_is_ready())
+    while (!atomic_load(&nosfs_ready))
         thread_yield();
 
     for (;;) {
