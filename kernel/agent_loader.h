@@ -32,7 +32,7 @@ agent_gate_fn  agent_loader_get_gate(void);
 void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer);
 
 // Public entry points
-int load_agent(const void *image, size_t size, agent_format_t fmt);
+int load_agent(const void *img, size_t sz, const char *path, int prio);
 int load_agent_with_prio(const void *image, size_t size, agent_format_t fmt, int prio);
 
 // Convenience wrapper used by RegX to load from a filesystem path
