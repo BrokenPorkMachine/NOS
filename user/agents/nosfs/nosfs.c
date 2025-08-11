@@ -313,4 +313,192 @@ int nosfs_acl_add(nosfs_fs_t *fs, int handle, uint32_t uid, uint32_t perm) {
     return 0;
 }
 
-int nosfs_acl_remove(nosfs_fs_
+int nosfs_acl_remove(nosfs_fs_t *fs, int handle, uint32_t uid) {
+    if (!fs || handle < 0 || (size_t)handle >= fs->file_count)
+        return -1;
+    nosfs_file_t *f = &fs->files[handle];
+    for (size_t i = 0; i < f->acl_count; ++i) {
+        if (f->acl[i].uid == uid) {
+            f->acl[i] = f->acl[--f->acl_count];
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int nosfs_acl_check(nosfs_fs_t *fs, int handle, uint32_t uid, uint32_t perm) {
+    if (!fs || handle < 0 || (size_t)handle >= fs->file_count)
+        return 0;
+    nosfs_file_t *f = &fs->files[handle];
+    for (size_t i = 0; i < f->acl_count; ++i)
+        if (f->acl[i].uid == uid && (f->acl[i].perm & perm))
+            return 1;
+    return 0;
+}
+
+int nosfs_acl_list(nosfs_fs_t *fs, int handle, nosfs_acl_entry_t *out, size_t *count) {
+    if (!fs || handle < 0 || (size_t)handle >= fs->file_count || !out || !count)
+        return -1;
+    nosfs_file_t *f = &fs->files[handle];
+    size_t n = f->acl_count;
+    if (*count < n) n = *count;
+    memcpy(out, f->acl, n * sizeof(nosfs_acl_entry_t));
+    *count = n;
+    return 0;
+}
+
+void nosfs_journal_init(void) { journal_count = 0; }
+
+void nosfs_journal_recover(nosfs_fs_t *fs) {
+    for (size_t i = 0; i < journal_count; ++i) {
+        int h = journal[i].handle;
+        if ((size_t)h < fs->file_count)
+            fs->files[h].size = 0;
+    }
+    journal_count = 0;
+}
+
+int nosfs_compute_crc(nosfs_fs_t *fs, int handle) {
+    if (!fs || handle < 0 || (size_t)handle >= fs->file_count)
+        return -1;
+    nosfs_file_t *f = &fs->files[handle];
+    f->crc32 = crc32_compute(f->data, f->size);
+    for (size_t i = 0; i < journal_count; ++i) {
+        if (journal[i].handle == handle) {
+            journal[i] = journal[--journal_count];
+            break;
+        }
+    }
+    return 0;
+}
+
+int nosfs_verify(nosfs_fs_t *fs, int handle) {
+    if (!fs || handle < 0 || (size_t)handle >= fs->file_count)
+        return -1;
+    nosfs_file_t *f = &fs->files[handle];
+    return (f->crc32 == crc32_compute(f->data, f->size)) ? 0 : -1;
+}
+
+size_t nosfs_list(nosfs_fs_t *fs, char names[][NOSFS_NAME_LEN], size_t max) {
+    if (!fs || !names) return 0;
+    size_t n = (fs->file_count < max) ? fs->file_count : max;
+    for (size_t i = 0; i < n; ++i)
+        strncpy(names[i], fs->files[i].name, NOSFS_NAME_LEN);
+    return n;
+}
+
+int nosfs_save_blocks(nosfs_fs_t *fs, uint8_t *blocks, size_t max_blocks) {
+    if (!fs || !blocks) return -1;
+    size_t offset = 0;
+    memcpy(blocks + offset, &fs->file_count, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    for (size_t i = 0; i < fs->file_count; ++i) {
+        nosfs_file_t *f = &fs->files[i];
+        memcpy(blocks + offset, f->name, NOSFS_NAME_LEN);
+        offset += NOSFS_NAME_LEN;
+        memcpy(blocks + offset, &f->size, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        memcpy(blocks + offset, &f->capacity, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        memcpy(blocks + offset, f->data, f->size);
+        offset += f->size;
+    }
+    size_t needed_blocks = (offset + NOSFS_BLOCK_SIZE - 1) / NOSFS_BLOCK_SIZE;
+    if (needed_blocks > max_blocks) return -1;
+    return (int)needed_blocks;
+}
+
+int nosfs_load_blocks(nosfs_fs_t *fs, const uint8_t *blocks, size_t blocks_cnt) {
+    (void)blocks_cnt;
+    if (!fs || !blocks) return -1;
+    size_t offset = 0;
+    uint32_t count = 0;
+    memcpy(&count, blocks + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    fs->file_count = count;
+    for (size_t i = 0; i < count; ++i) {
+        nosfs_file_t *f = &fs->files[i];
+        memcpy(f->name, blocks + offset, NOSFS_NAME_LEN);
+        offset += NOSFS_NAME_LEN;
+        memcpy(&f->size, blocks + offset, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        memcpy(&f->capacity, blocks + offset, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        f->data = malloc(f->capacity);
+        memcpy(f->data, blocks + offset, f->size);
+        offset += f->size;
+        f->perm = NOSFS_PERM_READ | NOSFS_PERM_WRITE;
+        f->owner = 0;
+        f->crc32 = crc32_compute(f->data, f->size);
+        f->acl_count = 0;
+        f->created_at = f->modified_at = time(NULL);
+    }
+    pthread_mutex_init(&fs->mutex, NULL);
+    return 0;
+}
+
+int nosfs_save_device(nosfs_fs_t *fs, uint32_t start_lba) {
+    size_t bytes = sizeof(uint32_t);
+    for (size_t i = 0; i < fs->file_count; ++i)
+        bytes += NOSFS_NAME_LEN + sizeof(uint32_t) * 2 + fs->files[i].size;
+    size_t blocks = (bytes + NOSFS_BLOCK_SIZE - 1) / NOSFS_BLOCK_SIZE;
+    if (nosfs_save_blocks(fs, nosfs_io_buffer, blocks) < 0 ||
+        block_write(start_lba, nosfs_io_buffer, blocks) < 0)
+        return -1;
+    return (int)blocks;
+}
+
+int nosfs_load_device(nosfs_fs_t *fs, uint32_t start_lba) {
+    size_t total_blocks = BLOCK_DEVICE_BLOCKS;
+    if (block_read(start_lba, nosfs_io_buffer, total_blocks) < 0)
+        return -1;
+    nosfs_load_blocks(fs, nosfs_io_buffer, total_blocks);
+    return 0;
+}
+
+int nosfs_journal_undo_last(nosfs_fs_t *fs) { (void)fs; return -1; }
+
+// Helper for the kernel agent loader: fetch entire file contents
+// into a newly allocated buffer.  Accept both "/agents/foo" and "agents/foo".
+int fs_read_all(const char *path, void **out, size_t *out_sz) {
+    if (!nosfs_ready || !path || !out || !out_sz)
+        return -1;
+
+    const char *original = path;
+    const char *normalized = (*path == '/') ? path + 1 : path;
+
+    pthread_mutex_lock(&nosfs_root.mutex);
+
+    // First try WITHOUT leading slash (canonical in our store)
+    for (size_t i = 0; i < nosfs_root.file_count; ++i) {
+        nosfs_file_t *f = &nosfs_root.files[i];
+        if (strcmp(f->name, normalized) == 0) {
+            void *buf = malloc(f->size);
+            if (!buf) { pthread_mutex_unlock(&nosfs_root.mutex); return -1; }
+            memcpy(buf, f->data, f->size);
+            *out = buf; *out_sz = f->size;
+            pthread_mutex_unlock(&nosfs_root.mutex);
+            return 0;
+        }
+    }
+
+    // If caller passed a name WITHOUT slash while the store has WITH slash (unlikely but safe):
+    if (normalized == original) { // there was no leading slash in input
+        for (size_t i = 0; i < nosfs_root.file_count; ++i) {
+            nosfs_file_t *f = &nosfs_root.files[i];
+            if (f->name[0] == '/' && strcmp(f->name + 1, normalized) == 0) {
+                void *buf = malloc(f->size);
+                if (!buf) { pthread_mutex_unlock(&nosfs_root.mutex); return -1; }
+                memcpy(buf, f->data, f->size);
+                *out = buf; *out_sz = f->size;
+                pthread_mutex_unlock(&nosfs_root.mutex);
+                return 0;
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&nosfs_root.mutex);
+    return -1;
+}
+
+// --------- End of file ---------
