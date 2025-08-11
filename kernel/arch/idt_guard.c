@@ -1,124 +1,155 @@
-// kernel/arch/idt_guard.c
-#include "idt_guard.h"
-
-#include <string.h>
 #include <stdint.h>
+#include <stddef.h>
 
-#ifdef IDT_GUARD_DEBUG
-extern int printf(const char *fmt, ...);
-#define DPRINT(...) printf(__VA_ARGS__)
-#else
-#define DPRINT(...) do{}while(0)
+#ifndef IDT_GUARD_DANGER_MAX
+// Anything below 1 MiB is considered suspect (OVMF stubs, real-mode shadows, etc).
+#define IDT_GUARD_DANGER_MAX 0x00100000ULL
 #endif
 
-struct __attribute__((packed)) idt_desc64 { uint16_t limit; uint64_t base; };
-struct __attribute__((packed)) idt_entry64 {
-    uint16_t off_lo;
+// --- IDTR / IDT structures (x86-64) -----------------------------------------
+struct __attribute__((packed)) idtr64 {
+    uint16_t limit;
+    uint64_t base;
+};
+
+struct __attribute__((packed)) idt_gate64 {
+    uint16_t off0;
     uint16_t sel;
     uint8_t  ist;
-    uint8_t  type_attr;
-    uint16_t off_mid;
-    uint32_t off_hi;
+    uint8_t  type_attr;  // 0x8E = present 64-bit interrupt gate
+    uint16_t off1;
+    uint32_t off2;
     uint32_t zero;
 };
 
-static inline uint64_t make_gate_offset(const volatile struct idt_entry64* e){
-    return ((uint64_t)e->off_hi<<32) | ((uint64_t)e->off_mid<<16) | e->off_lo;
+static inline void sidt(struct idtr64 *d) { __asm__ volatile("sidt %0" : "=m"(*d)); }
+static inline void lidt(const struct idtr64 *d) { __asm__ volatile("lidt %0" : : "m"(*d)); }
+static inline uint16_t read_cs(void) { uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs)); return cs; }
+
+static inline uint64_t gate_get_off(const struct idt_gate64* g) {
+    return ((uint64_t)g->off0) | ((uint64_t)g->off1 << 16) | ((uint64_t)g->off2 << 32);
 }
-static inline void fill_gate(struct idt_entry64* e, uint64_t handler, uint16_t cs){
-    e->off_lo   = (uint16_t)(handler & 0xFFFF);
-    e->sel      = cs;
-    e->ist      = 0;        // no IST
-    e->type_attr= 0x8E;     // present, DPL=0, 64-bit interrupt gate
-    e->off_mid  = (uint16_t)((handler>>16)&0xFFFF);
-    e->off_hi   = (uint32_t)((handler>>32)&0xFFFFFFFF);
-    e->zero     = 0;
+static inline void gate_set_off(struct idt_gate64* g, uint64_t off) {
+    g->off0 = (uint16_t)(off & 0xFFFF);
+    g->off1 = (uint16_t)((off >> 16) & 0xFFFF);
+    g->off2 = (uint32_t)((off >> 32) & 0xFFFFFFFF);
 }
 
-/* Guard stubs */
-__attribute__((naked)) static void ud_guard_stub(void){
-    __asm__ __volatile__(
-        "push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
-        "pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
-        "iretq\n\t"
-    );
+// Simple memcpy/memset (no libc)
+static void kmemcpy(void* dst, const void* src, size_t n) {
+    uint8_t* d = (uint8_t*)dst; const uint8_t* s = (const uint8_t*)src;
+    while (n--) *d++ = *s++;
 }
-__attribute__((naked)) static void gp_guard_stub(void){
-    __asm__ __volatile__(
-        "push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
-        "pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
-        "add $8, %rsp\n\t"   /* drop error code pushed by CPU for #GP */
-        "iretq\n\t"
-    );
+static void kmemset(void* dst, int v, size_t n) {
+    uint8_t* d = (uint8_t*)dst; uint8_t b = (uint8_t)v;
+    while (n--) *d++ = b;
 }
 
-/* Writable cloned IDT (max 4 KiB) */
-static __attribute__((aligned(16))) uint8_t g_idt_clone[4096];
-static struct idt_desc64 g_idtr_clone;
-static int g_guard_active = 0;
+// --- Guard stubs -------------------------------------------------------------
+// Use the "interrupt" attribute so the compiler emits an IRETQ on return.
+// We intentionally *return* (instead of HLT/panic) so spurious vectors don't deadlock
+// bring-up. Replace later with real handlers via idt_guard_install_real_handlers().
+struct interrupt_frame {
+    uint64_t rip, cs, rflags, rsp, ss;
+};
 
-int idt_guard_is_active(void){
-    return g_guard_active;
+__attribute__((interrupt)) static void guard_noerr(struct interrupt_frame* frame) {
+    (void)frame;  // drop it; just return
+}
+__attribute__((interrupt)) static void guard_err(struct interrupt_frame* frame, uint64_t ec) {
+    (void)frame; (void)ec; // drop it; just return
 }
 
-static void idt_guard_patch_entries(struct idt_entry64* idt, uint16_t limit){
-    uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs));
-    if(limit + 1 >= (6+1)*sizeof(struct idt_entry64)){
-        struct idt_entry64* v6 = &idt[6];
-        uint64_t off6 = make_gate_offset(v6);
-        if(off6>=0x00000000000A0000ULL && off6<=0x00000000000FFFFFULL){
-            DPRINT("[idt-guard] patch v6 (#UD) from %016llx\n", (unsigned long long)off6);
-            fill_gate(v6, (uint64_t)(uintptr_t)&ud_guard_stub, cs);
+// Pointers used for final handler takeover (optional).
+static void (*g_ud_real)(void*) = 0;
+static void (*g_gp_real)(void*, uint64_t) = 0;
+
+// Small trampoline pairs that either call real handlers (when installed) or fall back.
+__attribute__((interrupt)) static void guard_ud_mux(struct interrupt_frame* f) {
+    if (g_ud_real) { g_ud_real(f); return; } guard_noerr(f);
+}
+__attribute__((interrupt)) static void guard_gp_mux(struct interrupt_frame* f, uint64_t ec) {
+    if (g_gp_real) { g_gp_real(f, ec); return; } guard_err(f, ec);
+}
+
+// Decide if a vector pushes an error code (architectural)
+static inline int vec_has_error_code(int vec) {
+    switch (vec) {
+        case 8:  // DF
+        case 10: // TS
+        case 11: // NP
+        case 12: // SS
+        case 13: // GP
+        case 14: // PF
+        case 17: // AC
+        case 30: // SX
+            return 1;
+        default: return 0;
+    }
+}
+
+// IDT clone buffer and state
+static __attribute__((aligned(16))) uint8_t s_idt_clone[4096];
+static int s_done = 0;
+
+static void patch_gate(struct idt_gate64* g, int vec, uint16_t cs)
+{
+    // Always normalize type/sel; if handler points low, repoint to guard.
+    uint64_t off = gate_get_off(g);
+
+    // Normalize descriptor
+    g->sel = cs;
+    // Present | DPL=0 | Type=0xE (interrupt gate) | 64-bit gate bit comes from type variant
+    g->type_attr = 0x8E;
+    g->ist &= 0x7; // keep IST bits if any
+
+    if (off < IDT_GUARD_DANGER_MAX) {
+        // Known-bad/legacy target: replace with guard stubs.
+        if (vec == 6) {
+            gate_set_off(g, (uint64_t)(void*)&guard_ud_mux);
+        } else if (vec == 13) {
+            gate_set_off(g, (uint64_t)(void*)&guard_gp_mux);
+        } else {
+            if (vec_has_error_code(vec))
+                gate_set_off(g, (uint64_t)(void*)&guard_err);
+            else
+                gate_set_off(g, (uint64_t)(void*)&guard_noerr);
         }
     }
-    if(limit + 1 >= (13+1)*sizeof(struct idt_entry64)){
-        struct idt_entry64* v13 = &idt[13];
-        uint64_t off13 = make_gate_offset(v13);
-        if(off13>=0x00000000000A0000ULL && off13<=0x00000000000FFFFFULL){
-            DPRINT("[idt-guard] patch v13 (#GP) from %016llx\n", (unsigned long long)off13);
-            fill_gate(v13, (uint64_t)(uintptr_t)&gp_guard_stub, cs);
-        }
-    }
 }
 
-void idt_guard_init_once(void){
-    if(g_guard_active) return;
+void idt_guard_init_once(void)
+{
+    if (s_done) return;
 
-    struct idt_desc64 idtr = {0};
-    __asm__ volatile("sidt %0" : "=m"(idtr));
-    if(!idtr.base) return;
-    uint16_t limit = idtr.limit;
-    if(limit >= sizeof(g_idt_clone)) limit = sizeof(g_idt_clone) - 1;
+    struct idtr64 cur; sidt(&cur);
+    size_t sz = (size_t)cur.limit + 1;
+    if (sz == 0 || sz > sizeof(s_idt_clone)) sz = sizeof(s_idt_clone);
 
-    /* Clone current IDT into writable buffer */
-    memcpy(g_idt_clone, (const void*)(uintptr_t)idtr.base, (size_t)limit + 1);
-    struct idt_entry64* idt = (struct idt_entry64*)g_idt_clone;
+    // Clone current IDT.
+    kmemcpy(s_idt_clone, (const void*)cur.base, sz);
 
-    /* Patch suspicious entries (low-mem handlers) */
-    idt_guard_patch_entries(idt, limit);
+    // Patch suspicious entries.
+    uint16_t cs = read_cs();
+    size_t entries = sz / sizeof(struct idt_gate64);
+    if (entries > 256) entries = 256;
 
-    /* Load cloned IDT */
-    g_idtr_clone.base  = (uint64_t)(uintptr_t)g_idt_clone;
-    g_idtr_clone.limit = limit;
-    __asm__ volatile("lidt %0" :: "m"(g_idtr_clone));
-    g_guard_active = 1;
+    for (size_t i = 0; i < entries; ++i) {
+        struct idt_gate64* g = (struct idt_gate64*)(s_idt_clone + i * sizeof(struct idt_gate64));
+        patch_gate(g, (int)i, cs);
+    }
 
-    DPRINT("[idt-guard] active base=%016llx limit=%04x\n",
-           (unsigned long long)g_idtr_clone.base, (unsigned)g_idtr_clone.limit);
+    // Load the sanitized clone.
+    struct idtr64 newd = { .limit = (uint16_t)(entries*sizeof(struct idt_gate64) - 1),
+                           .base  = (uint64_t)(void*)s_idt_clone };
+    lidt(&newd);
+
+    s_done = 1;
 }
 
-void idt_guard_install_real_handlers(void (*ud_handler)(void), void (*gp_handler)(void)){
-    if(!g_guard_active) return;
-    struct idt_entry64* idt = (struct idt_entry64*)(uintptr_t)g_idtr_clone.base;
-    uint16_t limit = g_idtr_clone.limit;
-    uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs));
-
-    if(ud_handler && limit + 1 >= (6+1)*sizeof(struct idt_entry64)){
-        fill_gate(&idt[6], (uint64_t)(uintptr_t)ud_handler, cs);
-        DPRINT("[idt-guard] installed real #UD=%p\n", ud_handler);
-    }
-    if(gp_handler && limit + 1 >= (13+1)*sizeof(struct idt_entry64)){
-        fill_gate(&idt[13], (uint64_t)(uintptr_t)gp_handler, cs);
-        DPRINT("[idt-guard] installed real #GP=%p\n", gp_handler);
-    }
+void idt_guard_install_real_handlers(void (*ud_noerr)(void*), void (*gp_err)(void*, uint64_t))
+{
+    g_ud_real = ud_noerr;
+    g_gp_real = gp_err;
+    // Keep using the cloned IDT; mux stubs will forward from now on.
 }
