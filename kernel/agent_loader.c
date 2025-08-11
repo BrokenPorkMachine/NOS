@@ -1,239 +1,154 @@
-// kernel/agent_loader.c — IDT clone + PROBE via printf + force-patch #UD/#GP + BYPASS loader
-// - Uses printf (kernel console) only. No port I/O, no regx/gate usage.
-// - Prints vector 6 and 13 handler pointers before & after patching to help confirm the source of 0xB0000 jumps.
-// - Clones IDT into writable buffer, unconditionally sets #UD/#GP to known-good 64-bit stubs, then LIDT to the clone.
-// - Minimal ELF ET_EXEC loader (RELA-relative) with a C trampoline that calls thread_exit().
+// kernel/agent_loader.c — production-ready
+// - Quiet, minimal ELF ET_EXEC loader (maps as PIE into kernel heap area / arena)
+// - Applies RELA R_X86_64_RELATIVE entries
+// - Spawns agent via a C trampoline that calls thread_exit() if available
+// - Calls idt_guard_init_once() to ensure #UD/#GP can't vector into legacy low mem
 //
-// NOTE: If your console isn't ready here, you can switch the PROBE block off by setting PROBE_IDT=0.
+// NOTE: For best hygiene, call idt_guard_init_once() in very early arch init (trap setup)
+//       and remove the call below. It's idempotent either way.
 
 #include "agent_loader.h"
 #include "Task/thread.h"
 #include "VM/kheap.h"
+#include "arch/idt_guard.h"
 #include <elf.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
 
-extern int printf(const char *fmt, ...);
-
 typedef void (*agent_entry_t)(void);
-
-/* ===== IDT structs & helpers ===== */
-struct __attribute__((packed)) idt_desc64 { uint16_t limit; uint64_t base; };
-struct __attribute__((packed)) idt_entry64 {
-	uint16_t off_lo;
-	uint16_t sel;
-	uint8_t  ist;
-	uint8_t  type_attr;
-	uint16_t off_mid;
-	uint32_t off_hi;
-	uint32_t zero;
-};
-static inline uint64_t make_gate_offset(const volatile struct idt_entry64* e){
-	return ((uint64_t)e->off_hi<<32) | ((uint64_t)e->off_mid<<16) | e->off_lo;
-}
-static inline void fill_gate(struct idt_entry64* e, uint64_t handler, uint16_t cs){
-	e->off_lo   = (uint16_t)(handler & 0xFFFF);
-	e->sel      = cs;
-	e->ist      = 0;        // no IST
-	e->type_attr= 0x8E;     // present, DPL=0, 64-bit interrupt gate
-	e->off_mid  = (uint16_t)((handler>>16)&0xFFFF);
-	e->off_hi   = (uint32_t)((handler>>32)&0xFFFFFFFF);
-	e->zero     = 0;
-}
-
-/* Minimal stubs */
-__attribute__((naked)) void ud_safe_stub(void){
-	__asm__ __volatile__(
-		"push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
-		"pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
-		"iretq\n\t"
-	);
-}
-__attribute__((naked)) void gp_safe_stub(void){
-	__asm__ __volatile__(
-		"push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
-		"pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
-		"add $8, %rsp\n\t"   /* drop error code pushed by CPU for #GP */
-		"iretq\n\t"
-	);
-}
-
-/* Writable cloned IDT (max 4 KiB) */
-static __attribute__((aligned(16))) uint8_t g_idt_clone[4096];
-static struct idt_desc64 g_idtr_clone;
-
-static void idt_clone_probe_patch_and_load_once(void){
-	static int done=0; if(done) return; done=1;
-	struct idt_desc64 idtr = {0};
-	__asm__ volatile("sidt %0" : "=m"(idtr));
-	if(!idtr.base) return;
-	uint16_t limit = idtr.limit;
-	if(limit >= sizeof(g_idt_clone)) limit = sizeof(g_idt_clone) - 1;
-
-	/* Probe current */
-	const struct idt_entry64* idt_cur = (const struct idt_entry64*)(uintptr_t)idtr.base;
-	uint64_t off6  = (idtr.limit + 1 >= (6+1)*sizeof(struct idt_entry64))  ? make_gate_offset(&idt_cur[6])  : 0;
-	uint64_t off13 = (idtr.limit + 1 >= (13+1)*sizeof(struct idt_entry64)) ? make_gate_offset(&idt_cur[13]) : 0;
-	printf("[idt] pre  v6=%016llx v13=%016llx base=%016llx lim=%04x\n",
-	       (unsigned long long)off6, (unsigned long long)off13,
-	       (unsigned long long)idtr.base, (unsigned)idtr.limit);
-
-	/* Clone */
-	memcpy(g_idt_clone, (const void*)(uintptr_t)idtr.base, (size_t)limit + 1);
-	struct idt_entry64* idt = (struct idt_entry64*)g_idt_clone;
-
-	/* Force-patch #UD + #GP stubs */
-	uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs));
-	fill_gate(&idt[6],  (uint64_t)(uintptr_t)&ud_safe_stub, cs);
-	fill_gate(&idt[13], (uint64_t)(uintptr_t)&gp_safe_stub, cs);
-
-	/* Probe patched clone */
-	off6  = make_gate_offset(&idt[6]);
-	off13 = make_gate_offset(&idt[13]);
-	printf("[idt] post v6=%016llx v13=%016llx new_base=%016llx lim=%04x\n",
-	       (unsigned long long)off6, (unsigned long long)off13,
-	       (unsigned long long)(uintptr_t)g_idt_clone, (unsigned)limit);
-
-	/* Load cloned IDT */
-	g_idtr_clone.base  = (uint64_t)(uintptr_t)g_idt_clone;
-	g_idtr_clone.limit = limit;
-	__asm__ volatile("lidt %0" :: "m"(g_idtr_clone));
-}
-
-/* ===== Loader internals ===== */
 
 /* FS hooks wired elsewhere */
 static agent_read_file_fn g_read_file = 0;
 static agent_free_fn      g_free_fn   = 0;
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
-void agent_loader_set_gate(agent_gate_fn g){ (void)g; } /* no-op */
 
-/* 1 MiB arena fallback */
+/* Provide a no-op gate setter to satisfy legacy callers */
+void agent_loader_set_gate(agent_gate_fn g){ (void)g; }
+
+/* 1 MiB arena fallback for when kalloc() is tight early in boot */
 #define AGENT_ARENA_SIZE (1<<20)
 static uint8_t g_agent_arena[AGENT_ARENA_SIZE];
 static size_t  g_agent_bump = 0;
 static void* arena_alloc(size_t sz){
-	const size_t align = 0x1000;
-	size_t off = (g_agent_bump + (align-1)) & ~(align-1);
-	if (off + sz > AGENT_ARENA_SIZE) return NULL;
-	void* p = g_agent_arena + off; g_agent_bump = off + sz; return p;
+    const size_t align = 0x1000;
+    size_t off = (g_agent_bump + (align-1)) & ~(align-1);
+    if (off + sz > AGENT_ARENA_SIZE) return NULL;
+    void* p = g_agent_arena + off; g_agent_bump = off + sz; return p;
 }
 
 /* RELA (RELATIVE) */
 static size_t apply_relocations_rela_table(uint8_t* base, uint64_t lo, Elf64_Addr tab, Elf64_Addr tsz){
-	if(!tab || !tsz) return 0;
-	if (tab < lo) return 0;
-	uint64_t off = tab - lo;
-	Elf64_Rela* rela_tbl = (Elf64_Rela*)(base + off);
-	size_t cnt = (size_t)(tsz / sizeof(Elf64_Rela)), applied=0;
-	for(size_t i=0;i<cnt;i++){
-		uint32_t type = (uint32_t)ELF64_R_TYPE(rela_tbl[i].r_info);
-		if(type == R_X86_64_RELATIVE){
-			uint64_t tgt_off = rela_tbl[i].r_offset - lo;
-			uint64_t *where = (uint64_t*)(base + tgt_off);
-			*where = (uint64_t)(base + rela_tbl[i].r_addend);
-			applied++;
-		}
-	}
-	return applied;
+    if(!tab || !tsz) return 0;
+    if (tab < lo) return 0;
+    uint64_t off = tab - lo;
+    Elf64_Rela* rela_tbl = (Elf64_Rela*)(base + off);
+    size_t cnt = (size_t)(tsz / sizeof(Elf64_Rela)), applied=0;
+    for(size_t i=0;i<cnt;i++){
+        uint32_t type = (uint32_t)ELF64_R_TYPE(rela_tbl[i].r_info);
+        if(type == R_X86_64_RELATIVE){
+            uint64_t tgt_off = rela_tbl[i].r_offset - lo;
+            uint64_t *where = (uint64_t*)(base + tgt_off);
+            *where = (uint64_t)(base + rela_tbl[i].r_addend);
+            applied++;
+        }
+    }
+    return applied;
 }
 static void apply_relocations_rela(uint8_t* base, uint64_t lo, const Elf64_Ehdr* eh, const void* img, size_t sz){
-	(void)sz;
-	const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
-	Elf64_Addr rela=0,rela_sz=0,rela_ent=sizeof(Elf64_Rela), jmprel=0,pltrel_sz=0;
-	for(uint16_t i=0;i<eh->e_phnum;i++){
-		if(ph[i].p_type != PT_DYNAMIC) continue;
-		const Elf64_Dyn* dyn = (const Elf64_Dyn*)((const uint8_t*)img + ph[i].p_offset);
-		size_t n = ph[i].p_filesz / sizeof(Elf64_Dyn);
-		for(size_t j=0;j<n;j++){
-			switch(dyn[j].d_tag){
-				case DT_RELA:    rela      = dyn[j].d_un.d_ptr; break;
-				case DT_RELASZ:  rela_sz   = dyn[j].d_un.d_val; break;
-				case DT_RELAENT: rela_ent  = dyn[j].d_un.d_val; break;
-				case DT_JMPREL:  jmprel    = dyn[j].d_un.d_ptr; break;
-				case DT_PLTRELSZ:pltrel_sz = dyn[j].d_un.d_val; break;
-				default: break;
-			}
-		}
-	}
-	(void)rela_ent;
-	(void)apply_relocations_rela_table(base, lo, rela,     rela_sz);
-	(void)apply_relocations_rela_table(base, lo, jmprel,   pltrel_sz);
+    (void)sz;
+    const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
+    Elf64_Addr rela=0,rela_sz=0,rela_ent=sizeof(Elf64_Rela), jmprel=0,pltrel_sz=0;
+    for(uint16_t i=0;i<eh->e_phnum;i++){
+        if(ph[i].p_type != PT_DYNAMIC) continue;
+        const Elf64_Dyn* dyn = (const Elf64_Dyn*)((const uint8_t*)img + ph[i].p_offset);
+        size_t n = ph[i].p_filesz / sizeof(Elf64_Dyn);
+        for(size_t j=0;j<n;j++){
+            switch(dyn[j].d_tag){
+                case DT_RELA:    rela      = dyn[j].d_un.d_ptr; break;
+                case DT_RELASZ:  rela_sz   = dyn[j].d_un.d_val; break;
+                case DT_RELAENT: rela_ent  = dyn[j].d_un.d_val; break;
+                case DT_JMPREL:  jmprel    = dyn[j].d_un.d_ptr; break;
+                case DT_PLTRELSZ:pltrel_sz = dyn[j].d_un.d_val; break;
+                default: break;
+            }
+        }
+    }
+    (void)rela_ent;
+    (void)apply_relocations_rela_table(base, lo, rela,     rela_sz);
+    (void)apply_relocations_rela_table(base, lo, jmprel,   pltrel_sz);
 }
 
 /* Trampoline that ends with thread_exit() */
 static agent_entry_t g_agent_entry = 0;
 extern void thread_exit(void) __attribute__((weak));
 static void agent_trampoline(void){
-	agent_entry_t fn = g_agent_entry;
-	printf("[agt] trampoline start fn=%p\n", (void*)fn);
-	if(fn) fn();
-	printf("[agt] trampoline end\n");
-	if(thread_exit) thread_exit();
-	for(;;){ __asm__ __volatile__("cli; hlt" ::: "memory"); }
+    agent_entry_t fn = g_agent_entry;
+    if(fn) fn();
+    if(thread_exit) thread_exit();
+    for(;;){ __asm__ __volatile__("cli; hlt" ::: "memory"); }
 }
 
 static int elf_map_and_spawn(const void* img, size_t sz, int prio){
-	if(!img || sz < sizeof(Elf64_Ehdr)) return -1;
-	const Elf64_Ehdr* eh=(const Elf64_Ehdr*)img;
-	if(memcmp(eh->e_ident, ELFMAG, SELFMAG)!=0 || eh->e_ident[EI_CLASS]!=ELFCLASS64) return -1;
-	if(eh->e_phoff==0 || eh->e_phnum==0) return -1;
+    if(!img || sz < sizeof(Elf64_Ehdr)) return -1;
+    const Elf64_Ehdr* eh=(const Elf64_Ehdr*)img;
+    if(memcmp(eh->e_ident, ELFMAG, SELFMAG)!=0 || eh->e_ident[EI_CLASS]!=ELFCLASS64) return -1;
+    if(eh->e_phoff==0 || eh->e_phnum==0) return -1;
 
-	const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
+    const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
 
-	uint64_t lo=UINT64_MAX, hi=0;
-	for(uint16_t i=0;i<eh->e_phnum;i++){
-		if(ph[i].p_type!=PT_LOAD) continue;
-		if(ph[i].p_vaddr < lo) lo = ph[i].p_vaddr;
-		uint64_t end = ph[i].p_vaddr + ph[i].p_memsz;
-		if(end > hi) hi = end;
-	}
-	if(lo==UINT64_MAX || hi<=lo) return -1;
+    uint64_t lo=UINT64_MAX, hi=0;
+    for(uint16_t i=0;i<eh->e_phnum;i++){
+        if(ph[i].p_type!=PT_LOAD) continue;
+        if(ph[i].p_vaddr < lo) lo = ph[i].p_vaddr;
+        uint64_t end = ph[i].p_vaddr + ph[i].p_memsz;
+        if(end > hi) hi = end;
+    }
+    if(lo==UINT64_MAX || hi<=lo) return -1;
 
-	size_t span = (size_t)(hi - lo);
-	uint8_t* base = (uint8_t*)kalloc(span);
-	if(!base){ base = (uint8_t*)arena_alloc(span); if(!base) return -1; }
-	memset(base, 0, span);
+    size_t span = (size_t)(hi - lo);
+    uint8_t* base = (uint8_t*)kalloc(span);
+    if(!base){ base = (uint8_t*)arena_alloc(span); if(!base) return -1; }
+    memset(base, 0, span);
 
-	for(uint16_t i=0;i<eh->e_phnum;i++){
-		if(ph[i].p_type!=PT_LOAD) continue;
-		if(ph[i].p_offset + ph[i].p_filesz > sz){ return -1; }
-		uintptr_t dst = (uintptr_t)(base + (ph[i].p_vaddr - lo));
-		memcpy((void*)dst, (const uint8_t*)img + ph[i].p_offset, ph[i].p_filesz);
-	}
+    for(uint16_t i=0;i<eh->e_phnum;i++){
+        if(ph[i].p_type!=PT_LOAD) continue;
+        if(ph[i].p_offset + ph[i].p_filesz > sz){ return -1; }
+        uintptr_t dst = (uintptr_t)(base + (ph[i].p_vaddr - lo));
+        memcpy((void*)dst, (const uint8_t*)img + ph[i].p_offset, ph[i].p_filesz);
+    }
 
-	apply_relocations_rela(base, lo, eh, img, sz);
+    apply_relocations_rela(base, lo, eh, img, sz);
 
-	if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
-	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
+    if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
+    uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
 
-	/* Install cloned IDT with forced safe #UD/#GP vectors */
-	idt_clone_probe_patch_and_load_once();
+    /* Ensure #UD/#GP can't vector into legacy low memory; idempotent */
+    idt_guard_init_once();
 
-	/* Use a C trampoline so the entry can never return to garbage */
-	g_agent_entry = (agent_entry_t)(void*)entry_addr;
-	thread_t* t=thread_create_with_priority(agent_trampoline, prio>0?prio:200);
-	return t ? 0 : -1;
+    /* Use a C trampoline so the entry can never return to garbage */
+    g_agent_entry = (agent_entry_t)(void*)entry_addr;
+    thread_t* t=thread_create_with_priority(agent_trampoline, prio>0?prio:200);
+    return t ? 0 : -1;
 }
 
 /* Public API */
 int load_agent_auto_with_prio(const void* img, size_t sz, int prio){
-	return elf_map_and_spawn(img, sz, prio);
+    return elf_map_and_spawn(img, sz, prio);
 }
 int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio){
-	(void)f; return elf_map_and_spawn(img, sz, prio);
+    (void)f; return elf_map_and_spawn(img, sz, prio);
 }
 int load_agent_auto(const void* img, size_t sz){ return elf_map_and_spawn(img, sz, 200); }
 int load_agent(const void* img, size_t sz, agent_format_t f){ (void)f; return elf_map_and_spawn(img,  sz, 200); }
 
 int agent_loader_run_from_path(const char* path, int prio){
-	if(!g_read_file) return -1;
-	void* buf=0; size_t sz=0;
-	int rc=g_read_file(path,&buf,&sz);
-	if(rc<0) return rc;
-	int out = elf_map_and_spawn(buf, sz, prio);
-	if(g_free_fn && buf) g_free_fn(buf);
-	return out;
+    if(!g_read_file) return -1;
+    void* buf=0; size_t sz=0;
+    int rc=g_read_file(path,&buf,&sz);
+    if(rc<0) return rc;
+    int out = elf_map_and_spawn(buf, sz, prio);
+    if(g_free_fn && buf) g_free_fn(buf);
+    return out;
 }
