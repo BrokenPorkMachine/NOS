@@ -1,5 +1,10 @@
-// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C), no snprintf,
-// arena fallback, RELATIVE relocs, ultra-verbose tracing.
+// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C), no libc JSON parsing.
+// - Rebase entry for BOTH ET_DYN and ET_EXEC (we always map at a fresh base).
+// - Applies R_X86_64_RELATIVE relocations.
+// - 1 MiB arena fallback if kalloc() fails.
+// - Ultra-verbose tracing around mapping, relocations, and entry bytes.
+// - No snprintf/strstr/memchr/strtol; tiny local scanners only.
+// - Spawns BEFORE any optional bookkeeping (symbols disabled by default).
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -37,7 +42,7 @@ static agent_gate_fn      g_gate_fn   = 0;
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
 void agent_loader_set_gate(agent_gate_fn g){ g_gate_fn=g; }
 
-/* ---------- Tiny safe string helpers (no varargs) ---------- */
+/* ---------- Tiny safe string helpers (no varargs, no libc scans) ---------- */
 static size_t cstr_len(const char* s){ size_t n=0; if(!s) return 0; while(s[n]) n++; return n; }
 static void cstr_copy(char* dst, size_t cap, const char* src){
 	if(!dst||cap==0){ return; }
@@ -50,85 +55,68 @@ static void cstr_append(char* dst, size_t cap, const char* src){
 	while(src[i] && d+1<cap){ dst[d++]=src[i++]; }
 	dst[d]=0;
 }
-static void make_quoted_key(char* out, size_t cap, const char* key){
-	if(!out||cap==0){ return; }
-	out[0]=0;
-	cstr_append(out,cap,"\"");
-	cstr_append(out,cap,key?key:"");
-	cstr_append(out,cap,"\"");
-}
 static void path_basename_noext(const char* path, char* out, size_t cap){
 	if(!out||cap==0){ return; }
-	out[0]=0;
-	if(!path){ return; }
-	const char* b=path;
-	for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
-	/* copy */
-	size_t i=0; while(b[i] && i+1<cap){ out[i]=b[i]; i++; }
-	out[i]=0;
-	/* strip last '.' */
-	char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p;
-	if(dot) *dot=0;
-}
-static void build_manifest_default(char* out, size_t cap, const char* name, const char* entry){
-	if(!out||cap==0){ return; }
-	out[0]=0;
-	cstr_append(out,cap,"{\"name\":\"");
-	cstr_append(out,cap,name?name:"");
-	cstr_append(out,cap,"\",\"type\":4,\"version\":\"0\",\"entry\":\"");
-	cstr_append(out,cap,entry?entry:"agent_main");
-	cstr_append(out,cap,"\",\"capabilities\":\"\"}");
+	out[0]=0; if(!path){ return; }
+	const char* b=path; for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
+	size_t i=0; while(b[i] && i+1<cap){ out[i]=b[i]; i++; } out[i]=0;
+	char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p; if(dot) *dot=0;
 }
 
-/* ---------- Misc helpers ---------- */
-static const void* memmem_local(const void* hay, size_t haylen, const void* nee, size_t neelen){
-	if(!hay || !nee || neelen==0 || haylen<neelen) return NULL;
-	const uint8_t *h=(const uint8_t*)hay, *n=(const uint8_t*)nee;
-	for(size_t i=0;i+neelen<=haylen;i++) if(memcmp(h+i,n,neelen)==0) return h+i;
-	return NULL;
-}
-static const char* skip_ws(const char* p){ while(p && (*p==' '||*p=='\t'||*p=='\n'||*p=='\r')) p++; return p; }
-
-static int json_get_str(const char* json, const char* key, char* out, size_t osz){
-	if(!json || !key || !out || osz==0) return -1;
-	char pat[64]; make_quoted_key(pat,sizeof(pat),key); /* pat = "key" */
-	const char* p = strstr(json, pat);
-	if(!p) return -1;
-	p += cstr_len(pat);
-	p = skip_ws(p);
-	if(*p!=':') return -1;
-	p++; p = skip_ws(p);
-	if(*p!='\"') return -1;
-	p++;
-	size_t i=0;
-	while(*p && *p!='\"' && i+1<osz){ out[i++]=*p++; }
-	if(*p!='\"') return -1;
-	out[i]=0;
-	return 0;
-}
-static int json_get_int(const char* json, const char* key){
-	if(!json || !key) return -1;
-	char pat[64]; make_quoted_key(pat,sizeof(pat),key);
-	const char* p = strstr(json, pat);
-	if(!p) return -1;
-	p += cstr_len(pat);
-	p = skip_ws(p);
-	if(*p!=':') return -1;
-	p++; p = skip_ws(p);
-	return (int)strtol(p, NULL, 10);
-}
+/* Find first '{'...' }' blob and copy it (null-terminated). No memchr. */
 static int extract_manifest_blob(const void* buf, size_t sz, char* out, size_t osz){
 	if(!buf || !sz || !out || !osz) return -1;
-	const char* s=(const char*)memchr(buf,'{',sz);
-	if(!s) return -1;
-	size_t remain = sz - (size_t)(s - (const char*)buf);
-	const char* e=(const char*)memchr(s,'}',remain);
-	if(!e || e<=s) return -1;
-	size_t len=(size_t)(e-s+1);
-	if(len+1>osz) return -1;
-	memcpy(out,s,len);
+	const char* b=(const char*)buf;
+	size_t i=0; while(i<sz && b[i]!='{') i++;
+	if(i==sz) return -1;
+	size_t j=i; while(j<sz && b[j]!='}') j++;
+	if(j==sz || j<i) return -1;
+	size_t len = (j - i + 1);
+	if(len + 1 > osz) return -1;
+	for(size_t k=0;k<len;k++) out[k]=b[i+k];
 	out[len]=0;
 	return 0;
+}
+
+/* Very small JSON string value extractor: looks for "key":"value".
+   - No escapes supported (manifest is simple).
+   - No libc calls. */
+static int json_find_string_value(const char* json, const char* key, char* out, size_t osz){
+	if(!json || !key || !out || osz==0) return -1;
+	out[0]=0;
+	const size_t klen = cstr_len(key);
+	const char *p = json;
+	while(*p){
+		/* find opening quote */
+		while(*p && *p!='"') p++;
+		if(!*p) break;
+		p++; /* start of candidate key */
+		const char* kstart = p;
+		size_t i=0;
+		while(p[i] && p[i]!='"' && i<klen && kstart[i]==key[i]) i++;
+		/* key match only if next char is closing quote and we consumed whole key */
+		if(i==klen && kstart[i]=='"'){
+			p = kstart + i + 1;
+			/* skip ws */
+			while(*p==' '||*p=='\t'||*p=='\r'||*p=='\n') p++;
+			if(*p!=':'){ continue; }
+			p++;
+			while(*p==' '||*p=='\t'||*p=='\r'||*p=='\n') p++;
+			if(*p!='"'){ return -1; } /* value must be quoted */
+			p++;
+			/* copy until closing quote */
+			size_t o=0;
+			while(*p && *p!='"' && o+1<osz){ out[o++]=*p++; }
+			if(*p!='"') return -1;
+			out[o]=0;
+			return 0;
+		}else{
+			/* skip to next quote */
+			while(*p && *p!='"') p++;
+			if(*p=='"') p++;
+		}
+	}
+	return -1;
 }
 
 /* ---------- Entry registry (name -> fn*) ---------- */
@@ -177,38 +165,36 @@ static void hexdump_window(const uint8_t* img_base, size_t img_span,
 	}
 }
 
-/* ---------- Gate + registry + spawn ---------- */
-static int register_and_spawn_from_manifest(const char* json, const char* path, int prio){
+/* ---------- Minimal register + spawn (no JSON parse) ---------- */
+static int register_and_spawn_direct(const char* name,
+                                     const char* version,
+                                     const char* capabilities,
+                                     const char* entry,
+                                     const char* path,
+                                     int prio)
+{
 	regx_manifest_t m; memset(&m,0,sizeof(m));
-	char entry[64]={0};
-
-	(void)path;
-	json_get_str(json,"name",m.name,sizeof(m.name));
-	m.type = json_get_int(json,"type");
-	json_get_str(json,"version",m.version,sizeof(m.version));
-	json_get_str(json,"abi",m.abi,sizeof(m.abi));
-	json_get_str(json,"capabilities",m.capabilities,sizeof(m.capabilities));
-	json_get_str(json,"entry",entry,sizeof(entry));
-	if(!entry[0]) cstr_copy(entry,sizeof(entry),"agent_main");
-
-	LOGV("[loader] reg+spawn name=\"%s\" entry=\"%s\" caps=\"%s\" prio=%d\n",
-	     m.name[0]?m.name:"(unnamed)", entry, m.capabilities, prio);
+	cstr_copy(m.name, sizeof(m.name), name?name:"(unnamed)");
+	m.type = 4;
+	cstr_copy(m.version, sizeof(m.version), version?version:"0");
+	cstr_copy(m.abi, sizeof(m.abi), "");
+	cstr_copy(m.capabilities, sizeof(m.capabilities), capabilities?capabilities:"");
 
 	if(g_gate_fn){
-		int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry);
-		if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name[0]?m.name:"(unnamed)", entry); return -1; }
+		int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry?entry:"agent_main");
+		if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name, entry?entry:"agent_main"); return -1; }
 	}
 
 	uint64_t id = regx_register(&m,0);
-	if(!id){ kprintf("[loader] regx_register failed for %s\n", m.name[0]?m.name:"(unnamed)"); return -1; }
+	if(!id){ kprintf("[loader] regx_register failed for %s\n", m.name); return -1; }
 
-	agent_entry_t fn=find_entry(entry);
-	if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry); return -1; }
+	agent_entry_t fn=find_entry(entry?entry:"agent_main");
+	if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry?entry:"agent_main"); return -1; }
 
 	n2_agent_t agent; memset(&agent,0,sizeof(agent));
-	cstr_copy(agent.name,sizeof(agent.name), m.name[0]?m.name:"(unnamed)");
-	cstr_copy(agent.version,sizeof(agent.version), m.version);
-	cstr_copy(agent.capabilities,sizeof(agent.capabilities), m.capabilities);
+	cstr_copy(agent.name, sizeof(agent.name), m.name);
+	cstr_copy(agent.version, sizeof(agent.version), m.version);
+	cstr_copy(agent.capabilities, sizeof(agent.capabilities), m.capabilities);
 	agent.entry=fn;
 	n2_agent_register(&agent);
 
@@ -309,7 +295,7 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	size_t nrel = apply_relocations_rela(base, lo, eh, img, sz);
 	LOGV("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", nrel);
 
-	/* Rebase entry for BOTH ET_DYN and ET_EXEC */
+	/* Rebase entry for BOTH ET_DYN and ET_EXEC. */
 	if (eh->e_entry < lo || eh->e_entry >= hi){
 		kprintf("[loader] FATAL: e_entry (0x%llx) out of PT_LOAD span [0x%llx..%llx)\n",
 		        (unsigned long long)eh->e_entry,(unsigned long long)lo,(unsigned long long)hi);
@@ -337,36 +323,43 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 		hexdump_window(base, span, entry_ptr, 32, 32);
 	}
 
-	/* Manifest */
-	char manifest[512]={0};
-	if(extract_manifest_blob(img, sz, manifest, sizeof(manifest))!=0){
-		char nm[64]={0}; path_basename_noext(path?path:"init", nm, sizeof(nm));
-		build_manifest_default(manifest, sizeof(manifest), nm[0]?nm:"init", "agent_main");
-	}else{
+	/* Manifest (optional; we only try to get "entry", everything else is defaulted) */
+	char mf[512]={0};
+	int have_manifest = (extract_manifest_blob(img, sz, mf, sizeof(mf))==0);
+	if(have_manifest){
 		LOGV("[loader] manifest found for %s\n", path?path:"(buffer)");
+	}else{
+		LOGV("[loader] no manifest in %s; using defaults\n", path?path:"(buffer)");
 	}
 
 	/* Resolve entry symbol BEFORE any optional bookkeeping */
-	char entry_name[64]={0};
-	if(json_get_str(manifest,"entry",entry_name,sizeof(entry_name))!=0)
-		cstr_copy(entry_name,sizeof(entry_name),"agent_main");
-
+	char entry_name[64]; cstr_copy(entry_name,sizeof(entry_name),"agent_main");
+	if(have_manifest){
+		char tmp[64]={0};
+		if(json_find_string_value(mf,"entry",tmp,sizeof(tmp))==0 && tmp[0]){
+			cstr_copy(entry_name,sizeof(entry_name),tmp);
+		}
+	}
 	LOGV("[loader] binding entry symbol \"%s\" -> %p\n", entry_name, (void*)entry_addr);
 	reg_entry(entry_name, (agent_entry_t)(void*)entry_addr);
 
-	LOGV("[loader] invoking register_and_spawn...\n");
-	int rc = register_and_spawn_from_manifest(manifest, path, prio);
+	/* Build minimal manifest info for registry/gate */
+	char agent_name[64]={0};
+	path_basename_noext(path?path:"init", agent_name, sizeof(agent_name));
+	if(!agent_name[0]) cstr_copy(agent_name,sizeof(agent_name),"init");
+
+	LOGV("[loader] invoking register_and_spawn (name=\"%s\", entry=\"%s\")...\n", agent_name, entry_name);
+	int rc = register_and_spawn_direct(agent_name, "0", "", entry_name, path, prio);
 	LOGV("[loader] register_and_spawn rc=%d\n", rc);
 	if (rc != 0) return rc;
 
 	/* Optional: add symbol region AFTER successful spawn (guarded) */
 #if LOADER_ADD_SYMBOLS
 	{
-		char nm2[64]={0}; path_basename_noext(path?path:"elf", nm2, sizeof(nm2));
-		char symname[96]={0};
-		cstr_copy(symname,sizeof(symname), nm2[0]?nm2:"elf");
-		cstr_append(symname,sizeof(symname),":");
-		cstr_append(symname,sizeof(symname),entry_name);
+		char symname[128]={0};
+		cstr_copy(symname,sizeof(symname), agent_name);
+		cstr_append(symname,sizeof(symname), ":");
+		cstr_append(symname,sizeof(symname), entry_name);
 		LOGV("[loader] symbols_add %s base=%p span=%zu\n", symname, base, span);
 		symbols_add(symname, (uintptr_t)base, span);
 	}
@@ -377,18 +370,18 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 /* ---------- MACHO2 wrapper (embedded ELF) ---------- */
 static int load_agent_macho2_impl(const void* img, size_t sz, const char* path, int prio){
 	LOGV("[loader] MACHO2 wrapper for %s\n", path?path:"(buffer)");
-	const uint8_t* p = (const uint8_t*)memmem_local(img, sz, "\x7F""ELF", 4);
-	if(p){
-		size_t remain = sz - (size_t)(p - (const uint8_t*)img);
-		LOGV("[loader] embedded ELF detected at +0x%zx (remain=%zu)\n",(size_t)(p - (const uint8_t*)img), remain);
-		return load_agent_elf_impl(p, remain, path, prio);
+	/* Look for ELF magic without memmem */
+	const uint8_t* d=(const uint8_t*)img;
+	size_t i=0; for(; i+4<=sz; i++){ if(d[i]==0x7F && d[i+1]=='E' && d[i+2]=='L' && d[i+3]=='F') break; }
+	if(i+4<=sz){
+		size_t remain = sz - i;
+		LOGV("[loader] embedded ELF detected at +0x%zx (remain=%zu)\n", (size_t)i, remain);
+		return load_agent_elf_impl(d+i, remain, path, prio);
 	}
-	char manifest[512]={0};
-	if(extract_manifest_blob(img, sz, manifest, sizeof(manifest))!=0){
-		kprintf("[loader] MACHO2 without ELF and no manifest\n");
-		return -1;
-	}
-	return register_and_spawn_from_manifest(manifest, path, prio);
+	char dummy_name[64]={0}; path_basename_noext(path?path:"agent", dummy_name, sizeof(dummy_name));
+	LOGV("[loader] MACHO2 without ELF; registering stub agent \"%s\"\n", dummy_name[0]?dummy_name:"agent");
+	/* We don't have code to run; treat as failure to avoid spawning garbage */
+	return -1;
 }
 
 /* ---------- FLAT loader ---------- */
@@ -398,18 +391,16 @@ static int load_agent_flat_impl(const void* img, size_t sz, const char* path, in
 	const char* entry="agent_main";
 	LOGV("[loader] FLAT image %s at %p (%zu bytes)\n", nm[0]?nm:"(flat)", img, sz);
 	reg_entry(entry, (agent_entry_t)img);
-	char manifest[256]={0};
-	build_manifest_default(manifest, sizeof(manifest), nm[0]?nm:"flat", entry);
-	return register_and_spawn_from_manifest(manifest, path, prio);
+	return register_and_spawn_direct(nm[0]?nm:"flat", "0", "", entry, path, prio);
 }
 
 /* ---------- Public API (use enum/prototypes from header) ---------- */
 static agent_format_t detect_fmt(const void* img, size_t sz){
 	const uint8_t* d=(const uint8_t*)img;
-	if(sz>=4 && memcmp(d,"\x7F""ELF",4)==0) return AGENT_FORMAT_ELF;
+	if(sz>=4 && d[0]==0x7F && d[1]=='E' && d[2]=='L' && d[3]=='F') return AGENT_FORMAT_ELF;
 	if(sz>=4 && (d[0]==0xCF&&d[1]==0xFA&&d[2]==0xED&&d[3]==0xFE)) return AGENT_FORMAT_MACHO2;
-	if(sz>=4 && memcmp(d,"NOSM",4)==0) return AGENT_FORMAT_NOSM;
-	if(sz>0 && ((const char*)d)[0]=='{') return AGENT_FORMAT_MACHO2;
+	if(sz>=4 && d[0]=='N' && d[1]=='O' && d[2]=='S' && d[3]=='M') return AGENT_FORMAT_NOSM;
+	if(sz>0 && ((const char*)d)[0]=='{') return AGENT_FORMAT_MACHO2; /* historical wrapper */
 	return AGENT_FORMAT_FLAT;
 }
 
