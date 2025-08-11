@@ -1,20 +1,12 @@
-// kernel/agent_loader.c  -- C-only loader with arena fallback
+// kernel/agent_loader.c  -- C-only loader with arena fallback + gate-based spawn
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 
 #include "VM/kheap.h"     // kalloc()
-#include "agent.h"        // may or may not declare register_and_spawn()
 #include "printf.h"       // serial_printf()
 
-// Fallback prototypes in case headers don't declare them
-#ifndef HAVE_SERIAL_PRINTF
-extern int serial_printf(const char *fmt, ...);
-#endif
-#ifndef HAVE_REGISTER_AND_SPAWN
-extern int register_and_spawn(const char *name, void *entry, int prio);
-#endif
-
+// Loader<->registry gate: set by agent_loader_set_gate() in agent_loader_pub.c
 extern int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
 
 // ---- Minimal ELF64 bits ----
@@ -155,9 +147,8 @@ static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
     (void)sz;
     const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
     const Elf64_Phdr* dyn = NULL;
-    uint16_t i;
 
-    for (i = 0; i < eh->e_phnum; ++i) {
+    for (uint16_t i = 0; i < eh->e_phnum; ++i) {
         if (ph[i].p_type == PT_DYNAMIC) { dyn = &ph[i]; break; }
     }
     if (!dyn) return 0;
@@ -168,7 +159,7 @@ static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
     uint64_t rela = 0, rela_sz = 0, rela_ent = sizeof(Elf64_Rela);
     uint64_t jmprel = 0, pltrel_sz = 0;
 
-    for (i = 0; i < dcount; ++i) {
+    for (uint16_t i = 0; i < dcount; ++i) {
         switch (d[i].d_tag) {
             case DT_RELA:     rela      = d[i].d_val; break;
             case DT_RELASZ:   rela_sz   = d[i].d_val; break;
@@ -253,8 +244,14 @@ static int elf_map_and_spawn(const char* path, const void* img, size_t sz, int p
         dump_bytes((const uint8_t*)start, 64, start);
     }
 
-    // Launch
-    return register_and_spawn(path ? path : "(elf)", (void*)runtime, 200);
+    // Launch via registry gate
+    if (!__agent_loader_spawn_fn) {
+        serial_printf("[loader] spawn gate not set\n");
+        return -38; // ENOSYS
+    }
+    int rc = __agent_loader_spawn_fn(path ? path : "(elf)", (void*)runtime, 200);
+    serial_printf("[loader] register_and_spawn rc=%d\n", rc);
+    return rc;
 }
 
 // ---- Public entry points -------------------------------------------
