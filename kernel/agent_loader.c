@@ -3,7 +3,7 @@
 // - Applies R_X86_64_RELATIVE relocations.
 // - 1 MiB arena fallback if kalloc() fails.
 // - Ultra-verbose tracing around mapping, relocations, and entry bytes.
-// - NO JSON parsing or string scanning of the payload; assumes entry="agent_main".
+// - NO JSON parsing or string scanning of the payload; assumes entry="_start".
 // - Spawns BEFORE any optional bookkeeping (symbols disabled by default).
 //
 // If you later want to re-enable manifest parsing, wrap that code
@@ -127,16 +127,16 @@ static int register_and_spawn_direct(const char* name,
 	cstr_copy(m.abi, sizeof(m.abi), "");
 	cstr_copy(m.capabilities, sizeof(m.capabilities), capabilities?capabilities:"");
 
-	if(g_gate_fn){
-		int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry?entry:"agent_main");
-		if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name, entry?entry:"agent_main"); return -1; }
-	}
+        if(g_gate_fn){
+                int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry?entry:"_start");
+                if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name, entry?entry:"_start"); return -1; }
+        }
 
 	uint64_t id = regx_register(&m,0);
 	if(!id){ kprintf("[loader] regx_register failed for %s\n", m.name); return -1; }
 
-	agent_entry_t fn=find_entry(entry?entry:"agent_main");
-	if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry?entry:"agent_main"); return -1; }
+        agent_entry_t fn=find_entry(entry?entry:"_start");
+        if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry?entry:"_start"); return -1; }
 
 	n2_agent_t agent; memset(&agent,0,sizeof(agent));
 	cstr_copy(agent.name, sizeof(agent.name), m.name);
@@ -270,8 +270,8 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 		hexdump_window(base, span, entry_ptr, 32, 32);
 	}
 
-	/* Manifestless: assume "agent_main" entry */
-	char entry_name[64]; cstr_copy(entry_name,sizeof(entry_name),"agent_main");
+        /* Manifestless: assume "_start" entry */
+        char entry_name[64]; cstr_copy(entry_name,sizeof(entry_name),"_start");
 	LOGV("[loader] binding entry symbol \"%s\" -> %p\n", entry_name, (void*)entry_addr);
 	reg_entry(entry_name, (agent_entry_t)(void*)entry_addr);
 
@@ -316,12 +316,12 @@ static int load_agent_macho2_impl(const void* img, size_t sz, const char* path, 
 
 /* ---------- FLAT loader ---------- */
 static int load_agent_flat_impl(const void* img, size_t sz, const char* path, int prio){
-	if(!img||!sz) return -1;
-	char nm[64]={0}; path_basename_noext(path?path:"flat", nm, sizeof(nm));
-	const char* entry="agent_main";
-	LOGV("[loader] FLAT image %s at %p (%zu bytes)\n", nm[0]?nm:"(flat)", img, sz);
-	reg_entry(entry, (agent_entry_t)img);
-	return register_and_spawn_direct(nm[0]?nm:"flat", "0", "", entry, path, prio);
+        if(!img||!sz) return -1;
+        char nm[64]={0}; path_basename_noext(path?path:"flat", nm, sizeof(nm));
+        const char* entry="_start";
+        LOGV("[loader] FLAT image %s at %p (%zu bytes)\n", nm[0]?nm:"(flat)", img, sz);
+        reg_entry(entry, (agent_entry_t)img);
+        return register_and_spawn_direct(nm[0]?nm:"flat", "0", "", entry, path, prio);
 }
 
 /* ---------- Public API (use enum/prototypes from header) ---------- */

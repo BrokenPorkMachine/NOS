@@ -13,7 +13,7 @@ static const char mo2_manifest[] =
 "  \"name\": \"login\",\n"
 "  \"type\": \"service\",\n"
 "  \"version\": \"1.0.0\",\n"
-"  \"entry\": \"agent_main\"\n"
+"  \"entry\": \"_start\"\n"
 "}\n";
 
 // Single entry point expected by the loader
