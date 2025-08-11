@@ -157,8 +157,20 @@ uint64_t schedule_from_isr(uint64_t *old_rsp){
     next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next; return next->rsp;
 }
 
-__attribute__((noreturn)) void thread_exit(void){ thread_t *t=thread_current(); if(t) t->state=THREAD_EXITED; schedule(); __builtin_unreachable(); }
-__attribute__((noreturn,used)) static void thread_start(void(*f)(void)){ kprintf("[thread] id=%u first timeslice\n", thread_self()); f(); thread_exit(); }
+__attribute__((noreturn)) void thread_exit(void){
+    thread_t *t = thread_current();
+    if (t)
+        t->state = THREAD_EXITED;
+    schedule();
+    __builtin_unreachable();
+}
+
+__attribute__((noreturn,used)) static void thread_start(void (*f)(void)){
+    void (* volatile entry)(void) = f;
+    kprintf("[thread] id=%u first timeslice\n", thread_self());
+    entry();
+    thread_exit();
+}
 static void __attribute__((naked,noreturn,used))
 thread_entry(void){
     __asm__ volatile("pop %rdi\ncall thread_start\njmp .\n");
