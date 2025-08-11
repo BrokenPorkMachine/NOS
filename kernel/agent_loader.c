@@ -1,13 +1,5 @@
-// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C) with arena fallback,
-// RELATIVE relocs, and ultra-verbose tracing. Spawns BEFORE any optional bookkeeping.
-//
-// Safety toggles:
-#ifndef LOADER_VERBOSE
-#define LOADER_VERBOSE 1  /* 1=chatty logs, 0=quiet */
-#endif
-#ifndef LOADER_ADD_SYMBOLS
-#define LOADER_ADD_SYMBOLS 0  /* 1=call symbols_add after spawn, 0=skip (default: skip) */
-#endif
+// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C), no snprintf,
+// arena fallback, RELATIVE relocs, ultra-verbose tracing.
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -21,10 +13,16 @@
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
-#include <stdio.h>   // snprintf
 
 extern int kprintf(const char *fmt, ...);
 
+/* ---------- Tuning ---------- */
+#ifndef LOADER_VERBOSE
+#define LOADER_VERBOSE 1
+#endif
+#ifndef LOADER_ADD_SYMBOLS
+#define LOADER_ADD_SYMBOLS 0
+#endif
 #if LOADER_VERBOSE
   #define LOGV(...) kprintf(__VA_ARGS__)
 #else
@@ -39,7 +37,50 @@ static agent_gate_fn      g_gate_fn   = 0;
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
 void agent_loader_set_gate(agent_gate_fn g){ g_gate_fn=g; }
 
-/* ---------- Utils ---------- */
+/* ---------- Tiny safe string helpers (no varargs) ---------- */
+static size_t cstr_len(const char* s){ size_t n=0; if(!s) return 0; while(s[n]) n++; return n; }
+static void cstr_copy(char* dst, size_t cap, const char* src){
+	if(!dst||cap==0){ return; }
+	size_t i=0; if(src){ while(src[i] && i+1<cap){ dst[i]=src[i]; i++; } }
+	dst[i]=0;
+}
+static void cstr_append(char* dst, size_t cap, const char* src){
+	if(!dst||cap==0||!src) return;
+	size_t d=cstr_len(dst), i=0;
+	while(src[i] && d+1<cap){ dst[d++]=src[i++]; }
+	dst[d]=0;
+}
+static void make_quoted_key(char* out, size_t cap, const char* key){
+	if(!out||cap==0){ return; }
+	out[0]=0;
+	cstr_append(out,cap,"\"");
+	cstr_append(out,cap,key?key:"");
+	cstr_append(out,cap,"\"");
+}
+static void path_basename_noext(const char* path, char* out, size_t cap){
+	if(!out||cap==0){ return; }
+	out[0]=0;
+	if(!path){ return; }
+	const char* b=path;
+	for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
+	/* copy */
+	size_t i=0; while(b[i] && i+1<cap){ out[i]=b[i]; i++; }
+	out[i]=0;
+	/* strip last '.' */
+	char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p;
+	if(dot) *dot=0;
+}
+static void build_manifest_default(char* out, size_t cap, const char* name, const char* entry){
+	if(!out||cap==0){ return; }
+	out[0]=0;
+	cstr_append(out,cap,"{\"name\":\"");
+	cstr_append(out,cap,name?name:"");
+	cstr_append(out,cap,"\",\"type\":4,\"version\":\"0\",\"entry\":\"");
+	cstr_append(out,cap,entry?entry:"agent_main");
+	cstr_append(out,cap,"\",\"capabilities\":\"\"}");
+}
+
+/* ---------- Misc helpers ---------- */
 static const void* memmem_local(const void* hay, size_t haylen, const void* nee, size_t neelen){
 	if(!hay || !nee || neelen==0 || haylen<neelen) return NULL;
 	const uint8_t *h=(const uint8_t*)hay, *n=(const uint8_t*)nee;
@@ -50,35 +91,44 @@ static const char* skip_ws(const char* p){ while(p && (*p==' '||*p=='\t'||*p=='\
 
 static int json_get_str(const char* json, const char* key, char* out, size_t osz){
 	if(!json || !key || !out || osz==0) return -1;
-	char pat[64]; snprintf(pat,sizeof(pat),"\"%s\"",key);
-	const char* p = strstr(json, pat); if(!p) return -1;
-	p += strlen(pat); p = skip_ws(p); if(*p!=':') return -1; p++; p = skip_ws(p);
-	if(*p!='\"') return -1; p++;
-	size_t i=0; while(*p && *p!='\"' && i<osz-1) out[i++]=*p++;
-	if(*p!='\"') return -1; out[i]=0; return 0;
+	char pat[64]; make_quoted_key(pat,sizeof(pat),key); /* pat = "key" */
+	const char* p = strstr(json, pat);
+	if(!p) return -1;
+	p += cstr_len(pat);
+	p = skip_ws(p);
+	if(*p!=':') return -1;
+	p++; p = skip_ws(p);
+	if(*p!='\"') return -1;
+	p++;
+	size_t i=0;
+	while(*p && *p!='\"' && i+1<osz){ out[i++]=*p++; }
+	if(*p!='\"') return -1;
+	out[i]=0;
+	return 0;
 }
 static int json_get_int(const char* json, const char* key){
 	if(!json || !key) return -1;
-	char pat[64]; snprintf(pat,sizeof(pat),"\"%s\"",key);
-	const char* p = strstr(json, pat); if(!p) return -1;
-	p += strlen(pat); p = skip_ws(p); if(*p!=':') return -1; p++; p = skip_ws(p);
+	char pat[64]; make_quoted_key(pat,sizeof(pat),key);
+	const char* p = strstr(json, pat);
+	if(!p) return -1;
+	p += cstr_len(pat);
+	p = skip_ws(p);
+	if(*p!=':') return -1;
+	p++; p = skip_ws(p);
 	return (int)strtol(p, NULL, 10);
-}
-static void basename_noext(const char* path, char* out, size_t osz){
-	if(!out || osz==0){ return; }
-	out[0]=0; if(!path){ return; }
-	const char* b=path; for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
-	snprintf(out,osz,"%s",b);
-	char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p;
-	if(dot) *dot=0;
 }
 static int extract_manifest_blob(const void* buf, size_t sz, char* out, size_t osz){
 	if(!buf || !sz || !out || !osz) return -1;
-	const char* s=(const char*)memchr(buf,'{',sz); if(!s) return -1;
+	const char* s=(const char*)memchr(buf,'{',sz);
+	if(!s) return -1;
 	size_t remain = sz - (size_t)(s - (const char*)buf);
-	const char* e=(const char*)memchr(s,'}',remain); if(!e || e<=s) return -1;
-	size_t len=(size_t)(e-s+1); if(len+1>osz) return -1;
-	memcpy(out,s,len); out[len]=0; return 0;
+	const char* e=(const char*)memchr(s,'}',remain);
+	if(!e || e<=s) return -1;
+	size_t len=(size_t)(e-s+1);
+	if(len+1>osz) return -1;
+	memcpy(out,s,len);
+	out[len]=0;
+	return 0;
 }
 
 /* ---------- Entry registry (name -> fn*) ---------- */
@@ -90,7 +140,7 @@ static size_t g_ec=0;
 static void reg_entry(const char* name, agent_entry_t fn){
 	if(!name||!fn) return;
 	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0){ g_entries[i].fn=fn; return; }
-	if(g_ec<MAX_ENTRIES){ snprintf(g_entries[g_ec].name,sizeof(g_entries[g_ec].name),"%s",name); g_entries[g_ec].fn=fn; g_ec++; }
+	if(g_ec<MAX_ENTRIES){ cstr_copy(g_entries[g_ec].name,sizeof(g_entries[g_ec].name),name); g_entries[g_ec].fn=fn; g_ec++; }
 }
 static agent_entry_t find_entry(const char* name){
 	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0) return g_entries[i].fn;
@@ -139,7 +189,7 @@ static int register_and_spawn_from_manifest(const char* json, const char* path, 
 	json_get_str(json,"abi",m.abi,sizeof(m.abi));
 	json_get_str(json,"capabilities",m.capabilities,sizeof(m.capabilities));
 	json_get_str(json,"entry",entry,sizeof(entry));
-	if(!entry[0]) snprintf(entry,sizeof(entry),"agent_main");
+	if(!entry[0]) cstr_copy(entry,sizeof(entry),"agent_main");
 
 	LOGV("[loader] reg+spawn name=\"%s\" entry=\"%s\" caps=\"%s\" prio=%d\n",
 	     m.name[0]?m.name:"(unnamed)", entry, m.capabilities, prio);
@@ -156,9 +206,9 @@ static int register_and_spawn_from_manifest(const char* json, const char* path, 
 	if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry); return -1; }
 
 	n2_agent_t agent; memset(&agent,0,sizeof(agent));
-	snprintf(agent.name,sizeof(agent.name),"%s", m.name[0]?m.name:"(unnamed)");
-	snprintf(agent.version,sizeof(agent.version),"%s", m.version);
-	snprintf(agent.capabilities,sizeof(agent.capabilities),"%s", m.capabilities);
+	cstr_copy(agent.name,sizeof(agent.name), m.name[0]?m.name:"(unnamed)");
+	cstr_copy(agent.version,sizeof(agent.version), m.version);
+	cstr_copy(agent.capabilities,sizeof(agent.capabilities), m.capabilities);
 	agent.entry=fn;
 	n2_agent_register(&agent);
 
@@ -259,7 +309,7 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	size_t nrel = apply_relocations_rela(base, lo, eh, img, sz);
 	LOGV("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", nrel);
 
-	/* Rebase entry for BOTH ET_DYN and ET_EXEC (we map at a fresh base). */
+	/* Rebase entry for BOTH ET_DYN and ET_EXEC */
 	if (eh->e_entry < lo || eh->e_entry >= hi){
 		kprintf("[loader] FATAL: e_entry (0x%llx) out of PT_LOAD span [0x%llx..%llx)\n",
 		        (unsigned long long)eh->e_entry,(unsigned long long)lo,(unsigned long long)hi);
@@ -271,7 +321,7 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	else
 		LOGV("[loader] runtime entry (ET_EXEC) = %p (e_entry-lo=0x%llx, base=%p)\n",(void*)entry_addr,(unsigned long long)(eh->e_entry - lo),base);
 
-	/* Guard: entry must be inside mapped image */
+	/* Guard */
 	if(entry_addr < (uintptr_t)base || entry_addr >= (uintptr_t)(base + span)){
 		kprintf("[loader] FATAL: entry %p outside image [%p..%p)\n",(void*)entry_addr, base, base+span);
 		return -1;
@@ -290,10 +340,8 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	/* Manifest */
 	char manifest[512]={0};
 	if(extract_manifest_blob(img, sz, manifest, sizeof(manifest))!=0){
-		char nm[64]={0}; basename_noext(path?path:"init", nm, sizeof(nm));
-		snprintf(manifest,sizeof(manifest),
-		         "{\"name\":\"%s\",\"type\":4,\"version\":\"0\",\"entry\":\"agent_main\",\"capabilities\":\"\"}",
-		         nm[0]?nm:"init");
+		char nm[64]={0}; path_basename_noext(path?path:"init", nm, sizeof(nm));
+		build_manifest_default(manifest, sizeof(manifest), nm[0]?nm:"init", "agent_main");
 	}else{
 		LOGV("[loader] manifest found for %s\n", path?path:"(buffer)");
 	}
@@ -301,7 +349,7 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	/* Resolve entry symbol BEFORE any optional bookkeeping */
 	char entry_name[64]={0};
 	if(json_get_str(manifest,"entry",entry_name,sizeof(entry_name))!=0)
-		snprintf(entry_name,sizeof(entry_name),"agent_main");
+		cstr_copy(entry_name,sizeof(entry_name),"agent_main");
 
 	LOGV("[loader] binding entry symbol \"%s\" -> %p\n", entry_name, (void*)entry_addr);
 	reg_entry(entry_name, (agent_entry_t)(void*)entry_addr);
@@ -314,8 +362,11 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	/* Optional: add symbol region AFTER successful spawn (guarded) */
 #if LOADER_ADD_SYMBOLS
 	{
-		char symname[96]; char nm2[64]={0}; basename_noext(path?path:"elf", nm2, sizeof(nm2));
-		snprintf(symname,sizeof(symname),"%s:%s", nm2[0]?nm2:"elf", entry_name);
+		char nm2[64]={0}; path_basename_noext(path?path:"elf", nm2, sizeof(nm2));
+		char symname[96]={0};
+		cstr_copy(symname,sizeof(symname), nm2[0]?nm2:"elf");
+		cstr_append(symname,sizeof(symname),":");
+		cstr_append(symname,sizeof(symname),entry_name);
 		LOGV("[loader] symbols_add %s base=%p span=%zu\n", symname, base, span);
 		symbols_add(symname, (uintptr_t)base, span);
 	}
@@ -343,14 +394,12 @@ static int load_agent_macho2_impl(const void* img, size_t sz, const char* path, 
 /* ---------- FLAT loader ---------- */
 static int load_agent_flat_impl(const void* img, size_t sz, const char* path, int prio){
 	if(!img||!sz) return -1;
-	char nm[64]={0}; basename_noext(path?path:"flat", nm, sizeof(nm));
+	char nm[64]={0}; path_basename_noext(path?path:"flat", nm, sizeof(nm));
 	const char* entry="agent_main";
 	LOGV("[loader] FLAT image %s at %p (%zu bytes)\n", nm[0]?nm:"(flat)", img, sz);
 	reg_entry(entry, (agent_entry_t)img);
-	char manifest[256];
-	snprintf(manifest,sizeof(manifest),
-	         "{\"name\":\"%s\",\"type\":4,\"version\":\"0\",\"entry\":\"%s\",\"capabilities\":\"\"}",
-	         nm[0]?nm:"flat", entry);
+	char manifest[256]={0};
+	build_manifest_default(manifest, sizeof(manifest), nm[0]?nm:"flat", entry);
 	return register_and_spawn_from_manifest(manifest, path, prio);
 }
 
