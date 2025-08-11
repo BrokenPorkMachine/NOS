@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
+#include "arch/idt_guard.h"
 
 #include "../boot/include/bootinfo.h"
 #include "agent.h"
@@ -23,10 +24,6 @@
 #include "arch/CPU/lapic.h"
 #include "uaccess.h"
 #include "symbols.h"
-
-// NEW: sanitize firmware/legacy IDT entries before any agents/threads run
-#include "arch/idt_guard.h"
-extern void idt_guard_init_once(void);
 
 extern int timer_ready;
 
