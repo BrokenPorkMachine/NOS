@@ -10,6 +10,13 @@
 // Shared filesystem instance defined in nosfs.c
 extern nosfs_fs_t nosfs_root;
 
+// Signal to other agents when the filesystem server is ready.
+static _Atomic int nosfs_ready = 0;
+
+int nosfs_is_ready(void) {
+    return atomic_load(&nosfs_ready);
+}
+
 // Global flag indicating when the filesystem is initialized
 _Atomic int nosfs_ready = 0;
 
@@ -26,6 +33,7 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     if (h >= 0)
         nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
 
+    // Make filesystem contents visible to other threads.
     // Signal readiness so other agents can safely access the filesystem
     atomic_store(&nosfs_ready, 1);
 
