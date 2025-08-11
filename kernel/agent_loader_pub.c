@@ -1,82 +1,66 @@
 // kernel/agent_loader_pub.c
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "agent_loader.h"
 
-// Gate and reader/free hooks that regx/NOSFS will set.
-static agent_gate_fn       g_gate   = 0;
-static agent_read_file_fn  g_read   = 0;
-static agent_free_fn       g_free   = 0;
+// Exported hook the core loader uses to spawn the agent thread.
+// RegX (or your thread layer) should set this at boot.
+int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio) = 0;
 
-// This is defined in agent_loader.c; we set it here.
-extern int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
+// Current gate + I/O callbacks
+static agent_gate_fn        g_gate  = 0;
+static agent_read_file_fn   g_read  = 0;
+static agent_free_fn        g_free  = 0;
 
-// ---- weak declarations so we can spawn without knowing the exact symbol name.
-typedef void (*kentry0_t)(void);
-__attribute__((weak)) int thread_spawn(kentry0_t entry, int prio, const char *name);
-__attribute__((weak)) int thread_spawn_entry(kentry0_t entry, int prio, const char *name);
-__attribute__((weak)) int spawn_kthread(kentry0_t entry, int prio, const char *name);
+// Minimal serial proto for freestanding builds.
+// (Provided by serial.c; we only need the decl here.)
+int  serial_printf(const char *fmt, ...);
 
-// Minimal, real spawner (used by the loader). Tries a few common symbols.
-static int spawn_bridge(const char *name, void *entry, int prio)
-{
-    if (!entry) return -38; // ENOSYS-ish
-    kentry0_t e = (kentry0_t)entry;
+// Weak defaults from NOSFS shim (kernel/nosfs_pub.c).
+// If they’re linked, we adopt them automatically.
+__attribute__((weak)) int  nosfs_read_file(const char *path, const void **data_out, size_t *size_out);
+__attribute__((weak)) void nosfs_free(void *p);
 
-    if (thread_spawn)        return thread_spawn(e, prio, name ? name : "(anon)");
-    if (thread_spawn_entry)  return thread_spawn_entry(e, prio, name ? name : "(anon)");
-    if (spawn_kthread)       return spawn_kthread(e, prio, name ? name : "(anon)");
-    return -38;
+static void ensure_default_reader(void) {
+    if (!g_read && nosfs_read_file) {
+        g_read = nosfs_read_file;
+        g_free = nosfs_free;
+    }
 }
 
-// Public API used by regx and thread.c
+// --- Gate API --------------------------------------------------------------
 void agent_loader_set_gate(agent_gate_fn gate) { g_gate = gate; }
+agent_gate_fn agent_loader_get_gate(void)      { return g_gate; }
 
-// If your NOSFS shim exports nosfs_read_file/nosfs_free, wire them here
-extern int  nosfs_read_file(const char *path, const void **buf_out, size_t *sz_out);
-extern void nosfs_free(void *p);
-
-void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer)
-{
-    // If regx wanted to override, keep that. Otherwise use the NOSFS defaults.
-    g_read = reader ? reader : (agent_read_file_fn)nosfs_read_file;
-    g_free = freer  ? freer  : (agent_free_fn)nosfs_free;
-
-    // Ensure the loader will use our spawner from now on.
-    __agent_loader_spawn_fn = spawn_bridge;
+// --- Reader API ------------------------------------------------------------
+void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer) {
+    g_read = reader;
+    g_free = freer;
 }
 
-// Convenience so older call sites keep building.
-int load_agent_auto(const void *img, size_t sz)
-{
-    return load_agent_with_prio(img, sz, AGENT_FORMAT_UNKNOWN, /*prio*/200);
-}
+// --- Path loader -----------------------------------------------------------
+// Read an agent image from filesystem and delegate to the core loader.
+// Returns loader rc; -38 if no reader is configured.
+int agent_loader_run_from_path(const char *path, int prio) {
+    ensure_default_reader();
 
-// Read a path from /agents and load it with the requested prio.
-// Also ensures the spawn hook is in place even if set_read() was never called.
-int agent_loader_run_from_path(const char *path, int prio)
-{
-    if (!path) return -2;
+    if (!g_read) {
+        serial_printf("[loader] no reader configured; can't open \"%s\"\n",
+                      path ? path : "(null)");
+        return -38; // match existing rc used in logs
+    }
 
-    // Default hooks if regx didn't set them yet.
-    if (!g_read) g_read = (agent_read_file_fn)nosfs_read_file;
-    if (!g_free) g_free = (agent_free_fn)nosfs_free;
-    if (!__agent_loader_spawn_fn) __agent_loader_spawn_fn = spawn_bridge;
+    const void *data = 0;
+    size_t size = 0;
+    int rc = g_read(path, &data, &size);
+    if (rc != 0) {
+        serial_printf("[loader] read failed path=\"%s\" rc=%d\n",
+                      path ? path : "(null)", rc);
+        return rc;
+    }
 
-    const void *buf = 0;
-    size_t sz = 0;
-    if (g_read(path, &buf, &sz) != 0 || !buf || !sz) return -5;
+    rc = load_agent_with_prio(data, size, AGENT_FORMAT_ELF, prio);
 
-    // Let the core loader auto-detect the format and handle manifest/gate/spawn.
-    int rc = load_agent_with_prio(buf, sz, AGENT_FORMAT_UNKNOWN, prio);
-
-    // Free backing store if it came from NOSFS.
-    if (g_free) g_free((void*)buf);
+    if (g_free && data) g_free((void*)data);
     return rc;
-}
-
-// Expose what the core loader expects to call when it wants to contact regx.
-agent_gate_fn agent_loader_get_gate(void)
-{
-    return g_gate;
 }
