@@ -1,14 +1,21 @@
-// kernel/agent_loader.c  -- drop-in loader with arena fallback
+// kernel/agent_loader.c  -- C-only loader with arena fallback
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 
-#include "printf.h"                 // serial_printf()
-#include "VM/kheap.h"               // kalloc()
-#include "agent.h"                  // register_and_spawn()
-#include "symbols.h"
+#include "VM/kheap.h"     // kalloc()
+#include "agent.h"        // may or may not declare register_and_spawn()
+#include "printf.h"       // serial_printf()
 
-// ---- Minimal ELF64 bits we need ----
+// Fallback prototypes in case headers don't declare them
+#ifndef HAVE_SERIAL_PRINTF
+extern int serial_printf(const char *fmt, ...);
+#endif
+#ifndef HAVE_REGISTER_AND_SPAWN
+extern int register_and_spawn(const char *name, void *entry, int prio);
+#endif
+
+// ---- Minimal ELF64 bits ----
 typedef struct {
     unsigned char e_ident[16];
     uint16_t e_type;
@@ -48,9 +55,9 @@ typedef struct {
     uint64_t d_val;
 } Elf64_Dyn;
 
-#define PT_LOAD     1
-#define PT_DYNAMIC  2
-#define PT_GNU_RELRO 0x6474e552u
+#define PT_LOAD       1
+#define PT_DYNAMIC    2
+#define PT_GNU_RELRO  0x6474e552u
 
 #define DT_NULL     0
 #define DT_RELA     7
@@ -78,12 +85,11 @@ static void* arena_alloc(size_t bytes, size_t align)
 
 static void* kalloc_aligned_or_arena(size_t bytes, size_t align)
 {
-    // Try kernel heap first (best effort, alignment by overalloc/align if needed)
-    void* p = kalloc(bytes + align);
-    if (p) {
-        uintptr_t up = (uintptr_t)p;
+    // Try kernel heap first
+    void* raw = kalloc(bytes + align);
+    if (raw) {
+        uintptr_t up = (uintptr_t)raw;
         uintptr_t ap = (up + (align - 1)) & ~(uintptr_t)(align - 1);
-        // We simply return the aligned pointer; this memory is never freed anyway.
         return (void*)ap;
     }
     serial_printf("[loader] kalloc %zu failed, trying arena\n", (unsigned long)bytes);
@@ -95,23 +101,23 @@ static int is_elf64(const void* img, size_t sz, const Elf64_Ehdr** out_eh)
 {
     if (sz < sizeof(Elf64_Ehdr)) return 0;
     const Elf64_Ehdr* eh = (const Elf64_Ehdr*)img;
-    if (eh->e_ident[0] != 0x7f || eh->e_ident[1] != 'E' || eh->e_ident[2] != 'L' || eh->e_ident[3] != 'F')
+    if (eh->e_ident[0] != 0x7F || eh->e_ident[1] != 'E' || eh->e_ident[2] != 'L' || eh->e_ident[3] != 'F')
         return 0;
     if (eh->e_ident[4] != 2 /*ELFCLASS64*/) return 0;
-    if (eh->e_machine != 62 /*x86_64*/) return 0;
+    if (eh->e_machine  != 62 /*x86_64*/)    return 0;
     *out_eh = eh;
     return 1;
 }
 
 static void dump_bytes(const uint8_t* p, size_t n, uint64_t where)
 {
+    size_t i, j;
     serial_printf("[loader] dumping 64B around entry 0x%016lx\n", (unsigned long)where);
-    for (size_t i = 0; i < n; i += 16) {
+    for (i = 0; i < n; i += 16) {
         serial_printf("[dump] %016lx : ", (unsigned long)(where + i));
-        for (size_t j = 0; j < 16 && i + j < n; ++j)
-            serial_printf("%02x ", p[i + j]);
+        for (j = 0; j < 16 && i + j < n; ++j) serial_printf("%02x ", p[i + j]);
         serial_printf(" |");
-        for (size_t j = 0; j < 16 && i + j < n; ++j) {
+        for (j = 0; j < 16 && i + j < n; ++j) {
             unsigned c = p[i + j];
             serial_printf("%c", (c >= 32 && c < 127) ? c : '.');
         }
@@ -119,14 +125,37 @@ static void dump_bytes(const uint8_t* p, size_t n, uint64_t where)
     }
 }
 
-// ---- Relocations (ET_EXEC: RELATIVE only) --------------------------
+static size_t apply_rela_table(uint8_t* load_base, uint64_t lo_for_exec,
+                               const void* img, uint64_t tab, uint64_t sz_bytes)
+{
+    size_t applied = 0;
+    if (!tab || !sz_bytes) return 0;
+
+    const Elf64_Rela* r = (const Elf64_Rela*)((const uint8_t*)img + tab);
+    size_t n = sz_bytes / sizeof(Elf64_Rela);
+
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t type = ELF64_R_TYPE(r[i].r_info);
+        if (type == R_X86_64_RELATIVE) {
+            uint64_t where_off = r[i].r_offset - lo_for_exec;
+            uint64_t* where = (uint64_t*)(load_base + where_off);
+            *where = (uint64_t)(load_base + r[i].r_addend);
+            ++applied;
+        }
+    }
+    return applied;
+}
+
+// ET_EXEC relocations: RELATIVE only
 static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
                                      const Elf64_Ehdr* eh, const void* img, size_t sz)
 {
-    // Find PT_DYNAMIC
+    (void)sz;
     const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
     const Elf64_Phdr* dyn = NULL;
-    for (uint16_t i = 0; i < eh->e_phnum; ++i) {
+    uint16_t i;
+
+    for (i = 0; i < eh->e_phnum; ++i) {
         if (ph[i].p_type == PT_DYNAMIC) { dyn = &ph[i]; break; }
     }
     if (!dyn) return 0;
@@ -137,7 +166,7 @@ static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
     uint64_t rela = 0, rela_sz = 0, rela_ent = sizeof(Elf64_Rela);
     uint64_t jmprel = 0, pltrel_sz = 0;
 
-    for (size_t i = 0; i < dcount; ++i) {
+    for (i = 0; i < dcount; ++i) {
         switch (d[i].d_tag) {
             case DT_RELA:     rela      = d[i].d_val; break;
             case DT_RELASZ:   rela_sz   = d[i].d_val; break;
@@ -148,33 +177,15 @@ static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
         }
     }
 
-    size_t applied = 0;
-    // helper to do a table
-    auto do_rela = [&](uint64_t tab, uint64_t sz_bytes) {
-        if (!tab || !sz_bytes) return;
-        size_t n = sz_bytes / sizeof(Elf64_Rela);
-        const Elf64_Rela* r = (const Elf64_Rela*)((const uint8_t*)img + tab);
-        for (size_t i = 0; i < n; ++i) {
-            uint32_t type = ELF64_R_TYPE(r[i].r_info);
-            if (type == R_X86_64_RELATIVE) {
-                uint64_t where_off = r[i].r_offset - lo_for_exec;
-                uint64_t* where = (uint64_t*)(load_base + where_off);
-                *where = (uint64_t)(load_base + r[i].r_addend);
-                ++applied;
-            }
-        }
-    };
-
-    // (C89-friendly form of the above lambda)
-    do_rela(rela,     rela_sz);
-    do_rela(jmprel,   pltrel_sz);
-    return applied;
+    size_t n1 = apply_rela_table(load_base, lo_for_exec, img, rela,   rela_sz);
+    size_t n2 = apply_rela_table(load_base, lo_for_exec, img, jmprel, pltrel_sz);
+    return n1 + n2;
 }
 
 // ---- ELF map + spawn ------------------------------------------------
 static int elf_map_and_spawn(const char* path, const void* img, size_t sz, int prio)
 {
-    (void)prio; // assume register_and_spawn picks default priority unless you wire it
+    (void)prio;
     const Elf64_Ehdr* eh = NULL;
     if (!is_elf64(img, sz, &eh)) return -2;
 
@@ -183,14 +194,13 @@ static int elf_map_and_spawn(const char* path, const void* img, size_t sz, int p
 
     const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
 
-    // Compute span of PT_LOAD segments
+    // Compute span of PT_LOAD
     uint64_t lo = UINT64_MAX, hi = 0;
     for (uint16_t i = 0; i < eh->e_phnum; ++i) {
         if (ph[i].p_type != PT_LOAD) continue;
         if (ph[i].p_memsz == 0) continue;
         if (ph[i].p_vaddr < lo) lo = ph[i].p_vaddr;
-        uint64_t seg_hi = ph[i].p_vaddr + ph[i].p_memsz;
-        if (seg_hi > hi) hi = seg_hi;
+        if (ph[i].p_vaddr + ph[i].p_memsz > hi) hi = ph[i].p_vaddr + ph[i].p_memsz;
     }
     if (lo == UINT64_MAX || hi <= lo) return -3;
 
@@ -207,47 +217,45 @@ static int elf_map_and_spawn(const char* path, const void* img, size_t sz, int p
     // Map segments
     for (uint16_t i = 0; i < eh->e_phnum; ++i) {
         if (ph[i].p_type != PT_LOAD) continue;
+
         const uint64_t off   = ph[i].p_offset;
         const uint64_t files = ph[i].p_filesz;
         const uint64_t mems  = ph[i].p_memsz;
         const uint64_t va    = ph[i].p_vaddr;
+
         uint8_t* dst = load_base + (va - lo);
-        if (files) {
-            memcpy(dst, (const uint8_t*)img + off, (size_t)files);
-        }
-        if (mems > files) {
-            memset(dst + files, 0, (size_t)(mems - files));
-        }
+        if (files) memcpy(dst, (const uint8_t*)img + off, (size_t)files);
+        if (mems > files) memset(dst + files, 0, (size_t)(mems - files));
+
         serial_printf("[loader] PT_LOAD: vaddr=0x%lx file=%lu mem=%lu fl=0x%x -> [%p..%p)\n",
                       (unsigned long)va, (unsigned long)files, (unsigned long)mems,
                       (unsigned)ph[i].p_flags, dst, dst + mems);
     }
 
-    // Relocations (ET_EXEC: RELATIVE only)
-    size_t nrel = apply_relocations_rela(load_base, lo, eh, img, sz);
-    serial_printf("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", nrel);
+    // Apply RELA (relative) if present
+    {
+        size_t nrel = apply_relocations_rela(load_base, lo, eh, img, sz);
+        serial_printf("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", nrel);
+    }
 
-    // Compute runtime entry
+    // Runtime entry
     uint64_t runtime = (uint64_t)(load_base + (eh->e_entry - lo));
     const uint8_t* ebytes = (const uint8_t*)runtime;
     serial_printf("[loader] runtime entry (ET_EXEC) = 0x%016lx\n", (unsigned long)runtime);
     serial_printf("[loader] entry first bytes: %02x %02x %02x %02x\n",
                   ebytes[0], ebytes[1], ebytes[2], ebytes[3]);
 
-    // Show 64 bytes around entry (as you like to see)
+    // 64B window near entry (nice for diagnostics)
     {
         uint64_t start = (runtime >= 32) ? (runtime - 32) : runtime;
-        size_t   take  = 64;
-        dump_bytes((const uint8_t*)start, take, start);
+        dump_bytes((const uint8_t*)start, 64, start);
     }
 
-    // Hand off to registry to spawn the agent thread
-    int rc = register_and_spawn(path ? path : "(elf)", (void*)runtime, /*prio*/200);
-    serial_printf("[loader] register_and_spawn rc=%d\n", rc);
-    return rc;
+    // Launch
+    return register_and_spawn(path ? path : "(elf)", (void*)runtime, 200);
 }
 
-// ---- Public entry points used by regx / thread code -----------------
+// ---- Public entry points -------------------------------------------
 typedef enum {
     AGENT_FORMAT_ELF = 0,
     AGENT_FORMAT_MACHO2,
@@ -256,23 +264,19 @@ typedef enum {
     AGENT_FORMAT_UNKNOWN
 } agent_format_t;
 
-// Simple auto-detect: currently only ELF64
-static agent_format_t detect_format(const void* img, size_t sz)
+static agent_format_t detect_format(const void* image, size_t size)
 {
+    (void)size;
     const Elf64_Ehdr* eh = NULL;
-    if (is_elf64(img, sz, &eh)) return AGENT_FORMAT_ELF;
+    if (is_elf64(image, size, &eh)) return AGENT_FORMAT_ELF;
     return AGENT_FORMAT_UNKNOWN;
 }
 
 int load_agent_with_prio(const void* image, size_t size, agent_format_t fmt, int prio)
 {
     if (fmt == AGENT_FORMAT_UNKNOWN) fmt = detect_format(image, size);
-    switch (fmt) {
-        case AGENT_FORMAT_ELF:
-            return elf_map_and_spawn(NULL, image, size, prio);
-        default:
-            return -5; // ENOTSUP
-    }
+    if (fmt == AGENT_FORMAT_ELF) return elf_map_and_spawn(NULL, image, size, prio);
+    return -5; // ENOTSUP
 }
 
 int load_agent(const void* image, size_t size, agent_format_t fmt)
@@ -280,7 +284,7 @@ int load_agent(const void* image, size_t size, agent_format_t fmt)
     return load_agent_with_prio(image, size, fmt, 200);
 }
 
-// convenience used by run_from_path() wrapper (agent_loader_pub.c)
+// used by agent_loader_pub.c (run_from_path)
 int load_agent_auto_path(const char* path, const void* image, size_t size)
 {
     return elf_map_and_spawn(path, image, size, 200);
