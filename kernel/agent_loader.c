@@ -19,6 +19,7 @@
 
 // Forward from our helper:
 int nosfs_get_file(const char* path, const void** out_ptr, size_t* out_sz);
+extern void idt_guard_init_once(void);
 
 typedef void (*agent_entry_t)(void);
 
