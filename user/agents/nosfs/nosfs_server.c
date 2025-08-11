@@ -11,7 +11,6 @@
 extern nosfs_fs_t nosfs_root;
 
 // Signal to other agents when the filesystem server is ready.
-static _Atomic int nosfs_ready = 0;
 
 int nosfs_is_ready(void) {
     return atomic_load(&nosfs_ready);
