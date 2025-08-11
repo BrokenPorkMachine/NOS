@@ -1,9 +1,3 @@
-Here’s a **drop-in replacement** for `kernel/Task/thread.c` with the fixes:
-
-* Grants **`regx`** (and **`nosm`**) access to **`fs_queue`** so the loader can read `/agents/init.mo2`.
-* Hardens the thread trampoline to **tail-jump** into `thread_start` (removes stray return paths).
-
-```c
 // kernel/Task/thread.c
 #include "thread.h"
 #include "../IPC/ipc.h"
