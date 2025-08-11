@@ -2,6 +2,7 @@
 #include "nosfs.h"
 #include <string.h>
 #include <stdatomic.h>
+static _Atomic int nosfs_ready = 0;
 
 // Built-in agent images generated at build time
 #include "../../kernel/init_bin.h"
@@ -12,9 +13,7 @@ extern nosfs_fs_t nosfs_root;
 
 // Signal to other agents when the filesystem server is ready.
 
-int nosfs_is_ready(void) {
-    return atomic_load(&nosfs_ready);
-}
+int nosfs_is_ready(void) { return atomic_load(&nosfs_ready); }
 
 // Simple message-driven filesystem server. Each request is handled
 // sequentially and the response is sent back on the same queue.
@@ -22,10 +21,10 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     nosfs_init(&nosfs_root);
 
     // Preload essential agents so the registry can launch them.
-    int h = nosfs_create(&nosfs_root, "agents/init.mo2", init_bin_len, 0);
+    int h = nosfs_create(&nosfs_root, "/agents/init.mo2", init_bin_len, 0);
     if (h >= 0)
         nosfs_write(&nosfs_root, h, 0, init_bin, init_bin_len);
-    h = nosfs_create(&nosfs_root, "agents/login.bin", login_bin_len, 0);
+    h = nosfs_create(&nosfs_root, "/agents/login.bin", login_bin_len, 0);
     if (h >= 0)
         nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
 
