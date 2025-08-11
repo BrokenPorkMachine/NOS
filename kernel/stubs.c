@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include "../user/libc/libc.h"
 #include "init_bin.h"
+#include "login_bin.h"
 
 /* Basic kernel logging helper */
 extern int kprintf(const char *fmt, ...);
@@ -35,6 +36,11 @@ int fs_read_all(const char *path, void **out, size_t *out_sz) {
         *out_sz = init_bin_len;
         return 0;
     }
+    if (strcmp(path, "/agents/login.bin") == 0) {
+        *out = (void *)login_bin;
+        *out_sz = login_bin_len;
+        return 0;
+    }
     /* No real filesystem; return not found */
     *out = NULL;
     *out_sz = 0;
@@ -53,9 +59,3 @@ void nosm_entry(void) {
     for (;;) thread_yield();
 }
 
-void login_server(ipc_queue_t *q, uint32_t self_id) {
-    (void)q; (void)self_id;
-    kprintf("[login] server starting\n");
-    kprintf("[login] launching nsh...\n");
-    for (;;) thread_yield();
-}
