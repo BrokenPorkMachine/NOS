@@ -337,7 +337,7 @@ static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int p
     serial_puts("\r\n");
 
     serial_puts("[loader] dumping 64B around entry 0x");
-    //print_hex64((uint64_t)runtime_entry);
+    print_hex64((uint64_t)runtime_entry);
     serial_puts("\r\n");
     //hexdump_window((const void *)entry_ptr);
 
