@@ -20,8 +20,6 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id);
 
 // Returns non-zero once nosfs_server has initialized and preloaded files.
 
-static _Atomic int nosfs_ready = 0;
-
 #pragma once
 int nosfs_is_ready(void);
 
