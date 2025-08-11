@@ -2,7 +2,9 @@
 #include "nosfs.h"
 #include <string.h>
 #include <stdatomic.h>
-static _Atomic int nosfs_ready = 0;
+
+// Bring in kernel printf for optional boot logs
+extern int kprintf(const char *fmt, ...);
 
 // Built-in agent images generated at build time
 #include "../../kernel/init_bin.h"
@@ -11,26 +13,42 @@ static _Atomic int nosfs_ready = 0;
 // Shared filesystem instance defined in nosfs.c
 extern nosfs_fs_t nosfs_root;
 
-// Signal to other agents when the filesystem server is ready.
-
+// Keep readiness private here; expose via nosfs_is_ready()
+static _Atomic int nosfs_ready = 0;
 int nosfs_is_ready(void) { return atomic_load(&nosfs_ready); }
+
+// Optional: enumerate files present (nice for early boot-debug)
+static void nosfs_debug_list_all(void) {
+    char names[32][NOSFS_NAME_LEN];
+    int n = nosfs_list(&nosfs_root, names, 32);
+    for (int i = 0; i < n; ++i)
+        kprintf("[nosfs] file[%d]=%s\n", i, names[i]);
+}
 
 // Simple message-driven filesystem server. Each request is handled
 // sequentially and the response is sent back on the same queue.
 void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
+    (void)self_id;
+
+    // Initialise the in-memory FS
     nosfs_init(&nosfs_root);
 
     // Preload essential agents so the registry can launch them.
-    int h = nosfs_create(&nosfs_root, "/agents/init.mo2", init_bin_len, 0);
-    if (h >= 0)
-        nosfs_write(&nosfs_root, h, 0, init_bin, init_bin_len);
-    h = nosfs_create(&nosfs_root, "/agents/login.bin", login_bin_len, 0);
-    if (h >= 0)
-        nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
+    // IMPORTANT: store WITHOUT leading slash so fs_read_all() (which strips one) will match.
+    int h = nosfs_create(&nosfs_root, "agents/init.mo2", init_bin_len, 0);
+    if (h >= 0) nosfs_write(&nosfs_root, h, 0, init_bin, init_bin_len);
 
-    // Make filesystem contents visible to other threads.
-    // Signal readiness so other agents can safely access the filesystem
+    h = nosfs_create(&nosfs_root, "agents/login.bin", login_bin_len, 0);
+    if (h >= 0) nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
+
+    // Make filesystem contents visible to other threads and yield once on a cooperative scheduler
     atomic_store(&nosfs_ready, 1);
+
+    // Optional one-time debug listing (uncomment if needed)
+    // nosfs_debug_list_all();
+
+    extern void thread_yield(void);
+    thread_yield();
 
     ipc_message_t msg, resp;
 
