@@ -10,9 +10,10 @@
 extern int kprintf(const char *fmt, ...);
 
 // Loader hooks
-extern void agent_loader_set_read(int (*reader)(const char*, void**, size_t*),
-                                  void (*freer)(void*));
 extern int agent_loader_run_from_path(const char *path, int prio);
+extern void agent_loader_set_read(int (*reader)(const char*, const void**, size_t*),
+                                  void (*freer)(void*));
+__attribute__((weak)) int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
 
 // FS + alloc hooks you already have
 extern int fs_read_all(const char *path, void **out, size_t *out_sz);
@@ -299,6 +300,13 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
 
 thread_t *thread_create(void(*func)(void)){ return thread_create_with_priority(func,(MAX_PRIORITY+MIN_PRIORITY)/2); }
 
+// Bridge for the agent loader: spawn a thread for the loaded agent image.
+static int loader_spawn_bridge(const char *name, void *entry, int prio) {
+    (void)name; // name currently unused
+    thread_t *t = thread_create_with_priority((void(*)(void))entry, prio);
+    return t ? (int)t->id : -1;
+}
+
 void thread_block(thread_t *t){
     if(!t||t->magic!=THREAD_MAGIC) return;
     uint64_t rf=irq_save_disable();
@@ -371,8 +379,8 @@ static void nosm_thread_wrapper(void){ nosm_entry(); thread_exit(); }
 static void nosfs_thread_wrapper(void){ nosfs_server(&fs_queue, thread_self()); thread_exit(); }
 
 // FS hook used by agent_loader_run_from_path()
-static int agentfs_read_all(const char *path, void **out, size_t *out_sz){
-    return fs_read_all(path, out, out_sz);
+static int agentfs_read_all(const char *path, const void **out, size_t *out_sz){
+    return fs_read_all(path, (void**)out, out_sz);
 }
 static void agentfs_free(void *p){ (void)p; }
 
@@ -380,6 +388,7 @@ void threads_init(void){
     ipc_init(&fs_queue); ipc_init(&pkg_queue); ipc_init(&upd_queue); ipc_init(&init_queue); ipc_init(&regx_queue); ipc_init(&nosm_queue);
 
     agent_loader_set_read(agentfs_read_all, agentfs_free);
+    __agent_loader_spawn_fn = loader_spawn_bridge;
 
     // Bring up NOSFS before other core agents so init.mo2 can be served.
     thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 230);
