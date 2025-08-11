@@ -16,6 +16,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
+#include "init_bin.h"
+#include "login_bin.h"
+
+
 
 typedef void (*agent_entry_t)(void);
 
@@ -143,12 +147,27 @@ int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio)
 int load_agent_auto(const void* img, size_t sz){ return elf_map_and_spawn(img, sz, 200); }
 int load_agent(const void* img, size_t sz, agent_format_t f){ (void)f; return elf_map_and_spawn(img,  sz, 200); }
 
-int agent_loader_run_from_path(const char* path, int prio){
-    if(!g_read_file) return -1;
-    void* buf=0; size_t sz=0;
-    int rc=g_read_file(path,&buf,&sz);
-    if(rc<0) return rc;
-    int out = elf_map_and_spawn(buf, sz, prio);
-    if(g_free_fn && buf) g_free_fn(buf);
-    return out;
+// Launch a built-in agent by its path (matches the embedded blobs we xxd at build)
+int agent_loader_run_from_path(const char *path, int prio) {
+    const void *img = NULL;
+    size_t sz = 0;
+
+    if (!path) return -2;
+
+    if (strcmp(path, "/agents/init.mo2") == 0) {
+        img = (const void *)init_bin;
+        sz  = (size_t)init_bin_len;
+    } else if (strcmp(path, "/agents/login.mo2") == 0) {
+        img = (const void *)login_bin;
+        sz  = (size_t)login_bin_len;
+    } else {
+        // Not a known built-in; let future NOSFS paths use a different code path if desired
+        return -3;
+    }
+
+    // We know our .mo2 is O2/MACHO2 with manifest; let the normal path handle it
+    // (If your loader does auto-detect, AGENT_FORMAT_UNKNOWN is fine.)
+    int rc = load_agent_with_prio(img, sz, AGENT_FORMAT_MACHO2, prio);
+    serial_printf("[loader] autostart '%s' rc=%d size=%zu\n", path, rc, sz);
+    return rc;
 }
