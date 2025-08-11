@@ -241,11 +241,11 @@ void threads_init(void){
 
     agent_loader_set_read(agentfs_read_all, agentfs_free);
 
-    // Start the security gate first
+    // Start filesystem server first so init.mo2 can load safely
+    thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 230);
+    // Then bring up security gate and other helpers
     thread_t *t_regx  = thread_create_with_priority(regx_thread_wrapper, 220);
-    // Bring core helpers alongside
     thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, 210);
-    thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 200);
 
     if(!t_regx){ kprintf("[boot] failed to spawn regx\n"); for(;;)__asm__ volatile("hlt"); }
     if(!t_nosm)  kprintf("[boot] failed to spawn nosm\n");
