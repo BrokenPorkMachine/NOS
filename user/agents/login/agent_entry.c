@@ -11,7 +11,7 @@ __attribute__((used, section("\"__O2INFO,__manifest\"")))
 static const char mo2_manifest[] =
 "{\n"
 "  \"name\": \"login\",\n"
-"  \"type\": \"service\",\n"
+"  \"type\": 4,\n"
 "  \"version\": \"1.0.0\",\n"
 "  \"entry\": \"_start\"\n"
 "}\n";
