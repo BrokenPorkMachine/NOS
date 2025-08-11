@@ -26,6 +26,7 @@
 
 // NEW: sanitize firmware/legacy IDT entries before any agents/threads run
 #include "arch/idt_guard.h"
+extern void idt_guard_init_once(void);
 
 extern int timer_ready;
 
