@@ -1,6 +1,10 @@
 #include "nosfs.h"
 #include "../../../nosm/drivers/IO/block.h"
 
+// Global in-memory filesystem used by both the server thread and
+// the fs_read_all() helper for the agent loader.
+nosfs_fs_t nosfs_root;
+
 // ---------- Quota helpers ----------
 void nosfs_set_quota(nosfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes) {
     pthread_mutex_lock(&fs->mutex);
@@ -451,5 +455,32 @@ int nosfs_load_device(nosfs_fs_t *fs, uint32_t start_lba) {
 }
 
 int nosfs_journal_undo_last(nosfs_fs_t *fs) { (void)fs; return -1; }
+
+// Helper for the kernel agent loader: fetch entire file contents
+// into a newly allocated buffer.  Simple linear search across the
+// in-memory filesystem namespace.
+int fs_read_all(const char *path, void **out, size_t *out_sz) {
+    if (!path || !out || !out_sz)
+        return -1;
+    const char *name = (*path == '/') ? path + 1 : path;
+    pthread_mutex_lock(&nosfs_root.mutex);
+    for (size_t i = 0; i < nosfs_root.file_count; ++i) {
+        nosfs_file_t *f = &nosfs_root.files[i];
+        if (strcmp(f->name, name) == 0) {
+            void *buf = malloc(f->size);
+            if (!buf) {
+                pthread_mutex_unlock(&nosfs_root.mutex);
+                return -1;
+            }
+            memcpy(buf, f->data, f->size);
+            *out = buf;
+            *out_sz = f->size;
+            pthread_mutex_unlock(&nosfs_root.mutex);
+            return 0;
+        }
+    }
+    pthread_mutex_unlock(&nosfs_root.mutex);
+    return -1;
+}
 
 // --------- End of file ---------
