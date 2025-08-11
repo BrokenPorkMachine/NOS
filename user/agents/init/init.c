@@ -130,20 +130,16 @@ static int load_manifest_from_disk(const AgentAPI *api,
 
 /* ---------- fallback defaults ---------- */
 static int default_manifest(svc_spec_t *out, int max_out) {
+    /* Only include agents that ship on the current disk image.
+       Loading non-existent services (e.g., pkg or update) caused
+       init to stall before reaching the login agent. */
     static const char *paths[] = {
-        "/agents/pkg.bin",
-        "/agents/update.bin",
         "/agents/login.bin",
-        /* add more as they’re ready:
-           "/agents/ssh.bin",
-           "/agents/ftp.bin",
-           "/agents/vnc.bin",
-        */
     };
-    int n=0;
-    for (size_t i=0; i<sizeof(paths)/sizeof(paths[0]) && n<max_out; ++i) {
-        snprintf(out[n].path,sizeof(out[n].path),"%s",paths[i]);
-        out[n].args[0]=0;
+    int n = 0;
+    for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]) && n < max_out; ++i) {
+        snprintf(out[n].path, sizeof(out[n].path), "%s", paths[i]);
+        out[n].args[0] = 0;
         n++;
     }
     return n;
