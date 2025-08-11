@@ -144,7 +144,7 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/VM/cow.c -o kernel/VM/cow.o
 	$(CC) $(CFLAGS) -c kernel/VM/numa.c -o kernel/VM/numa.o
 	$(CC) $(CFLAGS) -c kernel/VM/kheap.c -o kernel/VM/kheap.o
-	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
+	$(CC) $(CFLAGS) -mgeneral-regs-only -mno-mmx -mno-sse -mno-sse2 -mno-avx -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
 
 	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
