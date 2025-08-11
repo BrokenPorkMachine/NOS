@@ -200,6 +200,7 @@ clean:
 
 run: disk.img
 	qemu-system-x86_64 \
+	-cpu max \
 	-bios OVMF.fd \
 	-drive file=disk.img,format=raw \
 	-m 512M \
@@ -210,6 +211,7 @@ run: disk.img
 
 runmac: disk.img
 	qemu-system-x86_64 \
+	-cpu max \
 	-bios OVMF.fd \
 	-drive file=disk.img,format=raw \
 	-m 512M \
