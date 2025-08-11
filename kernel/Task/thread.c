@@ -1,3 +1,9 @@
+Here’s a **drop-in replacement** for `kernel/Task/thread.c` with the fixes:
+
+* Grants **`regx`** (and **`nosm`**) access to **`fs_queue`** so the loader can read `/agents/init.mo2`.
+* Hardens the thread trampoline to **tail-jump** into `thread_start` (removes stray return paths).
+
+```c
 // kernel/Task/thread.c
 #include "thread.h"
 #include "../IPC/ipc.h"
@@ -27,7 +33,6 @@ extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.
 #define THREAD_MAGIC 0x74687264UL
 
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
-
 
 static inline uintptr_t align16(uintptr_t v){ return v & ~0xFULL; }
 
@@ -171,9 +176,14 @@ __attribute__((noreturn,used)) static void thread_start(void (*f)(void)){
     entry();
     thread_exit();
 }
-static void __attribute__((naked,noreturn,used))
+
+static void __attribute__((naked, noinline, used))
 thread_entry(void){
-    __asm__ volatile("pop %rdi\ncall thread_start\njmp .\n");
+    __asm__ volatile(
+        "pop %rdi\n"        // rdi = func
+        "xor %rbp, %rbp\n"  // clean frame root
+        "jmp thread_start\n"
+    );
 }
 
 #ifdef UNIT_TEST
@@ -268,11 +278,16 @@ void threads_init(void){
         ipc_grant(&fs_queue,   t_nosfs->id, IPC_CAP_SEND | IPC_CAP_RECV);
         ipc_grant(&regx_queue, t_nosfs->id, IPC_CAP_SEND | IPC_CAP_RECV);
     }
-    ipc_grant(&regx_queue, t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    if (t_regx){
+        ipc_grant(&regx_queue, t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
+        ipc_grant(&fs_queue,   t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);   // <-- give regx FS access
+    }
     if (t_nosm){
         ipc_grant(&nosm_queue, t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);
         ipc_grant(&regx_queue, t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);
+        ipc_grant(&fs_queue,   t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);   // optional: if nosm needs FS
     }
 
     if (timer_ready) thread_yield();
 }
+```
