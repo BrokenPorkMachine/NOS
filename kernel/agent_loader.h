@@ -1,113 +1,41 @@
+// kernel/agent_loader.h
 #pragma once
-#ifndef AGENT_LOADER_H
-#define AGENT_LOADER_H
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include <stdint.h>
-#include <regx.h>     // regx_manifest_t, regx_register(), n2_agent_t
-// --- add to kernel/agent_loader.h ---
-#ifndef AGENT_LOADER_PUB_DECLS
-#define AGENT_LOADER_PUB_DECLS
 
-// Returns the gate function previously set via agent_loader_set_gate().
-agent_gate_fn agent_loader_get_gate(void);
-
-// The core loader calls this to spawn the mapped agent entry.
-// It is set by agent_loader_pub.c.
-extern int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
-
-#endif // AGENT_LOADER_PUB_DECLS
-
-/*
- * Supported on-disk/in-memory formats
- */
+// ----- Agent formats -----
 typedef enum {
-    AGENT_FORMAT_ELF = 0,
-    AGENT_FORMAT_MACHO,
-    AGENT_FORMAT_MACHO2,  // O2-style with embedded JSON manifest
-    AGENT_FORMAT_FLAT,
-    AGENT_FORMAT_NOSM,
-    AGENT_FORMAT_UNKNOWN
+    AGENT_FORMAT_ELF = 1,
 } agent_format_t;
 
-/*
- * Entry point type exported by agents (e.g., "init_main")
- */
-typedef void (*agent_entry_t)(void);
+// ----- Security gate callback -----
+// Return 0 to allow, nonzero to deny (RegX can decide).
+typedef int (*agent_gate_fn)(
+    const char *name,        // e.g., "init"
+    const char *entry_sym,   // e.g., "agent_main"
+    const char *entry_hex,   // e.g., "0x12abc..."
+    const char *caps,        // optional caps string
+    const char *path         // original path, can be NULL
+);
 
-/*
- * Detect agent format from raw bytes.
- */
-agent_format_t detect_agent_format(const void *image, size_t size);
+// ----- File I/O callbacks for reading agent images -----
+typedef int  (*agent_read_file_fn)(const char *path, const void **data_out, size_t *size_out);
+typedef void (*agent_free_fn)(void *p);
 
-/*
- * Loaders (return 0 on success, <0 on error)
- *  - Auto: detect and load (default prio = 200)
- *  - Auto with explicit priority
- *  - Explicit: caller provides the format (default prio = 200)
- *  - Explicit with priority
- */
-int load_agent_auto(const void *image, size_t size);
-int load_agent_auto_with_prio(const void *image, size_t size, int prio);
+// Set/get the optional security gate (RegX will set this)
+void           agent_loader_set_gate(agent_gate_fn gate);
+agent_gate_fn  agent_loader_get_gate(void);
 
+// Set how the loader reads files (defaults to nosfs if linked)
+void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer);
+
+// Public entry points
 int load_agent(const void *image, size_t size, agent_format_t fmt);
 int load_agent_with_prio(const void *image, size_t size, agent_format_t fmt, int prio);
 
-/*
- * NOSM: opaque blob handed to nosm_request_verify_and_load
- * Returns 0 on success, <0 on error.
- */
-int load_agent_nosm(const void *image, size_t size);
-
-/*
- * Manifest extraction helpers (copy a JSON object into out_json; 0 on success)
- */
-int extract_manifest_macho2(const void *image, size_t size,
-                            char *out_json, size_t out_sz);
-int extract_manifest_elf(const void *image, size_t size,
-                         char *out_json, size_t out_sz);
-
-// Add near the other declarations
-int agent_loader_run_from_path(const char *path, int prio);
-/*
- * Register an entry point by symbolic name so the loader can resolve "entry"
- * from a manifest to a real function pointer.
- */
-void agent_loader_register_entry(const char *name, agent_entry_t fn);
-
-/* ------------------------------------------------------------------------- */
-/*                   Kernel integration / extensibility                      */
-/* ------------------------------------------------------------------------- */
-
-/* Reader/free hooks so the loader can fetch agent bytes from your FS layer. */
-typedef int  (*agent_read_file_fn)(const char *path, void **out, size_t *out_sz);
-typedef void (*agent_free_fn)(void *ptr);
-
-void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer);
-
-/*
- * Optional security gate installed by regx: decides whether a load is allowed.
- * Return non-zero to allow, 0 to deny.
- */
-typedef int (*agent_gate_fn)(const char *path,
-                             const char *name,
-                             const char *version,
-                             const char *capabilities,
-                             const char *entry);
-
-void agent_loader_set_gate(agent_gate_fn gate);
-
-/*
- * Convenience helper: read an agent from the filesystem and load it
- * (auto-detecting format). 'prio' is the initial thread priority.
- */
+// Convenience wrapper used by RegX to load from a filesystem path
 int agent_loader_run_from_path(const char *path, int prio);
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
-#endif /* AGENT_LOADER_H */
+// Bridge provided by agent_loader_pub.c so the loader can spawn a thread
+// name: informational (can be path); entry: runtime entry; prio: thread prio
+extern int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
