@@ -284,4 +284,3 @@ void threads_init(void){
 
     if (timer_ready) thread_yield();
 }
-```
