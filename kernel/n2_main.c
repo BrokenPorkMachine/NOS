@@ -78,6 +78,9 @@ void n2_main(bootinfo_t *bootinfo)
     if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI)
         return;
 
+    __asm__ volatile("cli");
+    idt_guard_init_once();   // fresh, sanitized IDT
+
     // Bring up serial FIRST so we can see early logs
     serial_init();
 
