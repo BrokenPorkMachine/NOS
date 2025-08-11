@@ -1,9 +1,10 @@
-// kernel/agent_loader.c — IDT clone+patch (#UD/#GP) + BYPASS loader + C trampoline
-// - No printing/serial I/O and no regx/gate usage.
-// - Clones the current IDT into a kernel-writable static buffer, patches vectors 6/13
-//   if they point to legacy low memory (0xA0000..0xFFFFF), and then LIDT to the clone.
-// - Maps ELF ET_EXEC as PIE, applies RELATIVE RELA, spawns agent via a C trampoline
-//   that calls thread_exit() so it never returns into garbage.
+// kernel/agent_loader.c — IDT clone + PROBE via printf + force-patch #UD/#GP + BYPASS loader
+// - Uses printf (kernel console) only. No port I/O, no regx/gate usage.
+// - Prints vector 6 and 13 handler pointers before & after patching to help confirm the source of 0xB0000 jumps.
+// - Clones IDT into writable buffer, unconditionally sets #UD/#GP to known-good 64-bit stubs, then LIDT to the clone.
+// - Minimal ELF ET_EXEC loader (RELA-relative) with a C trampoline that calls thread_exit().
+//
+// NOTE: If your console isn't ready here, you can switch the PROBE block off by setting PROBE_IDT=0.
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -13,6 +14,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
+
+extern int printf(const char *fmt, ...);
 
 typedef void (*agent_entry_t)(void);
 
@@ -27,26 +30,6 @@ struct __attribute__((packed)) idt_entry64 {
 	uint32_t off_hi;
 	uint32_t zero;
 };
-
-/* Minimal #UD handler stub: saves/pops some regs then iretq (no error code) */
-__attribute__((naked)) void ud_safe_stub(void){
-	__asm__ __volatile__(
-		"push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
-		"pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
-		"iretq\n\t"
-	);
-}
-
-/* Minimal #GP handler stub: same, but consumes error code before iretq */
-__attribute__((naked)) void gp_safe_stub(void){
-	__asm__ __volatile__(
-		"push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
-		"pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
-		"add $8, %rsp\n\t"   /* drop error code pushed by CPU for #GP */
-		"iretq\n\t"
-	);
-}
-
 static inline uint64_t make_gate_offset(const volatile struct idt_entry64* e){
 	return ((uint64_t)e->off_hi<<32) | ((uint64_t)e->off_mid<<16) | e->off_lo;
 }
@@ -60,38 +43,58 @@ static inline void fill_gate(struct idt_entry64* e, uint64_t handler, uint16_t c
 	e->zero     = 0;
 }
 
-/* Writable cloned IDT (max 4 KiB, enough for 256 entries * 16 bytes) */
+/* Minimal stubs */
+__attribute__((naked)) void ud_safe_stub(void){
+	__asm__ __volatile__(
+		"push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
+		"pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
+		"iretq\n\t"
+	);
+}
+__attribute__((naked)) void gp_safe_stub(void){
+	__asm__ __volatile__(
+		"push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
+		"pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
+		"add $8, %rsp\n\t"   /* drop error code pushed by CPU for #GP */
+		"iretq\n\t"
+	);
+}
+
+/* Writable cloned IDT (max 4 KiB) */
 static __attribute__((aligned(16))) uint8_t g_idt_clone[4096];
 static struct idt_desc64 g_idtr_clone;
-static void idt_clone_patch_and_load_once(void){
-	static int done=0; if(done) return; done=1;
 
-	/* Read current IDT */
+static void idt_clone_probe_patch_and_load_once(void){
+	static int done=0; if(done) return; done=1;
 	struct idt_desc64 idtr = {0};
 	__asm__ volatile("sidt %0" : "=m"(idtr));
 	if(!idtr.base) return;
 	uint16_t limit = idtr.limit;
-	if(limit >= sizeof(g_idt_clone)) limit = sizeof(g_idt_clone) - 1; /* clamp */
+	if(limit >= sizeof(g_idt_clone)) limit = sizeof(g_idt_clone) - 1;
 
-	/* Copy to writable clone */
+	/* Probe current */
+	const struct idt_entry64* idt_cur = (const struct idt_entry64*)(uintptr_t)idtr.base;
+	uint64_t off6  = (idtr.limit + 1 >= (6+1)*sizeof(struct idt_entry64))  ? make_gate_offset(&idt_cur[6])  : 0;
+	uint64_t off13 = (idtr.limit + 1 >= (13+1)*sizeof(struct idt_entry64)) ? make_gate_offset(&idt_cur[13]) : 0;
+	printf("[idt] pre  v6=%016llx v13=%016llx base=%016llx lim=%04x\n",
+	       (unsigned long long)off6, (unsigned long long)off13,
+	       (unsigned long long)idtr.base, (unsigned)idtr.limit);
+
+	/* Clone */
 	memcpy(g_idt_clone, (const void*)(uintptr_t)idtr.base, (size_t)limit + 1);
+	struct idt_entry64* idt = (struct idt_entry64*)g_idt_clone;
 
-	/* Patch vectors 6 and 13 if they point to legacy low memory */
+	/* Force-patch #UD + #GP stubs */
 	uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs));
-	if(limit + 1 >= (6+1)*sizeof(struct idt_entry64)){
-		struct idt_entry64* v6 = (struct idt_entry64*)(g_idt_clone + 6*sizeof(struct idt_entry64));
-		uint64_t off6 = make_gate_offset(v6);
-		if(off6>=0x00000000000A0000ULL && off6<=0x00000000000FFFFFULL){
-			fill_gate(v6, (uint64_t)(uintptr_t)&ud_safe_stub, cs);
-		}
-	}
-	if(limit + 1 >= (13+1)*sizeof(struct idt_entry64)){
-		struct idt_entry64* v13 = (struct idt_entry64*)(g_idt_clone + 13*sizeof(struct idt_entry64));
-		uint64_t off13 = make_gate_offset(v13);
-		if(off13>=0x00000000000A0000ULL && off13<=0x00000000000FFFFFULL){
-			fill_gate(v13, (uint64_t)(uintptr_t)&gp_safe_stub, cs);
-		}
-	}
+	fill_gate(&idt[6],  (uint64_t)(uintptr_t)&ud_safe_stub, cs);
+	fill_gate(&idt[13], (uint64_t)(uintptr_t)&gp_safe_stub, cs);
+
+	/* Probe patched clone */
+	off6  = make_gate_offset(&idt[6]);
+	off13 = make_gate_offset(&idt[13]);
+	printf("[idt] post v6=%016llx v13=%016llx new_base=%016llx lim=%04x\n",
+	       (unsigned long long)off6, (unsigned long long)off13,
+	       (unsigned long long)(uintptr_t)g_idt_clone, (unsigned)limit);
 
 	/* Load cloned IDT */
 	g_idtr_clone.base  = (uint64_t)(uintptr_t)g_idt_clone;
@@ -105,9 +108,7 @@ static void idt_clone_patch_and_load_once(void){
 static agent_read_file_fn g_read_file = 0;
 static agent_free_fn      g_free_fn   = 0;
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
-
-/* Provide a no-op gate setter to satisfy callers */
-void agent_loader_set_gate(agent_gate_fn g){ (void)g; }
+void agent_loader_set_gate(agent_gate_fn g){ (void)g; } /* no-op */
 
 /* 1 MiB arena fallback */
 #define AGENT_ARENA_SIZE (1<<20)
@@ -167,7 +168,9 @@ static agent_entry_t g_agent_entry = 0;
 extern void thread_exit(void) __attribute__((weak));
 static void agent_trampoline(void){
 	agent_entry_t fn = g_agent_entry;
+	printf("[agt] trampoline start fn=%p\n", (void*)fn);
 	if(fn) fn();
+	printf("[agt] trampoline end\n");
 	if(thread_exit) thread_exit();
 	for(;;){ __asm__ __volatile__("cli; hlt" ::: "memory"); }
 }
@@ -206,8 +209,8 @@ static int elf_map_and_spawn(const void* img, size_t sz, int prio){
 	if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
 	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
 
-	/* Install cloned IDT with safe #UD/#GP vectors */
-	idt_clone_patch_and_load_once();
+	/* Install cloned IDT with forced safe #UD/#GP vectors */
+	idt_clone_probe_patch_and_load_once();
 
 	/* Use a C trampoline so the entry can never return to garbage */
 	g_agent_entry = (agent_entry_t)(void*)entry_addr;
