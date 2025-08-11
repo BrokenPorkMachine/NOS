@@ -242,9 +242,27 @@ void buddy_init(const bootinfo_t *bootinfo) {
     for (int n=0; n<zone_count; n++) {
         const numa_region_t *r = numa_node_region(n);
         buddy_zone_t *z = &zones[n];
-        z->base = r->base;
-        z->length = r->length;
+
+        uint64_t base = r->base;
+        uint64_t length = r->length;
+
+        // Avoid reserving low memory used by firmware/IO (e.g., VGA at 0xB0000)
+        if (base < 0x100000) {
+            uint64_t delta = 0x100000 - base;
+            if (length > delta) {
+                base = 0x100000;
+                length -= delta;
+            } else {
+                base = 0x100000;
+                length = 0;
+            }
+        }
+
+        z->base = base;
+        z->length = length;
         z->frames = (z->length / PAGE_SIZE);
+        if (z->frames == 0)
+            continue;
         z->max_order = PMM_BUDDY_MAX_ORDER;
         z->free_frames = z->frames;
         z->lock = 0;
