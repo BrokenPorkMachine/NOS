@@ -16,8 +16,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
-#include "init_bin.h"
-#include "login_bin.h"
 
 
 
@@ -147,27 +145,20 @@ int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio)
 int load_agent_auto(const void* img, size_t sz){ return elf_map_and_spawn(img, sz, 200); }
 int load_agent(const void* img, size_t sz, agent_format_t f){ (void)f; return elf_map_and_spawn(img,  sz, 200); }
 
-// Launch a built-in agent by its path (matches the embedded blobs we xxd at build)
+// kernel/agent_loader.c
+// Thin wrapper that forwards to the existing path-based loader.
+// We support a few possible symbol names/signatures via weak refs.
+
+__attribute__((weak)) int loader_run_from_path(const char *path, int prio);
+__attribute__((weak)) int run_from_path(const char *path, int prio);
+__attribute__((weak)) int loader_run_from_path_simple(const char *path);
+__attribute__((weak)) int run_from_path_simple(const char *path);
+
 int agent_loader_run_from_path(const char *path, int prio) {
-    const void *img = NULL;
-    size_t sz = 0;
-
-    if (!path) return -2;
-
-    if (strcmp(path, "/agents/init.mo2") == 0) {
-        img = (const void *)init_bin;
-        sz  = (size_t)init_bin_len;
-    } else if (strcmp(path, "/agents/login.mo2") == 0) {
-        img = (const void *)login_bin;
-        sz  = (size_t)login_bin_len;
-    } else {
-        // Not a known built-in; let future NOSFS paths use a different code path if desired
-        return -3;
-    }
-
-    // We know our .mo2 is O2/MACHO2 with manifest; let the normal path handle it
-    // (If your loader does auto-detect, AGENT_FORMAT_UNKNOWN is fine.)
-    int rc = load_agent_with_prio(img, sz, AGENT_FORMAT_MACHO2, prio);
-    serial_printf("[loader] autostart '%s' rc=%d size=%zu\n", path, rc, sz);
-    return rc;
+    if (loader_run_from_path)            return loader_run_from_path(path, prio);
+    if (run_from_path)                   return run_from_path(path, prio);
+    if (loader_run_from_path_simple)     return loader_run_from_path_simple(path);
+    if (run_from_path_simple)            return run_from_path_simple(path);
+    // No known symbol present:
+    return -38; // ENOSYS-ish
 }
