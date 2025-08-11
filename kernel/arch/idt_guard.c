@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../../include/printf.h"
+#include "../../nosm/drivers/IO/serial.h"
 
 #define VEC_UD  6
 #define VEC_GP  13
