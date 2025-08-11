@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Provided by the scheduler to allow preemptive multitasking from the
+ * timer interrupt context. */
+extern uint64_t schedule_from_isr(uint64_t *old_rsp);
+
 /* ---- Helpers ---------------------------------------------------- */
 
 static inline int is_irq_vector(uint64_t vec) {
@@ -126,10 +130,8 @@ void isr_timer_handler(struct isr_context *ctx) {
     volatile uint16_t *vga = (uint16_t *)(uintptr_t)0xB8000 + 80 * 0; /* first row */
     vga[0] = ((uint16_t)('0' + (ticks % 10))) | ((uint16_t)0x2F << 8);
 
-    /* TODO: hook scheduler tick here if desired
-       extern uint64_t schedule_from_isr(uint64_t *old_rsp);
-       ctx->rsp = schedule_from_isr((uint64_t*)ctx->rsp);
-    */
+    /* Preemptive scheduling: switch to the next runnable thread if needed. */
+    ctx->rsp = schedule_from_isr((uint64_t *)ctx->rsp);
 
     (void)ctx;
     apic_eoi_if_needed(32); /* PIT/APIC timer typically at vector 32 */

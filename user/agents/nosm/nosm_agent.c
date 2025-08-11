@@ -41,7 +41,8 @@ void nosm_server(ipc_queue_t *q, uint32_t self_id) {
     serial_puts("[nosm] security agent online\n");
     for (;;) {
         ipc_message_t m = {0};
-        if (ipc_receive_blocking(q, self_id, &m) != 0) { thread_yield(); continue; }
+        if (ipc_receive_blocking(q, self_id, &m) != 0)
+            continue;
 
         if (m.type == NOSM_IPC_HEALTH_PING) {
             ipc_message_t r = {0}; r.type = NOSM_IPC_HEALTH_PONG;

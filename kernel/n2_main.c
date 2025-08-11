@@ -21,6 +21,7 @@
 #include "uaccess.h"
 #include "symbols.h"
 
+extern int timer_ready;
 // ... (previous kprint, strcspn_local, syscall infrastructure, sandboxing, module loading helpers, hardware/system query helpers, scheduler_loop, etc unchanged) ...
 
 #ifndef VERBOSE
@@ -103,6 +104,12 @@ void n2_main(bootinfo_t *bootinfo) {
     // Launch core service threads (e.g., RegX) early
     threads_init();
     vprint("[N2] Launching core service threads\r\n");
+
+    /* Start periodic LAPIC timer to enable preemptive scheduling. The
+       divider and initial count are rough placeholders sufficient for
+       cooperative tests. */
+    lapic_timer_setup_periodic(32, 1000000, 0x3);
+    timer_ready = 1;
 
     uint64_t rflags, cr0, cr3, cr4;
     __asm__ volatile("pushfq; pop %0" : "=r"(rflags));
