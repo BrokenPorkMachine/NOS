@@ -20,6 +20,23 @@
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #endif
+extern int load_agent(const void *img, size_t sz, const char *path, int prio);
+
+int load_agent_with_prio(const void *image, size_t size, agent_format_t fmt, int prio) {
+    if (!image || size == 0) {
+        // ENOMEM/EINVAL style error; choose a small negative generic error
+        return -7;
+    }
+
+    switch (fmt) {
+        case AGENT_FORMAT_ELF:
+            // We don't need a path here; the image is already in memory.
+            return load_agent(image, size, /*path=*/NULL, prio);
+        default:
+            // Unsupported format
+            return -22;
+    }
+}
 
 static inline uint64_t align_up_u64(uint64_t v, uint64_t a) {
     return (v + (a - 1)) & ~(a - 1);
