@@ -279,8 +279,30 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
 
     char manifest[512];
     if (extract_manifest_elf(image, size, manifest, sizeof(manifest)) != 0) {
-        free(mem);
-        return -1;
+        /*
+         * Missing manifest is only allowed for a single, trusted early
+         * bootstrap agent (init). Any other unmanifested ELF is rejected to
+         * avoid bypassing regx security.
+         */
+        char name[32] = {0};
+        if (path) {
+            const char *base = path;
+            for (const char *p = path; *p; ++p)
+                if (*p == '/') base = p + 1;
+            snprintf(name, sizeof(name), "%s", base);
+            char *dot = NULL;
+            for (char *p = name; *p; ++p)
+                if (*p == '.') dot = p;
+            if (dot) *dot = 0;
+        }
+        if (strcmp(name, "init") != 0) {
+            free(mem);
+            return -1;
+        }
+        snprintf(manifest, sizeof(manifest),
+                 "{\"name\":\"%s\",\"type\":4,\"version\":\"0\"," \
+                 "\"entry\":\"agent_main\",\"capabilities\":\"missing-manifest\"}",
+                 name);
     }
 
     char entry_name[64] = {0};
