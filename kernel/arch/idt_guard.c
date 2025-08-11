@@ -1,19 +1,56 @@
 #include <stdint.h>
-#include <stddef.h>
+#include "../drivers/IO/serial.h"
+#include "idt_guard.h"
 
-struct __attribute__((packed)) idtr64 {
+struct __attribute__((packed)) idtr_t {
     uint16_t limit;
     uint64_t base;
 };
-struct __attribute__((packed)) idt_gate64 {
-    uint16_t off0;
-    uint16_t sel;
+
+struct __attribute__((packed)) idt_gate_t {
+    uint16_t offset_low;
+    uint16_t selector;
     uint8_t  ist;
     uint8_t  type_attr;
-    uint16_t off1;
-    uint32_t off2;
+    uint16_t offset_mid;
+    uint32_t offset_high;
     uint32_t zero;
 };
+
+static inline uint64_t gate_target(const struct idt_gate_t* g) {
+    return (uint64_t)g->offset_low |
+           ((uint64_t)g->offset_mid  << 16) |
+           ((uint64_t)g->offset_high << 32);
+}
+
+void idt_guard_init_once(void) {
+    static int done = 0;
+    if (done) return;
+    done = 1;
+
+    struct idtr_t idtr;
+    __asm__ volatile("sidt %0" : "=m"(idtr));
+
+    const struct idt_gate_t* idt = (const struct idt_gate_t*)(uintptr_t)idtr.base;
+    uint64_t vec6  = gate_target(&idt[6]);
+    uint64_t vec13 = gate_target(&idt[13]);
+
+    serial_printf("[idt] pre-guard base=%016lx lim=%04x vec6=%016lx vec13=%016lx\n",
+                  (unsigned long)idtr.base, idtr.limit,
+                  (unsigned long)vec6, (unsigned long)vec13);
+
+    // No mutation here—just diagnostics. Safe on all compilers/options.
+
+    // Read back to show nothing changed (helps debugging):
+    __asm__ volatile("sidt %0" : "=m"(idtr));
+    idt   = (const struct idt_gate_t*)(uintptr_t)idtr.base;
+    vec6  = gate_target(&idt[6]);
+    vec13 = gate_target(&idt[13]);
+    serial_printf("[idt] post-guard base=%016lx lim=%04x vec6=%016lx vec13=%016lx\n",
+                  (unsigned long)idtr.base, idtr.limit,
+                  (unsigned long)vec6, (unsigned long)vec13);
+}
+
 struct interrupt_frame { uint64_t rip, cs, rflags, rsp, ss; };
 
 static inline void lidt(const struct idtr64 *d) { __asm__ volatile("lidt %0" : : "m"(*d)); }
@@ -52,36 +89,6 @@ static inline void gate_set(struct idt_gate64* g, uint16_t cs, uint64_t off, uin
     g->ist = (uint8_t)(ist & 0x7);
     g->type_attr = 0x8E;   // P=1 | DPL=0 | Type=0xE (64-bit interrupt gate)
     g->zero = 0;
-}
-
-static void idt_guard_init_once(void)
-{
-    if (s_done) return;
-
-    uint16_t cs = read_cs();
-
-    // Exceptions 0..31: give them safe handlers. Others: benign sink.
-    for (int i = 0; i < 256; ++i) {
-        uint64_t target = (uint64_t)(void*)&guard_noerr;
-        int has_err = 0;
-
-        switch (i) {
-            case 6:  target = (uint64_t)(void*)&guard_ud_mux; break;   // #UD
-            case 13: target = (uint64_t)(void*)&guard_gp_mux; has_err = 1; break; // #GP
-            case 8: case 10: case 11: case 12: case 14: case 17: case 30: has_err = 1; break;
-            default: break;
-        }
-        if (has_err) target = (target == (uint64_t)(void*)&guard_noerr)
-                                ? (uint64_t)(void*)&guard_err : target;
-        gate_set(&s_idt[i], cs, target, 0);
-    }
-
-    struct idtr64 idt = {
-        .limit = (uint16_t)(sizeof(s_idt) - 1),
-        .base  = (uint64_t)(void*)s_idt
-    };
-    lidt(&idt);
-    s_done = 1;
 }
 
 void idt_guard_install_real_handlers(void (*ud_noerr)(void*), void (*gp_err)(void*, uint64_t))
