@@ -1,526 +1,283 @@
-// kernel/agent_loader.c
+// kernel/agent_loader.c — fixed PIE entry handling (ET_DYN)
+// Maps PT_LOAD, computes entry = load_base + e_entry, registers & spawns.
+
 #include "agent_loader.h"
-#include "agent.h"
 #include "Task/thread.h"
-#include "../../user/libc/libc.h"
 #include "VM/kheap.h"
 #include "symbols.h"
+#include "agent.h"
+#include "regx.h"
 
-#include <stdint.h>
-#include <string.h>   // memcmp, memchr, strstr, strlen, strcmp, snprintf
-#include <limits.h>   // UINT32_MAX
-#include <nosm.h>
 #include <elf.h>
-#include <regx.h>     // regx_manifest_t, regx_register, n2_agent_t
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+#include <limits.h>
 
 extern int kprintf(const char *fmt, ...);
 
-/* ------------------------------------------------------------------------- */
-/*                              Local plumbing                               */
-/* ------------------------------------------------------------------------- */
-
+/* ------------------- Gate / FS hooks provided elsewhere ------------------- */
 static agent_read_file_fn g_read_file = 0;
 static agent_free_fn      g_free_fn   = 0;
 static agent_gate_fn      g_gate_fn   = 0;
-static uint8_t init_fallback_buf[200*1024];
 
-void agent_loader_set_read(agent_read_file_fn reader, agent_free_fn freer){ g_read_file=reader; g_free_fn=freer; }
-void agent_loader_set_gate(agent_gate_fn gate){ g_gate_fn = gate; }
+void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
+void agent_loader_set_gate(agent_gate_fn g){ g_gate_fn=g; }
 
-/* Forward declaration to satisfy cross-calls (MACHO2 -> ELF fallback) */
-static int load_agent_elf_impl(const void *image, size_t size, const char *path, int prio);
+/* --------------------------- Tiny utilities ------------------------------- */
 
-/* ------------------------------------------------------------------------- */
-/*                                  memmem                                   */
-/* ------------------------------------------------------------------------- */
-
-static const void *memmem_local(const void *hay, size_t haylen,
-                                const void *need, size_t needlen)
-{
-    const unsigned char *h = (const unsigned char*)hay;
-    const unsigned char *n = (const unsigned char*)need;
-
-    if (needlen == 0)
-        return hay;
-
-    for (size_t i = 0; i + needlen <= haylen; ++i)
-        if (memcmp(h + i, n, needlen) == 0)
-            return h + i;
-
-    return NULL;
+static const void* memmem_local(const void* h, size_t hl, const void* n, size_t nl){
+	if(!h || !n || nl==0 || hl<nl) return NULL;
+	const uint8_t* H=(const uint8_t*)h, *N=(const uint8_t*)n;
+	for(size_t i=0;i+nl<=hl;i++) if(!memcmp(H+i,N,nl)) return H+i;
+	return NULL;
 }
 
-/* ------------------------------------------------------------------------- */
-/*                              Small helpers                                */
-/* ------------------------------------------------------------------------- */
+static const char* skip_ws(const char* p){ while(p && (*p==' '||*p=='\t'||*p=='\n'||*p=='\r')) p++; return p; }
 
-static void path_basename_noext(const char *path, char *out, size_t out_sz){
-    if (!out || out_sz==0){ return; }
-    out[0]=0;
-    if (!path){ snprintf(out,out_sz,""); return; }
-
-    const char *base = path;
-    for (const char *p = path; *p; ++p)
-        if (*p == '/') base = p + 1;
-
-    snprintf(out, out_sz, "%s", base);
-    char *dot = NULL;
-    for (char *p = out; *p; ++p)
-        if (*p == '.') dot = p;
-    if (dot) *dot = 0;
+static int json_get_str(const char* json, const char* key, char* out, size_t osz){
+	if(!json||!key||!out||!osz) return -1;
+	char pat[64]; snprintf(pat,sizeof(pat),"\"%s\"",key);
+	const char* p=strstr(json,pat); if(!p) return -1;
+	p += strlen(pat); p = skip_ws(p); if(*p!=':') return -1; p++; p=skip_ws(p);
+	if(*p!='"') return -1; p++; size_t i=0; while(*p && *p!='"' && i<osz-1) out[i++]=*p++; if(*p!='"') return -1;
+	out[i]=0; return 0;
 }
 
-/* ------------------------------------------------------------------------- */
-/*                             Minimal JSON helpers                          */
-/* ------------------------------------------------------------------------- */
-
-static const char *skip_ws(const char *p){
-    while(*p==' '||*p=='\t'||*p=='\n'||*p=='\r') p++;
-    return p;
+static int json_get_int(const char* json, const char* key){
+	if(!json||!key) return -1;
+	char pat[64]; snprintf(pat,sizeof(pat),"\"%s\"",key);
+	const char* p=strstr(json,pat); if(!p) return -1;
+	p += strlen(pat); p = skip_ws(p); if(*p!=':') return -1; p++; p=skip_ws(p);
+	return (int)strtol(p,NULL,10);
 }
 
-static int json_extract_string(const char *json, const char *key, char *out, size_t out_sz){
-    if (!json || !key || !out || out_sz == 0) return -1;
-    char pattern[64];
-    snprintf(pattern,sizeof(pattern),"\"%s\"",key);
-    const char *p = strstr(json,pattern);
-    if(!p) return -1;
-    p += strlen(pattern);
-    p = skip_ws(p);
-    if(*p!=':') return -1;
-    p++;
-    p = skip_ws(p);
-    if(*p!='"') return -1;
-    p++;
-    size_t i=0;
-    while(*p && *p!='"' && i<out_sz-1) out[i++]=*p++;
-    if(*p!='"') return -1;
-    out[i]=0;
-    return 0;
+static void basename_noext(const char* path, char* out, size_t osz){
+	if(!out||!osz){return;} out[0]=0; if(!path){return;}
+	const char* b=path; for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
+	snprintf(out,osz,"%s",b); char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p; if(dot) *dot=0;
 }
 
-static int json_extract_int(const char *json, const char *key){
-    if (!json || !key) return -1;
-    char pattern[64];
-    snprintf(pattern,sizeof(pattern),"\"%s\"",key);
-    const char *p = strstr(json,pattern);
-    if(!p) return -1;
-    p += strlen(pattern);
-    p = skip_ws(p);
-    if(*p!=':') return -1;
-    p++;
-    p = skip_ws(p);
-    return (int)strtol(p,NULL,10);
+/* --------------------- Entry registry (name -> fn*) ----------------------- */
+
+typedef void (*agent_entry_t)(void);
+#define MAX_ENTRIES 64
+static struct { char name[64]; agent_entry_t fn; } g_entries[MAX_ENTRIES];
+static size_t g_ec=0;
+
+static void reg_entry(const char* name, agent_entry_t fn){
+	if(!name||!fn) return;
+	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0){ g_entries[i].fn=fn; return; }
+	if(g_ec<MAX_ENTRIES){ snprintf(g_entries[g_ec].name,sizeof(g_entries[g_ec].name),"%s",name); g_entries[g_ec].fn=fn; g_ec++; }
 }
 
-/* ------------------------------------------------------------------------- */
-/*                              Symbol registry                              */
-/* ------------------------------------------------------------------------- */
-
-#define MAX_ENTRIES 32
-static struct { const char *name; agent_entry_t fn; } entry_registry[MAX_ENTRIES];
-static size_t entry_count=0;
-
-void agent_loader_register_entry(const char *name, agent_entry_t fn){
-    if(!name||!fn) return;
-    for(size_t i=0;i<entry_count;++i)
-        if(strcmp(entry_registry[i].name,name)==0) return;
-    if(entry_count<MAX_ENTRIES){
-        entry_registry[entry_count].name=name;
-        entry_registry[entry_count].fn=fn;
-        entry_count++;
-    }
+static agent_entry_t find_entry(const char* name){
+	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0) return g_entries[i].fn;
+	return NULL;
 }
 
-static agent_entry_t find_entry_fn(const char *name){
-    for(size_t i=0;i<entry_count;++i)
-        if(strcmp(entry_registry[i].name,name)==0) return entry_registry[i].fn;
-    return NULL;
+/* ---------------------- Manifest extraction helpers ----------------------- */
+
+static int extract_manifest_blob(const void* buf, size_t sz, char* out, size_t osz){
+	if(!buf||!sz||!out||!osz) return -1;
+	/* Heuristic: find first '{' then the next '}' (manifests are tiny) */
+	const char* s=(const char*)memchr(buf,'{',sz);
+	if(!s) return -1;
+	size_t remain = sz - (size_t)(s - (const char*)buf);
+	const char* e=(const char*)memchr(s,'}',remain);
+	if(!e || e<=s) return -1;
+	size_t len=(size_t)(e-s+1); if(len+1>osz) return -1;
+	memcpy(out,s,len); out[len]=0; return 0;
 }
 
-/* ------------------------------------------------------------------------- */
-/*                             Format detection                              */
-/* ------------------------------------------------------------------------- */
+/* --------------------- Gate + registry + spawning ------------------------- */
 
-agent_format_t detect_agent_format(const void *image, size_t size){
-    const unsigned char *d=(const unsigned char*)image;
-    if(!d || size==0) return AGENT_FORMAT_UNKNOWN;
+static int register_and_spawn_from_manifest(const char* json, const char* path, int prio){
+	regx_manifest_t m=(regx_manifest_t){0};
+	char entry[64]={0};
 
-    if(size>=4 && memcmp(d,"\x7F""ELF",4)==0) return AGENT_FORMAT_ELF;
+	json_get_str(json,"name",m.name,sizeof(m.name));
+	m.type = json_get_int(json,"type");
+	json_get_str(json,"version",m.version,sizeof(m.version));
+	json_get_str(json,"abi",m.abi,sizeof(m.abi));
+	json_get_str(json,"capabilities",m.capabilities,sizeof(m.capabilities));
+	json_get_str(json,"entry",entry,sizeof(entry));
+	if(!entry[0]) snprintf(entry,sizeof(entry),"agent_main");
 
-    if(size>=4 && ((d[0]==0xCF&&d[1]==0xFA&&d[2]==0xED&&d[3]==0xFE) || (d[0]==0xFE&&d[1]==0xED&&d[2]==0xFA&&d[3]==0xCF))){
-        if(memmem_local(d,size,"__O2INFO",8)) return AGENT_FORMAT_MACHO2;
-        return AGENT_FORMAT_MACHO;
-    }
+	if(g_gate_fn){
+		int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry);
+		if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name, entry); return -1; }
+	}
 
-    if(size>=4 && memcmp(d,"NOSM",4)==0) return AGENT_FORMAT_NOSM;
+	uint64_t id = regx_register(&m,0);
+	if(!id){ kprintf("[loader] regx_register failed for %s\n", m.name[0]?m.name:"(unnamed)"); return -1; }
 
-    if(size>0 && ((const char*)d)[0]=='{') return AGENT_FORMAT_MACHO2;
+	agent_entry_t fn=find_entry(entry);
+	if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry); return -1; }
 
-    return AGENT_FORMAT_FLAT;
+	n2_agent_t agent=(n2_agent_t){0};
+	snprintf(agent.name,sizeof(agent.name),"%s", m.name[0]?m.name:"(unnamed)");
+	snprintf(agent.version,sizeof(agent.version),"%s", m.version);
+	snprintf(agent.capabilities,sizeof(agent.capabilities),"%s", m.capabilities);
+	agent.entry=fn;
+	n2_agent_register(&agent);
+
+	thread_t* t=thread_create_with_priority((void(*)(void))fn, prio>0?prio:200);
+	if(!t){ kprintf("[loader] thread create failed for %s\n", agent.name); return -1; }
+	return 0;
 }
 
-/* ------------------------------------------------------------------------- */
-/*                          Manifest extractors (JSON)                       */
-/* ------------------------------------------------------------------------- */
+/* ------------------------------ ELF loader -------------------------------- */
 
-int extract_manifest_macho2(const void *image,size_t size,char *out_json,size_t out_sz){
-    if(!image || !out_json || out_sz==0) return -1;
-    const unsigned char *d=(const unsigned char*)image;
-    const char *s=(const char*)memchr(d,'{',size);
-    if(!s) return -1;
-    size_t remain = size - (size_t)(s - (const char*)d);
-    const char *e=(const char*)memchr(s,'}',remain);
-    if(!e || e<=s || (size_t)(e-s+2)>out_sz) return -1;
-    memcpy(out_json,s,(size_t)(e-s+1));
-    out_json[e-s+1]=0;
-    return 0;
+static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int prio){
+	if(!img || sz < sizeof(Elf64_Ehdr)) return -1;
+
+	const Elf64_Ehdr* eh=(const Elf64_Ehdr*)img;
+	if(memcmp(eh->e_ident, ELFMAG, SELFMAG)!=0 || eh->e_ident[EI_CLASS]!=ELFCLASS64) return -1;
+	if(eh->e_phoff==0 || eh->e_phnum==0) return -1;
+
+	const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
+
+	/* Compute segment span and choose a load base (page aligned). */
+	uint64_t lo=UINT64_MAX, hi=0;
+	for(uint16_t i=0;i<eh->e_phnum;i++){
+		if(ph[i].p_type!=PT_LOAD) continue;
+		if(ph[i].p_vaddr < lo) lo = ph[i].p_vaddr;
+		uint64_t end = ph[i].p_vaddr + ph[i].p_memsz;
+		if(end > hi) hi = end;
+	}
+	if(lo==UINT64_MAX || hi<=lo) return -1;
+
+	size_t span = (size_t)(hi - lo);
+	uint8_t* base = (uint8_t*)kalloc(span);
+	if(!base){ kprintf("[loader] kalloc %zu failed\n", span); return -1; }
+	memset(base, 0, span);
+
+	/* Map PT_LOADs: dst = base + (p_vaddr - lo) */
+	for(uint16_t i=0;i<eh->e_phnum;i++){
+		if(ph[i].p_type!=PT_LOAD) continue;
+		if(ph[i].p_offset + ph[i].p_filesz > sz){ kprintf("[loader] ELF bounds\n"); return -1; }
+		memcpy(base + (ph[i].p_vaddr - lo),
+		       (const uint8_t*)img + ph[i].p_offset,
+		       ph[i].p_filesz);
+	}
+
+	/* Compute runtime entry:
+	   - ET_DYN (PIE): entry = base + (eh->e_entry - lo)  [= load_base + e_entry']
+	   - ET_EXEC:       entry = (void*)(uintptr_t)eh->e_entry (already absolute)
+	*/
+	uintptr_t entry_addr;
+	if(eh->e_type == ET_DYN){
+		entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
+	}else{
+		entry_addr = (uintptr_t)eh->e_entry;
+	}
+
+	/* Best-effort manifest extraction (for name/entry/caps) */
+	char manifest[512]={0};
+	if(extract_manifest_blob(img, sz, manifest, sizeof(manifest))!=0){
+		/* fabricate a minimal manifest */
+		char nm[64]={0}; basename_noext(path?path:"init", nm, sizeof(nm));
+		snprintf(manifest,sizeof(manifest),
+		         "{\"name\":\"%s\",\"type\":4,\"version\":\"0\",\"entry\":\"agent_main\",\"capabilities\":\"\"}", nm[0]?nm:"init");
+	}else{
+		kprintf("[loader] manifest found for %s\n", path?path:"(buffer)");
+	}
+
+	char entry_name[64]={0};
+	if(json_get_str(manifest,"entry",entry_name,sizeof(entry_name))!=0)
+		snprintf(entry_name,sizeof(entry_name),"agent_main");
+
+	/* Register this concrete function pointer under the manifest entry name. */
+	reg_entry(entry_name, (agent_entry_t)(void*)entry_addr);
+
+	/* Add a symbol region for debugging */
+	char symname[96]; char nm[64]={0}; basename_noext(path?path:"elf", nm, sizeof(nm));
+	snprintf(symname,sizeof(symname),"%s:%s", nm[0]?nm:"elf", entry_name);
+	symbols_add(symname, (uintptr_t)base, span);
+
+	/* Now enforce gate + registry + spawn */
+	return register_and_spawn_from_manifest(manifest, path, prio);
 }
 
-/* Safer ELF manifest scan: find "name", then scan back to '{' to bound JSON */
-int extract_manifest_elf(const void *image,size_t size,
-                         char *out_json,size_t out_sz){
-    if (!image || !out_json || out_sz == 0) return -1;
-    const unsigned char *d = (const unsigned char *)image;
+/* ------------------------- MACHO2 wrapper support ------------------------- */
 
-    const char *p = (const char *)memmem_local(d, size, "\"name\"", 6);
-    if (!p) return -1;
-    const char *s = p;
-    while (s > (const char *)d && *s != '{') s--;
-    if (*s != '{') return -1;
+static int load_agent_macho2_impl(const void* img, size_t sz, const char* path, int prio){
+	/* Many .mo2 are ELF payloads with a small header/manifest. Find ELF. */
+	const uint8_t* p = (const uint8_t*)memmem_local(img, sz, "\x7F""ELF", 4);
+	if(p){
+		size_t remain = sz - (size_t)(p - (const uint8_t*)img);
+		return load_agent_elf_impl(p, remain, path, prio);
+	}
 
-    size_t remain = size - (size_t)(s - (const char *)d);
-    const char *e = (const char *)memchr(s, '}', remain);
-    if (!e || e <= s || (size_t)(e - s + 2) > out_sz) return -1;
-    memcpy(out_json, s, (size_t)(e - s + 1));
-    out_json[e - s + 1] = 0;
-    return 0;
+	/* If no ELF payload, try manifest-only (registry entry must be kernel symbol). */
+	char manifest[512]={0};
+	if(extract_manifest_blob(img, sz, manifest, sizeof(manifest))!=0){
+		kprintf("[loader] MACHO2 without ELF and no manifest\n");
+		return -1;
+	}
+	return register_and_spawn_from_manifest(manifest, path, prio);
 }
 
-/* ------------------------------------------------------------------------- */
-/*                  Register + spawn (with security gate)                    */
-/* ------------------------------------------------------------------------- */
+/* ------------------------------ FLAT loader ------------------------------- */
 
-static int register_and_spawn_from_manifest(const char *json, const char *path, int prio){
-    regx_manifest_t m=(regx_manifest_t){0};
-    char entry[64]={0};
-
-    (void)path;
-
-    json_extract_string(json,"name",m.name,sizeof(m.name));
-    m.type=json_extract_int(json,"type");
-    json_extract_string(json,"version",m.version,sizeof(m.version));
-    json_extract_string(json,"abi",m.abi,sizeof(m.abi));
-    json_extract_string(json,"capabilities",m.capabilities,sizeof(m.capabilities));
-    json_extract_string(json,"entry",entry,sizeof(entry));
-
-    if (g_gate_fn){
-        int ok = g_gate_fn(path ? path : "(buffer)", m.name, m.version, m.capabilities, entry);
-        if (!ok){
-            kprintf("[loader] gate denied \"%s\" (entry=%s caps=%s)\n",
-                    m.name[0]?m.name:"(unnamed)", entry, m.capabilities);
-            return -1;
-        }
-    }
-
-    uint64_t id=regx_register(&m,0);
-    if(!id){
-        kprintf("[loader] regx_register failed for \"%s\"\n",
-                m.name[0]?m.name:"(unnamed)");
-        return -1;
-    }
-
-    agent_entry_t fn=find_entry_fn(entry);
-    if(!fn){
-        kprintf("[loader] entry \"%s\" not found for \"%s\"\n",
-                entry, m.name[0]?m.name:"(unnamed)");
-        return -1;
-    }
-
-    n2_agent_t agent=(n2_agent_t){0};
-    snprintf(agent.name,sizeof(agent.name),"%s",m.name);
-    snprintf(agent.version,sizeof(agent.version),"%s",m.version);
-    snprintf(agent.capabilities,sizeof(agent.capabilities),"%s",m.capabilities);
-    agent.entry=fn;
-    agent.manifest=NULL;
-    n2_agent_register(&agent);
-
-    thread_t *t=thread_create_with_priority((void(*)(void))fn, prio>0?prio:200);
-    if(!t){
-        kprintf("[loader] thread create failed \"%s\"\n", m.name);
-        return -1;
-    }
-    return 0;
+static int load_agent_flat_impl(const void* img, size_t sz, const char* path, int prio){
+	if(!img||!sz) return -1;
+	char nm[64]={0}; basename_noext(path?path:"flat", nm, sizeof(nm));
+	const char* entry="agent_main";
+	reg_entry(entry, (agent_entry_t)img);
+	char manifest[256];
+	snprintf(manifest,sizeof(manifest),
+	         "{\"name\":\"%s\",\"type\":4,\"version\":\"0\",\"entry\":\"%s\",\"capabilities\":\"\"}",
+	         nm[0]?nm:"flat", entry);
+	return register_and_spawn_from_manifest(manifest, path, prio);
 }
 
-/* ------------------------------------------------------------------------- */
-/*                    Internal per-format implementations                    */
-/* ------------------------------------------------------------------------- */
+/* ------------------------------ Public API -------------------------------- */
 
-static int load_agent_macho2_impl(const void *image,size_t size,const char *path,int prio){
-    (void)path;
-    char manifest[512];
-
-    /* Try to extract the manifest first for logging/symbols. */
-    if (extract_manifest_macho2(image,size,manifest,sizeof(manifest))==0){
-        char name[64]={0};
-        json_extract_string(manifest,"name",name,sizeof(name));
-        symbols_add(name[0]?name:"(anon)",(uintptr_t)image,size);
-    }
-
-    /* NEW: Look for an embedded ELF and load it as PIE.
-       Many .mo2 blobs are wrappers that carry a 64-bit ELF payload. */
-    const uint8_t *base = (const uint8_t *)image;
-    const uint8_t *elfp = (const uint8_t *)memmem_local(base, size, "\x7F""ELF", 4);
-    if (elfp){
-        size_t remain = size - (size_t)(elfp - base);
-        int rc_elf = load_agent_elf_impl(elfp, remain, path, prio);
-        if (rc_elf == 0){
-            /* ELF path already registered the entry and spawned the thread. */
-            return 0;
-        }
-        kprintf("[loader] embedded ELF load failed (rc=%d), falling back to registry path\n", rc_elf);
-    }
-
-    /* Fallback: legacy path where the entry is a kernel-registered symbol. */
-    if (extract_manifest_macho2(image,size,manifest,sizeof(manifest))==0){
-        int rc = register_and_spawn_from_manifest(manifest, path, prio);
-        return rc;
-    }
-    return -1;
+static agent_format_t detect_fmt(const void* img, size_t sz){
+	const uint8_t* d=(const uint8_t*)img;
+	if(sz>=4 && !memcmp(d,"\x7F""ELF",4)) return AGENT_FORMAT_ELF;
+	if(sz>=4 && (d[0]==0xCF&&d[1]==0xFA&&d[2]==0xED&&d[3]==0xFE)) return AGENT_FORMAT_MACHO2;
+	if(sz>=4 && !memcmp(d,"NOSM",4)) return AGENT_FORMAT_NOSM;
+	if(sz>0 && ((const char*)d)[0]=='{') return AGENT_FORMAT_MACHO2;
+	return AGENT_FORMAT_FLAT;
 }
 
-static int load_agent_elf_impl(const void *image,size_t size,const char *path,int prio) __attribute__((force_align_arg_pointer));
-static int load_agent_elf_impl(const void *image,size_t size,const char *path,int prio){
-    if (!image || size < sizeof(Elf64_Ehdr))
-        return -1;
-
-    const Elf64_Ehdr *eh = (const Elf64_Ehdr *)image;
-    if (memcmp(eh->e_ident, ELFMAG, SELFMAG) != 0 || eh->e_ident[EI_CLASS] != ELFCLASS64)
-        return -1;
-    if (eh->e_phoff == 0 || eh->e_phnum == 0)
-        return -1;
-
-    const Elf64_Phdr *ph = (const Elf64_Phdr *)((const uint8_t *)image + eh->e_phoff);
-    uint64_t min_vaddr = UINT64_MAX, max_vaddr = 0;
-    for (uint16_t i = 0; i < eh->e_phnum; ++i) {
-        if (ph[i].p_type != PT_LOAD)
-            continue;
-        if (ph[i].p_vaddr < min_vaddr)
-            min_vaddr = ph[i].p_vaddr;
-        uint64_t end = ph[i].p_vaddr + ph[i].p_memsz;
-        if (end > max_vaddr)
-            max_vaddr = end;
-    }
-    if (min_vaddr == UINT64_MAX || max_vaddr <= min_vaddr)
-        return -1;
-
-    size_t memsz = (size_t)(max_vaddr - min_vaddr);
-    uint8_t *mem = (uint8_t *)kalloc(memsz);
-    if (!mem){
-        if (memsz <= sizeof(init_fallback_buf)){
-            mem = init_fallback_buf;
-        } else {
-            kprintf("[loader] kalloc failed %zu bytes\n", memsz);
-            return -1;
-        }
-    }
-    memset(mem, 0, memsz);
-
-    for (uint16_t i = 0; i < eh->e_phnum; ++i) {
-        if (ph[i].p_type != PT_LOAD)
-            continue;
-        if (ph[i].p_offset + ph[i].p_filesz > size) {
-            kfree(mem);
-            return -1;
-        }
-        memcpy(mem + (ph[i].p_vaddr - min_vaddr),
-               (const uint8_t *)image + ph[i].p_offset,
-               ph[i].p_filesz);
-    }
-
-    /* Correct PIE entry computation: base + (e_entry - min_vaddr) */
-    uint64_t entry = (uint64_t)(mem + (eh->e_entry - min_vaddr));
-
-    char manifest[512];
-    if (extract_manifest_elf(image, size, manifest, sizeof(manifest)) != 0) {
-        /* Only trust the built-in bootstrap 'init' without a manifest. */
-        char name[32] = {0};
-        path_basename_noext(path, name, sizeof(name));
-
-        if (!name[0])
-            snprintf(name, sizeof(name), "elf");
-        /* When loading from an in-memory buffer (path="(buffer)") the
-         * basename won't be "init" even though this is our builtin init
-         * fallback. Treat that special case as "init" so the manifest-less
-         * ELF can be trusted and launched. */
-        if (strcmp(name, "(buffer)") == 0)
-            snprintf(name, sizeof(name), "init");
-
-
-        if (strcmp(name, "init") != 0) {
-            kfree(mem);
-            return -1;
-        }
-
-        /* IMPORTANT: empty capabilities so regx gate allowlist passes */
-        snprintf(manifest, sizeof(manifest),
-                 "{\"name\":\"%s\",\"type\":4,\"version\":\"0\","
-                 "\"entry\":\"agent_main\",\"capabilities\":\"\"}",
-                 name);
-    } else {
-        kprintf("[loader] manifest found for %s\n", path?path:"(null)");
-    }
-
-    char entry_name[64] = {0};
-    json_extract_string(manifest, "entry", entry_name, sizeof(entry_name));
-    if (!entry_name[0])
-        snprintf(entry_name, sizeof(entry_name), "agent_main");
-
-    agent_loader_register_entry(entry_name, (agent_entry_t)entry);
-    symbols_add(entry_name, (uintptr_t)mem, memsz);
-
-    /* --- Built-in init fast path (robust boot): skip gate/registry if "(buffer)". */
-    if (path && strcmp(path, "(buffer)") == 0) {
-        n2_agent_t agent = (n2_agent_t){0};
-        snprintf(agent.name, sizeof(agent.name), "init");
-        snprintf(agent.version, sizeof(agent.version), "0");
-        agent.capabilities[0] = '\0';
-        agent.entry = (agent_entry_t)entry;
-        agent.manifest = NULL;
-        n2_agent_register(&agent);
-
-        thread_t *t = thread_create_with_priority((void(*)(void))agent.entry, prio>0?prio:200);
-        if (!t) {
-            kprintf("[loader] thread create failed for built-in init\n");
-            kfree(mem);
-            return -1;
-        }
-        return 0;
-    }
-
-    /* Normal path: enforce gate + registry */
-    int rc = register_and_spawn_from_manifest(manifest, path, prio);
-    kprintf("[loader] register_and_spawn rc=%d\n", rc);
-    if (rc != 0)
-        kfree(mem);
-    return rc;
+int load_agent_auto_with_prio(const void* img, size_t sz, int prio){
+	agent_format_t f = detect_fmt(img,sz);
+	switch(f){
+		case AGENT_FORMAT_ELF:    return load_agent_elf_impl(img,sz,"(buffer)",prio);
+		case AGENT_FORMAT_MACHO2: return load_agent_macho2_impl(img,sz,"(buffer)",prio);
+		case AGENT_FORMAT_FLAT:   return load_agent_flat_impl(img,sz,"(buffer)",prio);
+		default: return -1;
+	}
 }
 
-static int load_agent_macho_impl(const void *image,size_t size,const char *path,int prio){
-    (void)image;(void)size;(void)path;(void)prio;
-    kprintf("[loader] Mach-O not implemented\n");
-    return -1;
+int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio){
+	switch(f){
+		case AGENT_FORMAT_ELF:    return load_agent_elf_impl(img,sz,"(buffer)",prio);
+		case AGENT_FORMAT_MACHO2: return load_agent_macho2_impl(img,sz,"(buffer)",prio);
+		case AGENT_FORMAT_FLAT:   return load_agent_flat_impl(img,sz,"(buffer)",prio);
+		default: return load_agent_auto_with_prio(img,sz,prio);
+	}
 }
 
-static int load_agent_flat_impl(const void *image, size_t size, const char *path, int prio){
-    if (!image || size == 0)
-        return -1;
+int load_agent_auto(const void* img, size_t sz){ return load_agent_auto_with_prio(img,sz,200); }
+int load_agent(const void* img, size_t sz, agent_format_t f){ return load_agent_with_prio(img,sz,f,200); }
 
-    char name[32] = {0};
-    path_basename_noext(path, name, sizeof(name));
-    if (!name[0]) snprintf(name, sizeof(name), "flat");
-
-    if (g_gate_fn){
-        int ok = g_gate_fn(path ? path : "(buffer)", name, "0", "", "agent_main");
-        if (!ok)
-            return -1;
-    }
-
-    agent_loader_register_entry("agent_main", (agent_entry_t)image);
-    symbols_add(name, (uintptr_t)image, size);
-    char manifest[128];
-    snprintf(manifest, sizeof(manifest),
-             "{\"name\":\"%s\",\"type\":4,\"version\":\"0\",\"entry\":\"agent_main\",\"capabilities\":\"\"}",
-             name);
-
-    return register_and_spawn_from_manifest(manifest, path, prio);
-}
-
-static int load_agent_nosm_impl(const void *image, size_t size, const char *path, int prio)
-{
-    (void)prio;
-
-    if (!image || size == 0 || size > UINT32_MAX)
-        return -1;
-
-    if (g_gate_fn) {
-        int ok = g_gate_fn(path ? path : "(buffer)", "(nosm)", "(unknown)", "", "nosm");
-        if (!ok) {
-            kprintf("[loader] gate denied %s\n", path ? path : "(buffer)");
-            return -1;
-        }
-    }
-
-    uint32_t mod_id = 0;
-    int rc = nosm_request_verify_and_load(image, (uint32_t)size, &mod_id);
-    if (rc != 0) {
-        kprintf("[loader] nosm_request_verify_and_load failed (rc=%d) for %s\n",
-                rc, path ? path : "(buffer)");
-        return -1;
-    }
-
-    symbols_add(path ? path : "(nosm)", (uintptr_t)image, size);
-    return 0;
-}
-
-/* ------------------------------------------------------------------------- */
-/*                         Public API (header-matching)                      */
-/* ------------------------------------------------------------------------- */
-
-int load_agent_auto_with_prio(const void *image,size_t size,int prio){
-    (void)prio;
-    return load_agent_macho2_impl(image,size,"(buffer)",prio);
-}
-
-int load_agent_with_prio(const void *image,size_t size,agent_format_t fmt,int prio){
-    switch(fmt){
-        case AGENT_FORMAT_MACHO2: return load_agent_macho2_impl(image,size,"(buffer)",prio);
-        case AGENT_FORMAT_MACHO:  return load_agent_macho_impl (image,size,"(buffer)",prio);
-        case AGENT_FORMAT_ELF:    return load_agent_elf_impl   (image,size,"(buffer)",prio);
-        case AGENT_FORMAT_FLAT:   return load_agent_flat_impl  (image,size,"(buffer)",prio);
-        case AGENT_FORMAT_NOSM:   return load_agent_nosm_impl  (image,size,"(buffer)",prio);
-        default:                  return load_agent_auto_with_prio(image,size,prio);
-    }
-}
-
-int load_agent_auto(const void *image,size_t size){
-    return load_agent_auto_with_prio(image,size,200);
-}
-
-int load_agent(const void *image,size_t size,agent_format_t fmt){
-    return load_agent_with_prio(image,size,fmt,200);
-}
-
-int load_agent_nosm(const void *image,size_t size){
-    return load_agent_nosm_impl(image,size,"(buffer)",200);
-}
-
-/* ------------------------------------------------------------------------- */
-/*                       Filesystem-based convenience                        */
-/* ------------------------------------------------------------------------- */
-
-int agent_loader_run_from_path(const char *path,int prio){
-    if(!g_read_file){
-        kprintf("[loader] no FS reader; cannot load \"%s\"\n", path?path:"(null)");
-        return -1;
-    }
-    void *buf=0; size_t sz=0;
-    int rc=g_read_file(path,&buf,&sz);
-    if(rc<0){
-        kprintf("[loader] read failed \"%s\"\n", path?path:"(null)");
-        return rc;
-    }
-
-    switch (detect_agent_format(buf, sz)){
-        case AGENT_FORMAT_MACHO2: rc=load_agent_macho2_impl(buf,sz,path,prio); break;
-        case AGENT_FORMAT_MACHO:  rc=load_agent_macho_impl (buf,sz,path,prio); break;
-        case AGENT_FORMAT_ELF:    rc=load_agent_elf_impl   (buf,sz,path,prio); break;
-        case AGENT_FORMAT_FLAT:   rc=load_agent_flat_impl  (buf,sz,path,prio); break;
-        case AGENT_FORMAT_NOSM:   rc=load_agent_nosm_impl  (buf,sz,path,prio); break;
-        default:                  rc=-1; break;
-    }
-
-    if(g_free_fn && buf) g_free_fn(buf);
-    return rc;
+int agent_loader_run_from_path(const char* path, int prio){
+	if(!g_read_file){ kprintf("[loader] no FS reader for %s\n", path?path:"(null)"); return -1; }
+	void* buf=0; size_t sz=0;
+	int rc=g_read_file(path,&buf,&sz);
+	if(rc<0){ kprintf("[loader] read failed: %s\n", path?path:"(null)"); return rc; }
+	int out = -1;
+	switch(detect_fmt(buf,sz)){
+		case AGENT_FORMAT_ELF:    out=load_agent_elf_impl(buf,sz,path,prio); break;
+		case AGENT_FORMAT_MACHO2: out=load_agent_macho2_impl(buf,sz,path,prio); break;
+		case AGENT_FORMAT_FLAT:   out=load_agent_flat_impl(buf,sz,path,prio); break;
+		default: out=-1; break;
+	}
+	if(g_free_fn && buf) g_free_fn(buf);
+	return out;
 }
