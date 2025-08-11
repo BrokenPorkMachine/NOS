@@ -181,6 +181,9 @@ void regx_main(void){
     // Kick off init agent once we're online
     spawn_init_once();
 
+    // Yield so the newly spawned init agent can run
+    thread_yield();
+
     // Idle loop; halt CPU while regx waits for work
     for(;;) __asm__ volatile("hlt");
 }

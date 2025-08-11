@@ -2,6 +2,8 @@
 #include "thread.h"
 #include "../IPC/ipc.h"
 #include "../../user/libc/libc.h"
+#include "../../user/rt/agent_abi.h"
+#include "../../nosm/drivers/IO/serial.h"
 #include <stdint.h>
 #include "../arch/CPU/smp.h"
 
@@ -19,6 +21,33 @@ extern int fs_read_all(const char *path, void **out, size_t *out_sz);
 extern void regx_main(void);                         // src/agents/regx/regx.c
 extern void nosm_entry(void);                        // user/agents/nosm/nosm.c
 extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.c
+
+// ---- AgentAPI helpers ----
+static int api_fs_read_all(const char *path, void *buf, size_t max, size_t *out_len){
+    void *tmp = NULL;
+    size_t len = 0;
+    int rc = fs_read_all(path, &tmp, &len);
+    if (rc != 0 || !tmp)
+        return rc ? rc : -1;
+    if (len > max)
+        len = max;
+    memcpy(buf, tmp, len);
+    if (out_len)
+        *out_len = len;
+    return 0;
+}
+static int api_regx_load(const char *path, const char *args, uint32_t *out_tid){ (void)args; int rc=agent_loader_run_from_path(path,200); if(out_tid) *out_tid=0; return rc; }
+static int api_regx_ping(void){ return 1; }
+static int api_puts(const char *s){ serial_puts(s); return 0; }
+static const AgentAPI k_agent_api = {
+    .yield     = thread_yield,
+    .self      = thread_self,
+    .printf    = kprintf,
+    .puts      = api_puts,
+    .fs_read_all = api_fs_read_all,
+    .regx_load = api_regx_load,
+    .regx_ping = api_regx_ping,
+};
 
 #ifndef STACK_SIZE
 #define STACK_SIZE 8192
@@ -202,9 +231,10 @@ __attribute__((noreturn)) void thread_exit(void){
 }
 
 __attribute__((noreturn,used)) static void thread_start(void (*f)(void)){
-    void (* volatile entry)(void) = f;
-    kprintf("[thread] id=%u first timeslice\n", thread_self());
-    entry();
+    void (* volatile entry)(const AgentAPI*, uint32_t) = (void(*)(const AgentAPI*, uint32_t))f;
+    uint32_t tid = thread_self();
+    kprintf("[thread] id=%u first timeslice\n", tid);
+    entry(&k_agent_api, tid);
     thread_exit();
 }
 
