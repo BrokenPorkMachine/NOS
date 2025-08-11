@@ -1,10 +1,13 @@
-// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C), no libc JSON parsing.
+// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C), manifestless hot path.
 // - Rebase entry for BOTH ET_DYN and ET_EXEC (we always map at a fresh base).
 // - Applies R_X86_64_RELATIVE relocations.
 // - 1 MiB arena fallback if kalloc() fails.
 // - Ultra-verbose tracing around mapping, relocations, and entry bytes.
-// - No snprintf/strstr/memchr/strtol; tiny local scanners only.
+// - NO JSON parsing or string scanning of the payload; assumes entry="agent_main".
 // - Spawns BEFORE any optional bookkeeping (symbols disabled by default).
+//
+// If you later want to re-enable manifest parsing, wrap that code
+// behind a compile-time flag (not included here).
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -42,7 +45,7 @@ static agent_gate_fn      g_gate_fn   = 0;
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
 void agent_loader_set_gate(agent_gate_fn g){ g_gate_fn=g; }
 
-/* ---------- Tiny safe string helpers (no varargs, no libc scans) ---------- */
+/* ---------- Tiny safe string helpers (no varargs) ---------- */
 static size_t cstr_len(const char* s){ size_t n=0; if(!s) return 0; while(s[n]) n++; return n; }
 static void cstr_copy(char* dst, size_t cap, const char* src){
 	if(!dst||cap==0){ return; }
@@ -61,62 +64,6 @@ static void path_basename_noext(const char* path, char* out, size_t cap){
 	const char* b=path; for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
 	size_t i=0; while(b[i] && i+1<cap){ out[i]=b[i]; i++; } out[i]=0;
 	char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p; if(dot) *dot=0;
-}
-
-/* Find first '{'...' }' blob and copy it (null-terminated). No memchr. */
-static int extract_manifest_blob(const void* buf, size_t sz, char* out, size_t osz){
-	if(!buf || !sz || !out || !osz) return -1;
-	const char* b=(const char*)buf;
-	size_t i=0; while(i<sz && b[i]!='{') i++;
-	if(i==sz) return -1;
-	size_t j=i; while(j<sz && b[j]!='}') j++;
-	if(j==sz || j<i) return -1;
-	size_t len = (j - i + 1);
-	if(len + 1 > osz) return -1;
-	for(size_t k=0;k<len;k++) out[k]=b[i+k];
-	out[len]=0;
-	return 0;
-}
-
-/* Very small JSON string value extractor: looks for "key":"value".
-   - No escapes supported (manifest is simple).
-   - No libc calls. */
-static int json_find_string_value(const char* json, const char* key, char* out, size_t osz){
-	if(!json || !key || !out || osz==0) return -1;
-	out[0]=0;
-	const size_t klen = cstr_len(key);
-	const char *p = json;
-	while(*p){
-		/* find opening quote */
-		while(*p && *p!='"') p++;
-		if(!*p) break;
-		p++; /* start of candidate key */
-		const char* kstart = p;
-		size_t i=0;
-		while(p[i] && p[i]!='"' && i<klen && kstart[i]==key[i]) i++;
-		/* key match only if next char is closing quote and we consumed whole key */
-		if(i==klen && kstart[i]=='"'){
-			p = kstart + i + 1;
-			/* skip ws */
-			while(*p==' '||*p=='\t'||*p=='\r'||*p=='\n') p++;
-			if(*p!=':'){ continue; }
-			p++;
-			while(*p==' '||*p=='\t'||*p=='\r'||*p=='\n') p++;
-			if(*p!='"'){ return -1; } /* value must be quoted */
-			p++;
-			/* copy until closing quote */
-			size_t o=0;
-			while(*p && *p!='"' && o+1<osz){ out[o++]=*p++; }
-			if(*p!='"') return -1;
-			out[o]=0;
-			return 0;
-		}else{
-			/* skip to next quote */
-			while(*p && *p!='"') p++;
-			if(*p=='"') p++;
-		}
-	}
-	return -1;
 }
 
 /* ---------- Entry registry (name -> fn*) ---------- */
@@ -165,7 +112,7 @@ static void hexdump_window(const uint8_t* img_base, size_t img_span,
 	}
 }
 
-/* ---------- Minimal register + spawn (no JSON parse) ---------- */
+/* ---------- Minimal register + spawn (manifestless) ---------- */
 static int register_and_spawn_direct(const char* name,
                                      const char* version,
                                      const char* capabilities,
@@ -323,27 +270,12 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 		hexdump_window(base, span, entry_ptr, 32, 32);
 	}
 
-	/* Manifest (optional; we only try to get "entry", everything else is defaulted) */
-	char mf[512]={0};
-	int have_manifest = (extract_manifest_blob(img, sz, mf, sizeof(mf))==0);
-	if(have_manifest){
-		LOGV("[loader] manifest found for %s\n", path?path:"(buffer)");
-	}else{
-		LOGV("[loader] no manifest in %s; using defaults\n", path?path:"(buffer)");
-	}
-
-	/* Resolve entry symbol BEFORE any optional bookkeeping */
+	/* Manifestless: assume "agent_main" entry */
 	char entry_name[64]; cstr_copy(entry_name,sizeof(entry_name),"agent_main");
-	if(have_manifest){
-		char tmp[64]={0};
-		if(json_find_string_value(mf,"entry",tmp,sizeof(tmp))==0 && tmp[0]){
-			cstr_copy(entry_name,sizeof(entry_name),tmp);
-		}
-	}
 	LOGV("[loader] binding entry symbol \"%s\" -> %p\n", entry_name, (void*)entry_addr);
 	reg_entry(entry_name, (agent_entry_t)(void*)entry_addr);
 
-	/* Build minimal manifest info for registry/gate */
+	/* Build minimal info for registry/gate */
 	char agent_name[64]={0};
 	path_basename_noext(path?path:"init", agent_name, sizeof(agent_name));
 	if(!agent_name[0]) cstr_copy(agent_name,sizeof(agent_name),"init");
@@ -378,9 +310,7 @@ static int load_agent_macho2_impl(const void* img, size_t sz, const char* path, 
 		LOGV("[loader] embedded ELF detected at +0x%zx (remain=%zu)\n", (size_t)i, remain);
 		return load_agent_elf_impl(d+i, remain, path, prio);
 	}
-	char dummy_name[64]={0}; path_basename_noext(path?path:"agent", dummy_name, sizeof(dummy_name));
-	LOGV("[loader] MACHO2 without ELF; registering stub agent \"%s\"\n", dummy_name[0]?dummy_name:"agent");
-	/* We don't have code to run; treat as failure to avoid spawning garbage */
+	/* No embedded ELF; do not parse manifest here to stay safe */
 	return -1;
 }
 
