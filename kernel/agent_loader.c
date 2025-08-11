@@ -194,6 +194,19 @@ static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int p
     return rc;
 }
 
+
+// Format-dispatching entry point used by agent_loader_pub.c
+int load_agent_with_prio(const void *image, size_t size, agent_format_t fmt, int prio) {
+    if (!image || size == 0) return -1;
+    switch (fmt) {
+        case AGENT_FORMAT_ELF:
+            return elf_map_and_spawn(image, size, NULL, prio);
+        default:
+            serial_printf("[loader] unsupported agent format=%d\n", (int)fmt);
+            return -22;
+    }
+}
+
 // Public helpers (invoked by regx or other subsystems)
 
 int load_agent(const void *img, size_t sz, const char *path, int prio) {
