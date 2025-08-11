@@ -69,7 +69,7 @@ static void spawn_init_once(void) {
         return;
 
     // Wait until the filesystem server has preloaded core agents.
-    while (!atomic_load(&nosfs_ready))
+    while (!atomic_load(&nosfs_is_ready))
         thread_yield();
 
     for (;;) {
