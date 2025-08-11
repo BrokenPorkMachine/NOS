@@ -1,4 +1,9 @@
-// kernel/agent_loader.c — ultra-verbose PIE loader (pure C), with RELATIVE relocs + arena fallback
+// kernel/agent_loader.c — ultra-verbose PIE/ET_EXEC loader (pure C)
+// - Rebase entry for BOTH ET_DYN and ET_EXEC (we always map at a fresh base)
+// - Applies R_X86_64_RELATIVE relocations
+// - 1 MiB arena fallback if kalloc() fails (so agents still run)
+// - Very chatty logging around mapping, relocations, and entry bytes
+// Toggle verbosity: set LOADER_VERBOSE to 0/1 below
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -140,18 +145,25 @@ static void* arena_alloc(size_t sz){
 	void* p = g_agent_arena + off; g_agent_bump = off + sz; return p;
 }
 
-/* ---------- Hex dump (entry window) ---------- */
-static void hexdump_window(const uint8_t* p, size_t before, size_t after){
-	if(!p) return;
-	const uint8_t* start = p - before;
-	for(size_t i=0;i<before+after;i+=16){
-		const uint8_t* row = start + i;
+/* ---------- Hex dump (entry window, clamped to image) ---------- */
+static void hexdump_window(const uint8_t* img_base, size_t img_span,
+                           const uint8_t* p, size_t before, size_t after)
+{
+	if(!p || !img_base || img_span==0) return;
+	const uint8_t* img_end = img_base + img_span;
+	const uint8_t* start   = p > img_base + before ? p - before : img_base;
+	const uint8_t* endwant = p + after;
+	const uint8_t* end     = endwant < img_end ? endwant : img_end;
+	if(end <= start) return;
+
+	for(const uint8_t* row = start; row < end; row += 16){
+		size_t n = (size_t)((end - row) > 16 ? 16 : (end - row));
 		kprintf("[dump] %016llx : ", (unsigned long long)(uintptr_t)row);
 		for(size_t j=0;j<16;j++){
-			kprintf("%02x ", row[j]);
+			if(j<n) kprintf("%02x ", row[j]); else kprintf("   ");
 		}
 		kprintf(" |");
-		for(size_t j=0;j<16;j++){
+		for(size_t j=0;j<n;j++){
 			uint8_t c = row[j];
 			kprintf("%c", (c>=32 && c<127)?c:'.');
 		}
@@ -218,7 +230,8 @@ static size_t apply_relocations_rela_table(uint8_t* base, uint64_t lo,
                                            Elf64_Addr tab, Elf64_Addr tsz)
 {
 	if(!tab || !tsz) return 0;
-	uint64_t off = (tab < lo) ? 0 : (tab - lo);
+	if (tab < lo) return 0;
+	uint64_t off = tab - lo;
 	Elf64_Rela* rela_tbl = (Elf64_Rela*)(base + off);
 	size_t cnt = (size_t)(tsz / sizeof(Elf64_Rela));
 	size_t applied = 0;
@@ -325,23 +338,27 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	size_t nrel = apply_relocations_rela(base, lo, eh, img, sz);
 	LOGV("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", nrel);
 
-	uintptr_t entry_addr;
+	/* Rebase entry for BOTH ET_DYN and ET_EXEC (we map at a fresh base). */
+	if (eh->e_entry < lo || eh->e_entry >= hi) {
+		kprintf("[loader] FATAL: e_entry (0x%llx) out of PT_LOAD span [0x%llx..0x%llx)\n",
+		        (unsigned long long)eh->e_entry,
+		        (unsigned long long)lo, (unsigned long long)hi);
+		return -1;
+	}
+	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
 	if(eh->e_type == ET_DYN){
-		entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
-		LOGV("[loader] runtime entry (ET_DYN) = %p (e_entry-lo=0x%llx)\n",
+		LOGV("[loader] runtime entry (ET_DYN)  = %p (e_entry-lo=0x%llx)\n",
 		     (void*)entry_addr, (unsigned long long)(eh->e_entry - lo));
 	}else{
-		entry_addr = (uintptr_t)eh->e_entry;
-		LOGV("[loader] runtime entry (ET_EXEC) = %p\n", (void*)entry_addr);
+		LOGV("[loader] runtime entry (ET_EXEC) = %p (e_entry-lo=0x%llx, base=%p)\n",
+		     (void*)entry_addr, (unsigned long long)(eh->e_entry - lo), base);
 	}
 
-	/* Guard: entry must be inside mapped image for ET_DYN */
-	if(eh->e_type == ET_DYN){
-		if(entry_addr < (uintptr_t)base || entry_addr >= (uintptr_t)(base + span)){
-			kprintf("[loader] FATAL: entry %p outside image [%p..%p)\n",
-			        (void*)entry_addr, base, base+span);
-			return -1;
-		}
+	/* Guard: entry must be inside mapped image */
+	if(entry_addr < (uintptr_t)base || entry_addr >= (uintptr_t)(base + span)){
+		kprintf("[loader] FATAL: entry %p outside image [%p..%p)\n",
+		        (void*)entry_addr, base, base+span);
+		return -1;
 	}
 
 	/* Entry inspection */
@@ -355,7 +372,7 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 			     entry_ptr[0], entry_ptr[1], entry_ptr[2], entry_ptr[3]);
 		}
 		LOGV("[loader] dumping 64B around entry %p\n", (void*)entry_addr);
-		hexdump_window(entry_ptr, 32, 32);
+		hexdump_window(base, span, entry_ptr, 32, 32);
 	}
 
 	/* Manifest */
