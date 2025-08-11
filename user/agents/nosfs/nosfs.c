@@ -500,5 +500,3 @@ int fs_read_all(const char *path, void **out, size_t *out_sz) {
     pthread_mutex_unlock(&nosfs_root.mutex);
     return -1;
 }
-
-// --------- End of file ---------
