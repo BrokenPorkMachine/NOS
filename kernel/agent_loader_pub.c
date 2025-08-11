@@ -1,18 +1,14 @@
-// Minimal public API shims around the internal loader.
-// Provides the symbols used by regx.c and thread.c.
-//
-// This file is freestanding (no libc). It only depends on the kernel's
-// serial printf and your internal load_agent() entry point.
+// kernel/agent_loader_pub.c
+// Public loader API shim with zero hard dependency on NOSFS.
+// regx / threads must call agent_loader_set_read() to provide a reader.
 
 #include <stdint.h>
 #include <stddef.h>
-#include <string.h>
 
-// --- forward decls to avoid pulling any libc ---
 // serial printf from kernel/printf.c
 int serial_printf(const char *fmt, ...);
 
-// internal loader entry (already implemented in kernel/agent_loader.c)
+// internal loader entry (already in kernel/agent_loader.c)
 typedef enum {
     AGENT_FORMAT_ELF = 0,
     AGENT_FORMAT_MACHO2,
@@ -23,21 +19,14 @@ typedef enum {
 
 int load_agent(const void *image, size_t size, agent_format_t fmt);
 
-// default file reader exported by our tiny NOS filesystem facade
-// (see kernel/nosfs_pub.c)
-int nosfs_read_file(const char *path, void **out_buf, size_t *out_sz);
-
-// --- public API expected by the rest of the tree ---
+// API surface expected by regx/thread
 typedef int (*agent_read_cb_t)(const char *path, void **out_buf, size_t *out_sz);
-
-// We don’t (yet) need to call into the security gate from here.
-// Keep it as an opaque pointer so the signature can evolve without churn.
 typedef void (*agent_gate_cb_t)(void);
 
 static agent_read_cb_t g_read_cb = 0;
 static agent_gate_cb_t g_gate_cb = 0;
 
-// Simple format sniffer. Extend here if you add other container types.
+// Tiny format sniffer (extend as needed)
 static agent_format_t sniff_fmt(const void *img, size_t sz) {
     if (sz >= 4) {
         const unsigned char *p = (const unsigned char *)img;
@@ -47,28 +36,27 @@ static agent_format_t sniff_fmt(const void *img, size_t sz) {
     return AGENT_FORMAT_UNKNOWN;
 }
 
-// Load with format autodetection.
 int load_agent_auto(const void *image, size_t size) {
     agent_format_t fmt = sniff_fmt(image, size);
     if (fmt == AGENT_FORMAT_UNKNOWN) {
-        serial_printf("[loader] unknown image magic; refusing (size=%zu)\n",
-                      (unsigned long)size);
-        return -38; // -ENOSYS/-ENODEV style; matches your logs
+        serial_printf("[loader] unknown image magic; size=%zu\n", (unsigned long)size);
+        return -38; // ENOSYS-ish
     }
     return load_agent(image, size, fmt);
 }
 
-// Run directly from a path (uses the registered reader or NOSFS).
 int agent_loader_run_from_path(const char *path) {
     if (!path) return -1;
-
-    if (!g_read_cb) g_read_cb = nosfs_read_file;
+    if (!g_read_cb) {
+        serial_printf("[loader] no path reader registered for \"%s\"\n", path);
+        return -38; // tell caller we cannot read paths
+    }
 
     void *buf = 0;
     size_t sz = 0;
     int rc = g_read_cb(path, &buf, &sz);
     if (rc < 0 || !buf || !sz) {
-        serial_printf("[loader] run_from_path \"%s\" read failed rc=%d\n", path, rc);
+        serial_printf("[loader] read \"%s\" failed rc=%d\n", path, rc);
         return rc ? rc : -5;
     }
 
@@ -76,14 +64,11 @@ int agent_loader_run_from_path(const char *path) {
     return load_agent_auto(buf, sz);
 }
 
-// Allow regx/thread to override the path reader (eg. NOSFS, ramdisk, etc.)
 void agent_loader_set_read(agent_read_cb_t cb) {
-    g_read_cb = cb ? cb : nosfs_read_file;
+    g_read_cb = cb;
 }
 
-// Allow regx to provide/own a security gate. Opaque here on purpose.
 void agent_loader_set_gate(agent_gate_cb_t cb) {
     g_gate_cb = cb;
-    // We don’t invoke it here; the gate is typically consulted by regx itself.
-    // This keeps the shim side-effect free while satisfying the symbol.
+    (void)g_gate_cb; // reserved; no-op here
 }
