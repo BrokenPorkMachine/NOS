@@ -1,8 +1,7 @@
-// kernel/agent_loader.c — BYPASS version (no regx, no gate, no prints)
-// Goal: rule out faults in regx/gate/manifest/formatting by avoiding them entirely.
-// This just maps the ELF, applies RELATIVE relocs, and creates a thread at entry.
+// kernel/agent_loader.c — BYPASS version (no regx/gate calls, no prints)
+// Adds a no-op agent_loader_set_gate() to satisfy link dependencies.
 //
-// Public API kept identical so the rest of the kernel links the same.
+// This just maps ELF, applies RELATIVE relocs, and spawns the thread directly.
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -19,6 +18,9 @@ typedef void (*agent_entry_t)(void);
 static agent_read_file_fn g_read_file = 0;
 static agent_free_fn      g_free_fn   = 0;
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
+
+/* Provide a no-op gate setter to satisfy callers (e.g., regx.c) */
+void agent_loader_set_gate(agent_gate_fn g){ (void)g; /* bypass: no gate */ }
 
 /* 1 MiB arena fallback */
 #define AGENT_ARENA_SIZE (1<<20)
@@ -120,7 +122,7 @@ int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio)
 	(void)f; return elf_map_and_spawn(img, sz, prio);
 }
 int load_agent_auto(const void* img, size_t sz){ return elf_map_and_spawn(img, sz, 200); }
-int load_agent(const void* img, size_t sz, agent_format_t f){ (void)f; return elf_map_and_spawn(img, sz, 200); }
+int load_agent(const void* img, size_t sz, agent_format_t f){ (void)f; return elf_map_and_spawn(img,  sz, 200); }
 
 int agent_loader_run_from_path(const char* path, int prio){
 	if(!g_read_file) return -1;
