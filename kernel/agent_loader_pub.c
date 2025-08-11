@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #include "VM/kheap.h"   // kfree
-#include "printf.h"     // serial_printf
+#include "../../include/printf.h"
 
 // Provided by agent_loader.c
 int load_agent_auto_path(const char* path, const void* image, size_t size);
