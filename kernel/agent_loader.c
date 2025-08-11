@@ -255,6 +255,9 @@ static int register_and_spawn_from_manifest(const char *json, const char *path, 
 /* ------------------------------------------------------------------------- */
 /*                    Internal per-format implementations                    */
 /* ------------------------------------------------------------------------- */
+/* Forward declaration to satisfy cross-calls */
+static int load_agent_elf_impl(const void *image, size_t size,
+                               const char *path, int prio);
 
 static int load_agent_macho2_impl(const void *image,size_t size,const char *path,int prio){
     (void)path;
