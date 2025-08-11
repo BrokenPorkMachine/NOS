@@ -1,5 +1,11 @@
-// kernel/agent_loader.c — BYPASS version (no regx/gate calls, no prints)
-// Adds a no-op agent_loader_set_gate() to satisfy link dependencies.
+// kernel/agent_loader.c — robust PIE/ET_EXEC loader (pure C), manifestless hot path.
+// - Rebase entry for BOTH ET_DYN and ET_EXEC (we always map at a fresh base).
+// - Applies R_X86_64_RELATIVE relocations.
+// - 1 MiB arena fallback if kalloc() fails.
+// - Ultra-verbose tracing around mapping, relocations, and entry bytes.
+// - NO JSON parsing or string scanning of the payload; assumes entry="_start".
+// - Spawns BEFORE any optional bookkeeping (symbols disabled by default).
+
 //
 // This just maps ELF, applies RELATIVE relocs, and spawns the thread directly.
 
@@ -33,7 +39,65 @@ static void* arena_alloc(size_t sz){
 	void* p = g_agent_arena + off; g_agent_bump = off + sz; return p;
 }
 
-/* RELA (RELATIVE) */
+/* ---------- Hex dump (entry window, clamped to image) ---------- */
+static void hexdump_window(const uint8_t* img_base, size_t img_span,
+                           const uint8_t* p, size_t before, size_t after){
+	if(!p || !img_base || img_span==0) return;
+	const uint8_t* img_end = img_base + img_span;
+	const uint8_t* start   = (p > img_base + before) ? (p - before) : img_base;
+	const uint8_t* endwant = p + after;
+	const uint8_t* end     = (endwant < img_end) ? endwant : img_end;
+	if(end <= start) return;
+	for(const uint8_t* row = start; row < end; row += 16){
+		size_t n = (size_t)((end - row) > 16 ? 16 : (end - row));
+		kprintf("[dump] %016llx : ", (unsigned long long)(uintptr_t)row);
+		for(size_t j=0;j<16;j++){ if(j<n) kprintf("%02x ", row[j]); else kprintf("   "); }
+		kprintf(" |");
+		for(size_t j=0;j<n;j++){ uint8_t c=row[j]; kprintf("%c", (c>=32 && c<127)?c:'.'); }
+		kprintf("|\n");
+	}
+}
+
+/* ---------- Minimal register + spawn (manifestless) ---------- */
+static int register_and_spawn_direct(const char* name,
+                                     const char* version,
+                                     const char* capabilities,
+                                     const char* entry,
+                                     const char* path,
+                                     int prio)
+{
+	regx_manifest_t m; memset(&m,0,sizeof(m));
+	cstr_copy(m.name, sizeof(m.name), name?name:"(unnamed)");
+	m.type = 4;
+	cstr_copy(m.version, sizeof(m.version), version?version:"0");
+	cstr_copy(m.abi, sizeof(m.abi), "");
+	cstr_copy(m.capabilities, sizeof(m.capabilities), capabilities?capabilities:"");
+
+        if(g_gate_fn){
+                int ok=g_gate_fn(path?path:"(buffer)", m.name, m.version, m.capabilities, entry?entry:"_start");
+                if(!ok){ kprintf("[loader] gate denied %s (entry=%s)\n", m.name, entry?entry:"_start"); return -1; }
+        }
+
+	uint64_t id = regx_register(&m,0);
+	if(!id){ kprintf("[loader] regx_register failed for %s\n", m.name); return -1; }
+
+        agent_entry_t fn=find_entry(entry?entry:"_start");
+        if(!fn){ kprintf("[loader] entry not resolved: %s\n", entry?entry:"_start"); return -1; }
+
+	n2_agent_t agent; memset(&agent,0,sizeof(agent));
+	cstr_copy(agent.name, sizeof(agent.name), m.name);
+	cstr_copy(agent.version, sizeof(agent.version), m.version);
+	cstr_copy(agent.capabilities, sizeof(agent.capabilities), m.capabilities);
+	agent.entry=fn;
+	n2_agent_register(&agent);
+
+	LOGV("[loader] spawning thread at %p for \"%s\"\n", (void*)fn, agent.name);
+	thread_t* t=thread_create_with_priority((void(*)(void))fn, prio>0?prio:200);
+	if(!t){ kprintf("[loader] thread create failed for %s\n", agent.name); return -1; }
+	return 0;
+}
+
+/* ---------- Relocations (RELATIVE only) ---------- */
 static size_t apply_relocations_rela_table(uint8_t* base, uint64_t lo, Elf64_Addr tab, Elf64_Addr tsz){
 	if(!tab || !tsz) return 0;
 	if (tab < lo) return 0;
@@ -108,6 +172,90 @@ static int elf_map_and_spawn(const void* img, size_t sz, int prio){
 
 	if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
 	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
+
+  if(eh->e_type == ET_DYN)
+		LOGV("[loader] runtime entry (ET_DYN)  = %p (e_entry-lo=0x%llx)\n",(void*)entry_addr,(unsigned long long)(eh->e_entry - lo));
+	else
+		LOGV("[loader] runtime entry (ET_EXEC) = %p (e_entry-lo=0x%llx, base=%p)\n",(void*)entry_addr,(unsigned long long)(eh->e_entry - lo),base);
+
+	/* Guard */
+	if(entry_addr < (uintptr_t)base || entry_addr >= (uintptr_t)(base + span)){
+		kprintf("[loader] FATAL: entry %p outside image [%p..%p)\n",(void*)entry_addr, base, base+span);
+		return -1;
+	}
+
+	/* Entry inspection */
+	{
+		uint8_t *entry_ptr = (uint8_t*)entry_addr;
+		uint32_t first4 = *(volatile uint32_t*)entry_ptr;
+		if (first4 == 0xFA1E0FF3u) LOGV("[loader] entry starts with ENDBR64 (CET)\n");
+		else LOGV("[loader] entry first bytes: %02x %02x %02x %02x\n", entry_ptr[0],entry_ptr[1],entry_ptr[2],entry_ptr[3]);
+		LOGV("[loader] dumping 64B around entry %p\n", (void*)entry_addr);
+		hexdump_window(base, span, entry_ptr, 32, 32);
+	}
+
+        /* Manifestless: assume "_start" entry */
+        char entry_name[64]; cstr_copy(entry_name,sizeof(entry_name),"_start");
+	LOGV("[loader] binding entry symbol \"%s\" -> %p\n", entry_name, (void*)entry_addr);
+	reg_entry(entry_name, (agent_entry_t)(void*)entry_addr);
+
+	/* Build minimal info for registry/gate */
+	char agent_name[64]={0};
+	path_basename_noext(path?path:"init", agent_name, sizeof(agent_name));
+	if(!agent_name[0]) cstr_copy(agent_name,sizeof(agent_name),"init");
+
+	LOGV("[loader] invoking register_and_spawn (name=\"%s\", entry=\"%s\")...\n", agent_name, entry_name);
+	int rc = register_and_spawn_direct(agent_name, "0", "", entry_name, path, prio);
+	LOGV("[loader] register_and_spawn rc=%d\n", rc);
+	if (rc != 0) return rc;
+
+	/* Optional: add symbol region AFTER successful spawn (guarded) */
+#if LOADER_ADD_SYMBOLS
+	{
+		char symname[128]={0};
+		cstr_copy(symname,sizeof(symname), agent_name);
+		cstr_append(symname,sizeof(symname), ":");
+		cstr_append(symname,sizeof(symname), entry_name);
+		LOGV("[loader] symbols_add %s base=%p span=%zu\n", symname, base, span);
+		symbols_add(symname, (uintptr_t)base, span);
+	}
+#endif
+	return 0;
+}
+
+/* ---------- MACHO2 wrapper (embedded ELF) ---------- */
+static int load_agent_macho2_impl(const void* img, size_t sz, const char* path, int prio){
+	LOGV("[loader] MACHO2 wrapper for %s\n", path?path:"(buffer)");
+	/* Look for ELF magic without memmem */
+	const uint8_t* d=(const uint8_t*)img;
+	size_t i=0; for(; i+4<=sz; i++){ if(d[i]==0x7F && d[i+1]=='E' && d[i+2]=='L' && d[i+3]=='F') break; }
+	if(i+4<=sz){
+		size_t remain = sz - i;
+		LOGV("[loader] embedded ELF detected at +0x%zx (remain=%zu)\n", (size_t)i, remain);
+		return load_agent_elf_impl(d+i, remain, path, prio);
+	}
+	/* No embedded ELF; do not parse manifest here to stay safe */
+	return -1;
+}
+
+/* ---------- FLAT loader ---------- */
+static int load_agent_flat_impl(const void* img, size_t sz, const char* path, int prio){
+        if(!img||!sz) return -1;
+        char nm[64]={0}; path_basename_noext(path?path:"flat", nm, sizeof(nm));
+        const char* entry="_start";
+        LOGV("[loader] FLAT image %s at %p (%zu bytes)\n", nm[0]?nm:"(flat)", img, sz);
+        reg_entry(entry, (agent_entry_t)img);
+        return register_and_spawn_direct(nm[0]?nm:"flat", "0", "", entry, path, prio);
+}
+
+/* ---------- Public API (use enum/prototypes from header) ---------- */
+static agent_format_t detect_fmt(const void* img, size_t sz){
+	const uint8_t* d=(const uint8_t*)img;
+	if(sz>=4 && d[0]==0x7F && d[1]=='E' && d[2]=='L' && d[3]=='F') return AGENT_FORMAT_ELF;
+	if(sz>=4 && (d[0]==0xCF&&d[1]==0xFA&&d[2]==0xED&&d[3]==0xFE)) return AGENT_FORMAT_MACHO2;
+	if(sz>=4 && d[0]=='N' && d[1]=='O' && d[2]=='S' && d[3]=='M') return AGENT_FORMAT_NOSM;
+	if(sz>0 && ((const char*)d)[0]=='{') return AGENT_FORMAT_MACHO2; /* historical wrapper */
+	return AGENT_FORMAT_FLAT;
 
 	/* Bypass registry/gate: spawn thread directly */
 	thread_t* t=thread_create_with_priority((void(*)(void))(void*)entry_addr, prio>0?prio:200);

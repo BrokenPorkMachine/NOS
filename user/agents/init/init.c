@@ -17,7 +17,7 @@ static const char mo2_manifest[] =
 "  \"name\": \"init\",\n"
 "  \"type\": 4,\n"
 "  \"version\": \"1.0.0\",\n"
-"  \"entry\": \"agent_main\"\n"
+"  \"entry\": \"_start\"\n"
 "}\n";
 
 /* ---------- minimal JSON helpers (string-only) ---------- */
