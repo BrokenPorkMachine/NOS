@@ -7,8 +7,8 @@ OBJCOPY := $(CROSS_COMPILE)objcopy
 NASM    := nasm
 
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
-          -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-          -I include -I boot/include -I nosm -no-pie
+	  -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+	  -I include -I boot/include -I nosm -no-pie
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
 all: libc kernel boot disk.img
@@ -114,7 +114,9 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
 	xxd -i out/agents/init.mo2 | \
-	sed 's/out_agents_init_mo2/init_bin/g; s/out_agents_init_mo2_len/init_bin_len/' > kernel/init_bin.h
+	sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_init_mo2/init_bin/g; s/out_agents_init_mo2_len/init_bin_len/' > kernel/init_bin.h
+	xxd -i out/agents/login.bin | \
+	sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_login_bin/login_bin/g; s/out_agents_login_bin_len/login_bin_len/' > kernel/login_bin.h
 	$(CC) $(CFLAGS) -c kernel/stubs.c -o kernel/stubs.o
 	$(CC) $(CFLAGS) -c nosm/drivers/IO/serial.c -o nosm/drivers/IO/serial.o
 # Linked-in security gate + core agents:
@@ -134,7 +136,7 @@ kernel: libc agents bins
 
 	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
-        kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o kernel/proc_launch.o kernel/trap.o kernel/symbols.o nosm/drivers/IO/serial.o kernel/stubs.o \
+	kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o kernel/proc_launch.o kernel/trap.o kernel/symbols.o nosm/drivers/IO/serial.o kernel/stubs.o \
 	src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
 	user/libc/libc.o -o kernel.bin
 
@@ -168,14 +170,15 @@ disk.img: boot kernel agents bins modules
 # ===== utility =====
 clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
-            kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
-            kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
-            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o kernel/proc_launch.o kernel/trap.o \
-            kernel/symbols.o \
-            $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
-            src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
-            user/rt/rt0_user.o user/rt/rt0_agent.o \
-            nosm/drivers/IO/serial.o nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2
+	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
+	    kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
+	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o kernel/proc_launch.o kernel/trap.o \
+	    kernel/symbols.o \
+	    $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
+	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o \
+	    user/rt/rt0_user.o user/rt/rt0_agent.o \
+	    nosm/drivers/IO/serial.o nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2 \
+	    kernel/login_bin.h
 	rm -rf out
 	make -C boot clean
 
