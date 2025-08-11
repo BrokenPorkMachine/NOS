@@ -5,10 +5,11 @@ global context_switch
 
 section .text
 context_switch:
-    push rax        ; Maintain 16-byte alignment of the stack
-    pushfq          ; Save caller's rflags and disable interrupts while switching
-    cli
-    ; Save callee-saved registers as per System V ABI
+    push rax
+    pushfq              ; save caller's rflags
+    cli                 ; disable interrupts during the switch
+
+    ; Save callee-saved registers (SysV)
     push rbp
     push rbx
     push r12
@@ -25,16 +26,29 @@ context_switch:
     ; Load the new stack pointer
     mov rsp, rsi
 
-    ; Restore saved registers
+    ; Restore callee-saved registers from target stack
     pop r15
     pop r14
     pop r13
     pop r12
     pop rbx
     pop rbp
-    popfq           ; Restore rflags (including IF)
-    pop rax         ; Discard alignment placeholder
 
+    ; The next slot on the target stack is its saved RFLAGS.
+    ; We no longer trust flags on the stack (TF might be set), so drop it:
+    add rsp, 8
+
+    ; Set sane flags explicitly: clear TF, set IF.
+    ; (Preserve other flags as much as possible.)
+    pushfq
+    pop rax
+    and rax, ~0x100     ; ~TF
+    or  rax,  0x200     ;  IF
+    push rax
+    popfq
+
+    ; Continue normal restore
+    pop rax
     ret
 
 section .note.GNU-stack noalloc nobits align=1
