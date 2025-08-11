@@ -9,6 +9,18 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 #include <regx.h>     // regx_manifest_t, regx_register(), n2_agent_t
+// --- add to kernel/agent_loader.h ---
+#ifndef AGENT_LOADER_PUB_DECLS
+#define AGENT_LOADER_PUB_DECLS
+
+// Returns the gate function previously set via agent_loader_set_gate().
+agent_gate_fn agent_loader_get_gate(void);
+
+// The core loader calls this to spawn the mapped agent entry.
+// It is set by agent_loader_pub.c.
+extern int (*__agent_loader_spawn_fn)(const char *name, void *entry, int prio);
+
+#endif // AGENT_LOADER_PUB_DECLS
 
 /*
  * Supported on-disk/in-memory formats
