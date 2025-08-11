@@ -11,6 +11,7 @@
 #include <limits.h>   // UINT32_MAX
 #include <nosm.h>
 #include <elf.h>
+#include <regx.h>   // make sure regx types are visible here
 
 extern int kprintf(const char *fmt, ...);
 
