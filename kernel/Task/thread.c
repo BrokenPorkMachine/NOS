@@ -188,10 +188,10 @@ void schedule(void){
     if (!next->started) {
         /* new stack layout we seeded:
            [r15][r14][r13][r12][rbx][rbp][rflags][rax][RET=thread_entry][ARG=func]
-           RET is at offset 8*(6 + 1 + 1) = 64 bytes below current new_rsp.
+           RET is 64 bytes above the current new_sp.
          */
         uint64_t *new_sp   = (uint64_t *)next->rsp;
-        uint64_t *ret_slot = (uint64_t *)((uintptr_t)new_sp - 8*8);
+        uint64_t *ret_slot = (uint64_t *)((uintptr_t)new_sp + 8*8);
 
         /* Determine kernel text range. If linker symbols absent, use a conservative fallback. */
         uintptr_t text_lo = (uintptr_t)__text_start;
