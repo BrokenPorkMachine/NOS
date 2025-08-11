@@ -168,7 +168,7 @@ void schedule(void){
             text_hi = 0x0000000002000000ULL;        // generous upper cap
         }
         /* If RET is outside .text, heal it to thread_entry. */
-        extern void thread_entry(void);
+        static void thread_entry(void);
         uint64_t ret_val = *ret_slot;
         if (!(ret_val >= text_lo && ret_val < text_hi)) {
             *ret_slot = (uint64_t)(uintptr_t)&thread_entry;
