@@ -55,9 +55,6 @@ struct interrupt_frame { uint64_t rip, cs, rflags, rsp, ss; };
 
 static inline uint16_t read_cs(void) { uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs)); return cs; }
 
-static __attribute__((aligned(16))) struct idt_gate64 s_idt[256];
-static int s_done = 0;
-
 #if defined(__GNUC__) && (__GNUC__ >= 5)
 #  define INTFN __attribute__((interrupt)) __attribute__((target("general-regs-only")))
 #else
