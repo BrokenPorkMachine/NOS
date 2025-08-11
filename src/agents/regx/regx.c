@@ -1,14 +1,14 @@
 // src/agents/regx/regx.c
-#include "../../user/libc/libc.h"   // snprintf, strcmp, etc.
+#include "../../../user/libc/libc.h"   // snprintf, strcmp, etc.
 #include <stdint.h>
 #include <stdatomic.h>
-#include "../../kernel/Task/thread.h"
-#include "../../kernel/arch/CPU/lapic.h"
-#include "drivers/IO/serial.h"
-#include "../../kernel/agent_loader.h"
-#include "../../kernel/init_bin.h"
-#include "../../kernel/login_bin.h"
-#include "../../user/agents/nosfs/nosfs_server.h"
+#include "../../../kernel/Task/thread.h"
+#include "../../../kernel/arch/CPU/lapic.h"
+#include "../../../nosm/drivers/IO/serial.h"
+#include "../../../kernel/agent_loader.h"
+#include "../../../kernel/init_bin.h"
+#include "../../../kernel/login_bin.h"
+#include "../../../user/agents/nosfs/nosfs_server.h"
 extern void serial_putc(char c);
 
 // Kernel console
