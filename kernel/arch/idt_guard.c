@@ -68,28 +68,6 @@ static int s_done = 0;
 static void (*g_ud_real)(void*) = 0;
 static void (*g_gp_real)(void*, uint64_t) = 0;
 
-/* Minimal, non-faulting stubs */
-INTFN static void guard_noerr(struct interrupt_frame* f) { (void)f; }
-INTFN static void guard_err(struct interrupt_frame* f, uint64_t ec) { (void)f; (void)ec; }
-INTFN static void guard_ud_mux(struct interrupt_frame* f) {
-    if (g_ud_real) { g_ud_real(f); return; }
-    guard_noerr(f);
-}
-INTFN static void guard_gp_mux(struct interrupt_frame* f, uint64_t ec) {
-    if (g_gp_real) { g_gp_real(f, ec); return; }
-    guard_err(f, ec);
-}
-
-static inline void gate_set(struct idt_gate64* g, uint16_t cs, uint64_t off, uint8_t ist)
-{
-    g->off0 = (uint16_t)(off & 0xFFFF);
-    g->off1 = (uint16_t)((off >> 16) & 0xFFFF);
-    g->off2 = (uint32_t)((off >> 32) & 0xFFFFFFFF);
-    g->sel = cs;
-    g->ist = (uint8_t)(ist & 0x7);
-    g->type_attr = 0x8E;   // P=1 | DPL=0 | Type=0xE (64-bit interrupt gate)
-    g->zero = 0;
-}
 
 void idt_guard_install_real_handlers(void (*ud_noerr)(void*), void (*gp_err)(void*, uint64_t))
 {
