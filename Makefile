@@ -144,17 +144,23 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/VM/cow.c -o kernel/VM/cow.o
 	$(CC) $(CFLAGS) -c kernel/VM/numa.c -o kernel/VM/numa.o
 	$(CC) $(CFLAGS) -c kernel/VM/kheap.c -o kernel/VM/kheap.o
-	$(CC) $(CFLAGS) -mgeneral-regs-only -mno-mmx -mno-sse -mno-sse2 -mno-avx -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
+    $(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
 	$(CC) $(CFLAGS) -c kernel/nosfs_pub.c -o kernel/nosfs_pub.o
 
 	$(LD) -T kernel/n2.ld kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
-    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
-    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o kernel/proc_launch.o kernel/trap.o kernel/symbols.o \
+    kernel/agent.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o \
+    kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
+    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o \
+    kernel/proc_launch.o kernel/trap.o kernel/symbols.o \
+    kernel/arch/idt_guard.o \        # <-- add this
     kernel/nosfs_pub.o \
-    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o \
-    nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
+    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
+    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
+    nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o \ 
+	nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
     src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
 	user/libc/libc.o -o kernel.bin
+
 
 
 	cp kernel.bin n2.bin
