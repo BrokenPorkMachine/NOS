@@ -45,7 +45,7 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     atomic_store(&nosfs_ready, 1);
 
     // Optional one-time debug listing (uncomment if needed)
-    // nosfs_debug_list_all();
+    nosfs_debug_list_all();
 
     ipc_message_t msg, resp;
 
