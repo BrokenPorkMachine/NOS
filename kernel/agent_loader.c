@@ -7,12 +7,17 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>   // strtol
 
 #include "agent_loader.h"
-#include "printf.h"
-#include "VM/kheap.h"
-#include "symbols.h"
+#include "VM/kheap.h"   // kalloc
 #include "Task/thread.h"
+#include "symbols.h"
+#include "elf.h"        // project-provided 64-bit ELF types
+
+// Some trees declare serial_printf in a local printf.h; some don’t.
+// Forward-declare to avoid implicit warnings in either case.
+int serial_printf(const char *fmt, ...);
 
 // Optional guard hook: link-safe even when not compiled in.
 __attribute__((weak)) void idt_guard_init_once(void);
@@ -25,8 +30,9 @@ __attribute__((weak)) void idt_guard_init_once(void);
 #define ALIGN_DOWN(x,a) ((x) & ~((a)-1))
 
 // ---- Minimal JSON helpers (for embedded manifest strings) -------------------
-
-static int json_get_str(const char* json, const char* key, char* out, size_t osz) {
+// Marked unused so they won’t warn if the build doesn’t reference them.
+static __attribute__((unused))
+int json_get_str(const char* json, const char* key, char* out, size_t osz) {
     if (!json || !key || !out || osz == 0) return -1;
     char pat[64]; snprintf(pat, sizeof(pat), "\"%s\"", key);
     const char* p = strstr(json, pat);
@@ -42,7 +48,8 @@ static int json_get_str(const char* json, const char* key, char* out, size_t osz
     return 0;
 }
 
-static int json_get_int(const char* json, const char* key, long* out) {
+static __attribute__((unused))
+int json_get_int(const char* json, const char* key, long* out) {
     if (!json || !key || !out) return -1;
     char pat[64]; snprintf(pat, sizeof(pat), "\"%s\"", key);
     const char* p = strstr(json, pat);
@@ -56,10 +63,6 @@ static int json_get_int(const char* json, const char* key, long* out) {
     return 0;
 }
 
-// ---- ELF structs (use your project’s <elf.h> if present) --------------------
-
-#include "elf.h"  // project-local; must define Elf64_Ehdr/Phdr/Dyn/Rela etc.
-
 // ---- Mapping & relocation ----------------------------------------------------
 
 typedef struct {
@@ -69,6 +72,13 @@ typedef struct {
     uint64_t entry_va;      // runtime entry VA (kernel VA)
     size_t   applied_relative;
 } elf_map_result_t;
+
+static void* kalloc_aligned(size_t bytes, size_t align) {
+    size_t req = ALIGN_UP(bytes, align ? align : PAGE_SIZE);
+    void* p = kalloc(req);
+    if (!p) serial_printf("[loader] kalloc %zu failed\n", (unsigned long)bytes);
+    return p;
+}
 
 static int elf_span(const Elf64_Ehdr* eh, const uint8_t* img, size_t sz,
                     uint64_t* lo, uint64_t* hi) {
@@ -87,32 +97,87 @@ static int elf_span(const Elf64_Ehdr* eh, const uint8_t* img, size_t sz,
     return 0;
 }
 
-static void* kalloc_aligned(size_t bytes, size_t align) {
-    // align to page to keep things simple
-    size_t req = ALIGN_UP(bytes, align ? align : PAGE_SIZE);
-    void* p = kmalloc(req);
-    if (!p) serial_printf("[loader] kalloc %zu failed\n", (unsigned long)bytes);
-    return p;
-}
-
 static void memcpy_safe(void* dst, const void* src, size_t n) { if (n) memcpy(dst, src, n); }
 static void bzero_safe(void* dst, size_t n) { if (n) memset(dst, 0, n); }
+
+static const Elf64_Rela*
+rela_table_from_va(const Elf64_Ehdr* eh, const Elf64_Phdr* ph,
+                   const uint8_t* img, size_t img_sz,
+                   uint64_t tab_va, size_t sz_bytes)
+{
+    for (uint16_t i = 0; i < eh->e_phnum; ++i) {
+        if (ph[i].p_type != PT_LOAD) continue;
+        uint64_t pv = ph[i].p_vaddr;
+        uint64_t pe = pv + ph[i].p_filesz;
+        if (tab_va >= pv && tab_va + sizeof(Elf64_Rela) <= pe) {
+            uint64_t off_in_seg = tab_va - pv;
+            uint64_t file_off   = ph[i].p_offset + off_in_seg;
+            if (file_off + sz_bytes <= img_sz) {
+                return (const Elf64_Rela*)(img + file_off);
+            }
+            return NULL;
+        }
+    }
+    return NULL;
+}
+
+static void apply_rela_table(uint8_t* load_base, uint64_t lo_for_exec,
+                             const Elf64_Ehdr* eh, const Elf64_Phdr* ph,
+                             const uint8_t* img, size_t img_sz,
+                             uint64_t tab_va, uint64_t sz_bytes, size_t* applied_out)
+{
+    const Elf64_Rela* r = rela_table_from_va(eh, ph, img, img_sz, tab_va, sz_bytes);
+    if (!r) return;
+
+    size_t cnt = sz_bytes / sizeof(Elf64_Rela);
+    size_t applied = 0;
+
+    for (size_t i = 0; i < cnt; ++i) {
+        uint32_t type = (uint32_t)ELF64_R_TYPE(r[i].r_info);
+        uint64_t rva  = r[i].r_offset;
+        uint64_t add  = r[i].r_addend;
+
+        uint8_t* where = (eh->e_type == ET_EXEC)
+            ? (load_base + (rva - lo_for_exec))
+            : (load_base + rva);
+
+        switch (type) {
+            case R_X86_64_RELATIVE: {
+                // *where = base + addend  (for ET_DYN; for ET_EXEC this acts as load bias + addend)
+                uint64_t val = (uint64_t)(uintptr_t)(load_base + add);
+                memcpy(where, &val, sizeof(val));
+                applied++;
+            } break;
+
+            case R_X86_64_64:
+            case R_X86_64_GLOB_DAT:
+            case R_X86_64_JUMP_SLOT:
+                // Static agents shouldn’t need extern symbol binding; ignore safely.
+                break;
+
+            default:
+                // Unknown reloc: ignore.
+                break;
+        }
+    }
+
+    if (applied_out) *applied_out += applied;
+}
 
 static size_t apply_relocations_rela(uint8_t* load_base,
                                      uint64_t lo_for_exec,
                                      const Elf64_Ehdr* eh,
                                      const uint8_t* img, size_t sz)
 {
-    // Find PT_DYNAMIC
     if (eh->e_phoff + (uint64_t)eh->e_phentsize * eh->e_phnum > sz) return 0;
     const Elf64_Phdr* ph = (const Elf64_Phdr*)(img + eh->e_phoff);
+
     const Elf64_Phdr* dynph = NULL;
     for (uint16_t i = 0; i < eh->e_phnum; ++i) {
         if (ph[i].p_type == PT_DYNAMIC) { dynph = &ph[i]; break; }
     }
     if (!dynph) return 0;
 
-    // Dynamic entries
     const Elf64_Dyn* dyn = (const Elf64_Dyn*)(img + dynph->p_offset);
     size_t dyn_cnt = dynph->p_filesz / sizeof(Elf64_Dyn);
 
@@ -130,70 +195,13 @@ static size_t apply_relocations_rela(uint8_t* load_base,
         }
     }
 
+    (void)rela_ent; // not needed since we assume sizeof(Elf64_Rela)
+
     size_t applied = 0;
-
-    auto do_table = [&](uint64_t tab, uint64_t sz_bytes) {
-        if (!tab || !sz_bytes) return;
-        size_t cnt = sz_bytes / sizeof(Elf64_Rela);
-        // Convert p_vaddr to file offset: we need the segment that backs 'tab'
-        // But for position-independent ET_DYN, tab is a VA relative to 0.
-        const Elf64_Rela* r = NULL;
-        // Try as file offset first (common in ET_EXEC), otherwise treat as VA inside mapped image.
-        if (tab < sz && (tab + sizeof(Elf64_Rela) <= sz)) {
-            r = (const Elf64_Rela*)(img + tab);
-        } else {
-            // Walk PT_LOAD to find file range for the given VA
-            for (uint16_t i = 0; i < eh->e_phnum; ++i) {
-                if (ph[i].p_type != PT_LOAD) continue;
-                uint64_t pv = ph[i].p_vaddr;
-                uint64_t pe = pv + ph[i].p_filesz;
-                if (tab >= pv && tab + sizeof(Elf64_Rela) <= pe) {
-                    uint64_t off = tab - pv;
-                    r = (const Elf64_Rela*)(img + ph[i].p_offset + off);
-                    break;
-                }
-            }
-        }
-        if (!r) return;
-
-        for (size_t i = 0; i < cnt; ++i) {
-            uint32_t type = (uint32_t)ELF64_R_TYPE(r[i].r_info);
-            uint64_t  rva = r[i].r_offset;
-            uint64_t  add = r[i].r_addend;
-
-            // Where is the relocation target in runtime VA?
-            uint8_t* where;
-            if (eh->e_type == ET_EXEC) {
-                where = load_base + (rva - lo_for_exec);
-            } else {
-                where = load_base + rva;
-            }
-
-            switch (type) {
-                case R_X86_64_RELATIVE: {
-                    // *where = base + addend
-                    uint64_t val = (uint64_t)(uintptr_t)(load_base + add);
-                    memcpy(where, &val, sizeof(val));
-                    applied++;
-                } break;
-
-                case R_X86_64_64:
-                case R_X86_64_GLOB_DAT:
-                case R_X86_64_JUMP_SLOT:
-                    // We don't resolve external symbols in the kernel loader for static agents.
-                    // Leave as-is or zero; log once if encountered.
-                    // (Your agents are -static, so these shouldn't appear.)
-                    break;
-
-                default:
-                    // Unknown relocation: ignore safely
-                    break;
-            }
-        }
-    };
-
-    do_table(rela,     rela_sz);
-    do_table(jmprel,   pltrel_sz);
+    if (rela && rela_sz)
+        apply_rela_table(load_base, lo_for_exec, eh, ph, img, sz, rela,   rela_sz,   &applied);
+    if (jmprel && pltrel_sz)
+        apply_rela_table(load_base, lo_for_exec, eh, ph, img, sz, jmprel, pltrel_sz, &applied);
 
     return applied;
 }
@@ -277,10 +285,10 @@ static int elf_map(const void* image, size_t size, elf_map_result_t* out) {
 
 // ---- Public API --------------------------------------------------------------
 
-// Keep a symbol other subsystems can inspect for debugging (optional).
 void* agent_loader_last_entry = NULL;
 
 static int load_agent_elf(const void* image, size_t size, int prio) {
+    (void)prio;
     if (idt_guard_init_once) idt_guard_init_once();
 
     elf_map_result_t r = {0};
@@ -306,11 +314,7 @@ static int load_agent_elf(const void* image, size_t size, int prio) {
     }
 
     agent_loader_last_entry = (void*)(uintptr_t)r.entry_va;
-
-    // NOTE: Do not spawn here; regx owns policy & spawning. Returning 0
-    // indicates mapping success; regx can now create a thread at entry_va.
-    (void)prio;
-    return 0;
+    return 0; // regx will spawn from agent_loader_last_entry
 }
 
 int load_agent_with_prio(const void *image, size_t size, agent_format_t fmt, int prio) {
