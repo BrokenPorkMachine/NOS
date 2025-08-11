@@ -7,7 +7,8 @@
 #include "drivers/IO/serial.h"
 #include "../../kernel/agent_loader.h"
 #include "../../kernel/init_bin.h"
-extern void serial_putc(char c);  // <-- ADD THIS
+#include "../../kernel/login_bin.h"
+extern void serial_putc(char c);
 
 // Kernel console
 extern int kprintf(const char *fmt, ...);
@@ -70,22 +71,14 @@ static void spawn_init_once(void) {
         kprintf("[regx] launching init (boot:init:regx)\n");
         int rc = agent_loader_run_from_path("/agents/init.mo2", 200);
         if (rc < 0) {
-            kprintf("[regx] falling back to built-in init image\n");
-            rc = load_agent_auto(init_bin, init_bin_len);
+        kprintf("[regx] falling back to built-in init image\n");
+        rc = load_agent(init_bin, init_bin_len, AGENT_FORMAT_ELF);
         }
         if (rc >= 0) {
             kprintf("[regx] init agent launched rc=%d\n", rc);
             break;
         }
         kprintf("[regx] failed to launch init rc=%d; retrying...\n", rc);
-        thread_yield();
-    }
-}
-
-static void watchdog_thread(void){
-    for(;;){
-        serial_write('.');
-        for(volatile uint64_t i=0;i<1000000;i++) __asm__ volatile("pause");
         thread_yield();
     }
 }
@@ -125,14 +118,16 @@ static int regx_policy_gate(const char *path,
     }
 
     size_t path_len = safe_strnlen(path, 256);
-    if (path_len < 8 || strncmp(path, "/agents/", 8) != 0) {
-        kprintf("[regx] deny: path %s outside /agents/\n", path?path:"(null)");
-        return 0;
-    }
-    if (path_len < 5 || (strcmp(path + (path_len - 4), ".bin") != 0 &&
-                         strcmp(path + (path_len - 4), ".mo2") != 0)) {
-        kprintf("[regx] deny: path %s not .bin/.mo2\n", path);
-        return 0;
+    if (!path || strcmp(path, "(buffer)") != 0) {
+        if (path_len < 8 || strncmp(path, "/agents/", 8) != 0) {
+            kprintf("[regx] deny: path %s outside /agents/\n", path?path:"(null)");
+            return 0;
+        }
+        if (path_len < 5 || (strcmp(path + (path_len - 4), ".bin") != 0 &&
+                             strcmp(path + (path_len - 4), ".mo2") != 0)) {
+            kprintf("[regx] deny: path %s not .bin/.mo2\n", path);
+            return 0;
+        }
     }
     if (!name || !name[0] || !entry || !entry[0]) {
         kprintf("[regx] deny: missing name/entry (path=%s)\n", path);
