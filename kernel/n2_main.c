@@ -40,6 +40,8 @@ static void kprint(const char *s) { serial_puts(s); }
 #  define vprint(s) (void)0
 #endif
 
+extern int agent_loader_run_from_path(const char *path, int prio);
+
 static void print_acpi_info(const bootinfo_t *b) { (void)b; }
 static void print_cpu_topology(const bootinfo_t *b) { (void)b; }
 static void print_modules(const bootinfo_t *b) { (void)b; }
@@ -147,6 +149,12 @@ void n2_main(bootinfo_t *bootinfo)
     // Launch scheduler & core services
     threads_init();
     vprint("[N2] Launching core service threads\r\n");
+    
+    // Autostart login from the disk image (/agents/login.mo2)
+    {
+        int rc_login = agent_loader_run_from_path("/agents/login.mo2", 200);
+        serial_printf("[boot] autostart login rc=%d\n", rc_login);
+    }
 
     // Start LAPIC periodic timer (preemptive scheduling if/when IF is enabled)
     lapic_timer_setup_periodic(32, 1000000, 0x3);
