@@ -260,17 +260,32 @@ static int register_and_spawn_from_manifest(const char *json, const char *path, 
 static int load_agent_macho2_impl(const void *image,size_t size,const char *path,int prio){
     (void)path;
     char manifest[512];
+
+    /* Try to extract the manifest first for logging/symbols. */
     if (extract_manifest_macho2(image,size,manifest,sizeof(manifest))==0){
         char name[64]={0};
         json_extract_string(manifest,"name",name,sizeof(name));
         symbols_add(name[0]?name:"(anon)",(uintptr_t)image,size);
+    }
 
+    /* NEW: Look for an embedded ELF and load it as PIE.
+       Many .mo2 blobs are wrappers that carry a 64-bit ELF payload. */
+    const uint8_t *base = (const uint8_t *)image;
+    const uint8_t *elfp = (const uint8_t *)memmem_local(base, size, "\x7F""ELF", 4);
+    if (elfp){
+        size_t remain = size - (size_t)(elfp - base);
+        int rc_elf = load_agent_elf_impl(elfp, remain, path, prio);
+        if (rc_elf == 0){
+            /* ELF path already registered the entry and spawned the thread. */
+            return 0;
+        }
+        kprintf("[loader] embedded ELF load failed (rc=%d), falling back to registry path\n", rc_elf);
+    }
+
+    /* Fallback: legacy path where the entry is a kernel-registered symbol. */
+    if (extract_manifest_macho2(image,size,manifest,sizeof(manifest))==0){
         int rc = register_and_spawn_from_manifest(manifest, path, prio);
-        if (rc == 0) return 0;
-
-        // Fallback: if MACHO2 could not spawn (e.g., entry not registered/relocated),
-        // try interpreting the bytes as ELF to still bootstrap init.
-        return load_agent_elf_impl(image, size, path, prio);
+        return rc;
     }
     return -1;
 }
@@ -324,6 +339,7 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
                ph[i].p_filesz);
     }
 
+    /* Correct PIE entry computation: base + (e_entry - min_vaddr) */
     uint64_t entry = (uint64_t)(mem + (eh->e_entry - min_vaddr));
 
     char manifest[512];
