@@ -32,7 +32,7 @@ static void *kalloc_aligned_or_arena(size_t bytes, size_t align);
 static size_t apply_relocations_rela(uint8_t *load_base, uint64_t lo_for_exec,
                                      const Elf64_Ehdr *eh, const void *img, size_t sz);
 static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int prio);
-| static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n);
+static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n);
 static void hexdump_window(uintptr_t addr, const uint8_t *p, size_t prefix);
 
 /* --------------------------------------------------------------------------------
