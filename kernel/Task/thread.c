@@ -241,9 +241,10 @@ void threads_init(void){
 
     agent_loader_set_read(agentfs_read_all, agentfs_free);
 
-    // Start the filesystem early so init.mo2 can be loaded safely
+    // Start filesystem server first so init.mo2 can load safely
     thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 230);
-    // Bring up security gate and module loader
+
+    // Then bring up security gate and other helpers
     thread_t *t_regx  = thread_create_with_priority(regx_thread_wrapper, 220);
     thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, 210);
 

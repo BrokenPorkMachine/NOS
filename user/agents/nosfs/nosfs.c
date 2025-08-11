@@ -4,6 +4,8 @@
 // Global in-memory filesystem used by both the server thread and
 // the fs_read_all() helper for the agent loader.
 nosfs_fs_t nosfs_root;
+// Simple readiness flag so fs_read_all can fail gracefully before init
+static volatile int nosfs_ready = 0;
 
 // ---------- Quota helpers ----------
 void nosfs_set_quota(nosfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes) {
@@ -123,6 +125,7 @@ void nosfs_init(nosfs_fs_t *fs) {
     pthread_mutex_init(&fs->mutex, NULL);
     nosfs_journal_init();
     undo_log.type = NOSFS_UNDO_NONE;
+    nosfs_ready = 1;
 }
 
 void nosfs_destroy(nosfs_fs_t *fs) {
@@ -137,6 +140,7 @@ void nosfs_destroy(nosfs_fs_t *fs) {
     pthread_mutex_destroy(&fs->mutex);
     nosfs_journal_init();
     undo_log.type = NOSFS_UNDO_NONE;
+    nosfs_ready = 0;
 }
 
 // ========== Helper: Name Valid ==========
@@ -460,7 +464,7 @@ int nosfs_journal_undo_last(nosfs_fs_t *fs) { (void)fs; return -1; }
 // into a newly allocated buffer.  Simple linear search across the
 // in-memory filesystem namespace.
 int fs_read_all(const char *path, void **out, size_t *out_sz) {
-    if (!path || !out || !out_sz)
+    if (!nosfs_ready || !path || !out || !out_sz)
         return -1;
     const char *name = (*path == '/') ? path + 1 : path;
     pthread_mutex_lock(&nosfs_root.mutex);
