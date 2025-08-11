@@ -53,7 +53,6 @@ void idt_guard_init_once(void) {
 
 struct interrupt_frame { uint64_t rip, cs, rflags, rsp, ss; };
 
-static inline void lidt(const struct idtr64 *d) { __asm__ volatile("lidt %0" : : "m"(*d)); }
 static inline uint16_t read_cs(void) { uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs)); return cs; }
 
 static __attribute__((aligned(16))) struct idt_gate64 s_idt[256];
