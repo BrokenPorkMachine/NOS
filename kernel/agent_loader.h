@@ -18,6 +18,8 @@ typedef int (*agent_gate_fn)(
     const char *path         // original path, can be NULL
 );
 
+int load_agent_auto(const void *buf, size_t len);
+
 // ----- File I/O callbacks for reading agent images -----
 typedef int  (*agent_read_file_fn)(const char *path, const void **data_out, size_t *size_out);
 typedef void (*agent_free_fn)(void *p);
