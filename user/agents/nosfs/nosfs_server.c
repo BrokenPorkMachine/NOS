@@ -38,7 +38,7 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     int h = nosfs_create(&nosfs_root, "agents/init.mo2", init_bin_len, 0);
     if (h >= 0) (void)nosfs_write(&nosfs_root, h, 0, init_bin, init_bin_len);
 
-    h = nosfs_create(&nosfs_root, "agents/login.bin", login_bin_len, 0);
+    h = nosfs_create(&nosfs_root, "agents/login.mo2", login_bin_len, 0);
     if (h >= 0) (void)nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
 
     // Make filesystem contents visible to other threads

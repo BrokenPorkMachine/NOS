@@ -42,7 +42,7 @@ int fs_read_all(const char *path, void **out, size_t *out_sz) {
         *out_sz = init_bin_len;
         return 0;
     }
-    if (strcmp(path, "/agents/login.bin") == 0) {
+    if (strcmp(path, "/agents/login.mo2") == 0) {
         *out = (void *)login_bin;
         *out_sz = login_bin_len;
         return 0;

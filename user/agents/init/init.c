@@ -134,7 +134,7 @@ static int default_manifest(svc_spec_t *out, int max_out) {
        Loading non-existent services (e.g., pkg or update) caused
        init to stall before reaching the login agent. */
     static const char *paths[] = {
-        "/agents/login.bin",
+        "/agents/login.mo2",
     };
     int n = 0;
     for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]) && n < max_out; ++i) {

@@ -20,8 +20,7 @@ AGENT_DIRS := user/agents/init user/agents/login
 AGENT_DIRS_NONEMPTY := $(AGENT_DIRS)
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
 AGENT_ELFS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
-AGENT_BINS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).bin)
-AGENT_BINS  := $(filter-out out/agents/init.bin,$(AGENT_BINS)) out/agents/init.mo2
+AGENT_MO2  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).mo2)
 AGENT_C_SRCS := $(foreach d,$(AGENT_DIRS_NONEMPTY),$(wildcard $(d)/*.c))
 AGENT_OBJS   := $(patsubst %.c,%.o,$(AGENT_C_SRCS))
 
@@ -33,18 +32,15 @@ define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
 out/agents/$(1).elf: $$(AGENT_$(1)_OBJS) user/rt/rt0_agent.o user/libc/libc.o
-	@mkdir -p $$(@D)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
+        @mkdir -p $$(@D)
+        $(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
 
-out/agents/$(1).bin: out/agents/$(1).elf
-	cp $$< $$@
+out/agents/$(1).mo2: out/agents/$(1).elf
+        cp $$< $$@
 endef
 $(foreach n,$(AGENT_NAMES),$(eval $(call MAKE_AGENT_RULES,$(n))))
 
-out/agents/init.mo2: out/agents/init.elf
-	cp $< $@
-
-agents: $(AGENT_ELFS) $(AGENT_BINS)
+agents: $(AGENT_ELFS) $(AGENT_MO2)
 
 # ===== NOSM modules =====
 nosm/drivers/example/hello/hello_nmod.o: nosm/drivers/example/hello/hello_nmod.c
@@ -115,8 +111,8 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
 	xxd -i out/agents/init.mo2 | \
 	sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_init_mo2/init_bin/g; s/out_agents_init_mo2_len/init_bin_len/' > kernel/init_bin.h
-	xxd -i out/agents/login.bin | \
-        sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_login_bin/login_bin/g; s/out_agents_login_bin_len/login_bin_len/' > kernel/login_bin.h
+        xxd -i out/agents/login.mo2 | \
+        sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_login_mo2/login_bin/g; s/out_agents_login_mo2_len/login_bin_len/' > kernel/login_bin.h
 	$(CC) $(CFLAGS) -c nosm/drivers/IO/serial.c   -o nosm/drivers/IO/serial.o
 	$(CC) $(CFLAGS) -c nosm/drivers/IO/usb.c      -o nosm/drivers/IO/usb.o
 	$(CC) $(CFLAGS) -c nosm/drivers/IO/usbkbd.c   -o nosm/drivers/IO/usbkbd.o
@@ -178,7 +174,7 @@ disk.img: boot kernel agents bins modules
 	mcopy -i disk.img O2.bin ::/
 	mcopy -i disk.img n2.bin ::/
 	mmd -i disk.img ::/agents || true
-	$(foreach b,$(AGENT_BINS), mcopy -i disk.img $(b) ::/agents/$(notdir $(b));)
+    $(foreach b,$(AGENT_MO2), mcopy -i disk.img $(b) ::/agents/$(notdir $(b));)
 	mmd -i disk.img ::/bin || true
 	$(foreach b,$(BIN_BINS), mcopy -i disk.img $(b) ::/bin/$(notdir $(b));)
 	mmd -i disk.img ::/modules || true
@@ -191,7 +187,7 @@ clean:
 	    kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
 	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o kernel/proc_launch.o kernel/trap.o \
 	    kernel/symbols.o \
-	    $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_BINS) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
+        $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_MO2) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
         src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
         user/rt/rt0_user.o user/rt/rt0_agent.o \
         nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
