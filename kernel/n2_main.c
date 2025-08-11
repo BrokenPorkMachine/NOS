@@ -1,12 +1,10 @@
-// kernel/n2_main.c  — production-safe bring-up with early IDT sanitization
-
+// kernel/n2_main.c
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
-#include "arch/idt_guard.h"
-
 #include "../boot/include/bootinfo.h"
+
 #include "agent.h"
 #include "drivers/IO/serial.h"
 #include "drivers/IO/video.h"
@@ -25,6 +23,14 @@
 #include "uaccess.h"
 #include "symbols.h"
 
+// If you already have a trap.h, prefer including it.
+// The extern keeps this file standalone if not.
+extern void trap_init(void);
+
+// Optional (debug-only) IDT probe/guard hooks. Safe if absent.
+void idt_guard_init_once(void) __attribute__((weak));
+static inline void call_idt_guard(void) { if (idt_guard_init_once) idt_guard_init_once(); }
+
 extern int timer_ready;
 
 #ifndef VERBOSE
@@ -32,56 +38,29 @@ extern int timer_ready;
 #endif
 
 static void kprint(const char *s) { serial_puts(s); }
+
 #if VERBOSE
-#  define vprint(s) kprint(s)
+#define vprint(s) kprint(s)
 #else
-#  define vprint(s) (void)0
+#define vprint(s) (void)0
 #endif
 
-extern int agent_loader_run_from_path(const char *path, int prio);
+// Stubs if you don’t want extra boot chatter. Fill as needed.
+static void print_acpi_info(const bootinfo_t *b)      { (void)b; }
+static void print_cpu_topology(const bootinfo_t *b)    { (void)b; }
+static void print_modules(const bootinfo_t *b)         { (void)b; }
+static void print_framebuffer(const bootinfo_t *b)     { (void)b; }
+static void print_mmap(const bootinfo_t *b)            { (void)b; }
+static void load_module(const void *m)                 { (void)m; }
+static void scheduler_loop(void)                       { for (;;) schedule(); }
 
-static void print_acpi_info(const bootinfo_t *b) { (void)b; }
-static void print_cpu_topology(const bootinfo_t *b) { (void)b; }
-static void print_modules(const bootinfo_t *b) { (void)b; }
-static void print_framebuffer(const bootinfo_t *b) { (void)b; }
-static void print_mmap(const bootinfo_t *b) { (void)b; }
-static void load_module(const void *m) { (void)m; }
-static void scheduler_loop(void) { while (1) schedule(); }
+void n2_main(bootinfo_t *bootinfo) {
+    if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI) return;
 
-/* --- Minimal IDT debug helpers (local, no external deps) ------------------ */
-struct __attribute__((packed)) idtr64 { uint16_t limit; uint64_t base; };
-struct __attribute__((packed)) idt_gate64 {
-    uint16_t off0; uint16_t sel; uint8_t ist; uint8_t type_attr;
-    uint16_t off1; uint32_t off2; uint32_t zero;
-};
-static inline void sidt_local(struct idtr64 *d) { __asm__ volatile("sidt %0" : "=m"(*d)); }
-static inline uint64_t gate_off(const struct idt_gate64* g) {
-    return ((uint64_t)g->off0) | ((uint64_t)g->off1<<16) | ((uint64_t)g->off2<<32);
-}
-static void idt_debug_probe(const char* tag) {
-#if VERBOSE
-    struct idtr64 idtr; sidt_local(&idtr);
-    const struct idt_gate64* idt = (const struct idt_gate64*)idtr.base;
-    uint64_t off6 = gate_off(&idt[6]);
-    uint64_t off13 = gate_off(&idt[13]);
-    serial_printf("[idt] %s base=%016lx lim=%04x vec6=%016lx vec13=%016lx\n",
-                  tag, (unsigned long)idtr.base, (unsigned)idtr.limit,
-                  (unsigned long)off6, (unsigned long)off13);
-#else
-    (void)tag;
-#endif
-}
-/* ------------------------------------------------------------------------- */
+    extern char _start, _end;
+    symbols_add("kernel", (uintptr_t)&_start, (uintptr_t)&_end - (uintptr_t)&_start);
 
-void n2_main(bootinfo_t *bootinfo)
-{
-    if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI)
-        return;
-
-    __asm__ volatile("cli");
-    idt_guard_init_once();   // fresh, sanitized IDT
-
-    // Bring up serial FIRST so we can see early logs
+    threads_early_init();
     serial_init();
 
     vprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
@@ -89,45 +68,25 @@ void n2_main(bootinfo_t *bootinfo)
     const char *bl = bootinfo->bootloader_name;
     if (bl) {
         uintptr_t p = (uintptr_t)bl;
-        if (is_user_addr(p)) {
-            CANONICAL_GUARD(p);
-            vprint((const char *)p);
-        } else {
-            vprint("unknown");
-        }
-    } else {
-        vprint("unknown");
-    }
+        if (is_user_addr(p)) { CANONICAL_GUARD(p); vprint((const char *)p); }
+        else vprint("unknown");
+    } else vprint("unknown");
     vprint("\r\n");
 
-    // Map kernel symbol range for better crash dumps
-    extern char _start, _end;
-    symbols_add("kernel", (uintptr_t)&_start, (uintptr_t)&_end - (uintptr_t)&_start);
-
-    // Very early threading primitives (no scheduling yet)
-    threads_early_init();
-
-    // Ensure external interrupts are off during IDT work
+    // Keep interrupts off until *our* IDT is installed.
     __asm__ volatile("cli");
 
-    // BEFORE touching drivers/agents: sanitize the IDT so no vector points into 0xB0000 legacy space.
-    idt_debug_probe("pre-guard");
-    idt_guard_init_once();
-    idt_debug_probe("post-guard");
-
-    // --- Discovery / info (kept quiet by default to avoid early complexity) ---
-    print_acpi_info(bootinfo);
-    print_cpu_topology(bootinfo);
-    print_modules(bootinfo);
-    print_framebuffer(bootinfo);
-    print_mmap(bootinfo);
-
-    // --- Memory subsystem init ---
+    // Memory/allocators online first.
     numa_init(bootinfo);
-    buddy_init(bootinfo);   // replaces old pmm_init
-    kheap_init();           // kernel heap backed by buddy allocator
+    buddy_init(bootinfo);
+    kheap_init();
 
-    // --- USB first (kbd available for TTY), then display/TTY ---
+    // Install OUR kernel IDT before any user code or agent load.
+    trap_init();
+    // Optional visibility around the firmware vs. kernel IDT state.
+    call_idt_guard();
+
+    // Devices (OK now that we have traps):
     vprint("[N2] Initializing USB stack...\r\n");
     usb_init();
     usb_kbd_init();
@@ -144,21 +103,17 @@ void n2_main(bootinfo_t *bootinfo)
     n2_agent_registry_reset();
     vprint("[N2] Agent Registry Reset\r\n");
 
-    // Launch scheduler & core services
     threads_init();
     vprint("[N2] Launching core service threads\r\n");
-    
-    // Autostart login from the disk image (/agents/login.mo2)
-    {
-        int rc_login = agent_loader_run_from_path("/agents/login.mo2", 200);
-        serial_printf("[boot] autostart login rc=%d\n", rc_login);
-    }
 
-    // Start LAPIC periodic timer (preemptive scheduling if/when IF is enabled)
+    // LAPIC timer for preemption
     lapic_timer_setup_periodic(32, 1000000, 0x3);
     timer_ready = 1;
 
-    // State snapshot for diagnostics
+    // Now that traps are installed, interrupts may be enabled safely.
+    __asm__ volatile("sti");
+
+    // Debug registers snapshot
     uint64_t rflags, cr0, cr3, cr4;
     __asm__ volatile("pushfq; pop %0" : "=r"(rflags));
     __asm__ volatile("mov %%cr0,%0" : "=r"(cr0));
@@ -166,15 +121,19 @@ void n2_main(bootinfo_t *bootinfo)
     __asm__ volatile("mov %%cr4,%0" : "=r"(cr4));
     uint32_t lapic_tmr = lapic_timer_current();
     serial_printf("[N2] RFLAGS.IF=%lu CR0=%lx CR3=%lx CR4=%lx LAPIC_TMR=%u\n",
-                  (unsigned long)((rflags >> 9) & 1), (unsigned long)cr0,
-                  (unsigned long)cr3, (unsigned long)cr4, lapic_tmr);
+                  (rflags >> 9) & 1, cr0, cr3, cr4, lapic_tmr);
     serial_printf("[N2] runqueue len cpu0=%d\n", thread_runqueue_length(0));
 
-    // Load boot modules (agents, etc.)
-    for (uint32_t i = 0; i < bootinfo->module_count; ++i)
-        load_module(&bootinfo->modules[i]);
+    // Optional boot info spew
+    print_acpi_info(bootinfo);
+    print_cpu_topology(bootinfo);
+    print_modules(bootinfo);
+    print_framebuffer(bootinfo);
+    print_mmap(bootinfo);
 
-    // NOTE: We deliberately leave IF=0 until your real trap/IRQ setup runs.
-    // The guard IDT makes stray vectors harmless in the meantime.
+    // Load any UEFI-provided modules (if you use them)
+    for (uint32_t i = 0; i < bootinfo->module_count; ++i) load_module(&bootinfo->modules[i]);
+
+    // Hand scheduler the CPU forever
     scheduler_loop();
 }
