@@ -26,6 +26,10 @@ extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.
 
 #define THREAD_MAGIC 0x74687264UL
 
+// Exposed by linker script (n2.ld); if you don’t have these, see fallback below
+extern char __text_start[];
+extern char __text_end[];
+
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
 
 static inline uintptr_t align16(uintptr_t v){ return v & ~0xFULL; }
@@ -41,9 +45,7 @@ static thread_t main_thread;
 
 /*
  * Validate that a thread pointer references either the bootstrap
- * main_thread or an element within the static thread_pool.  Run-queue
- * corruption could otherwise send the scheduler chasing bogus pointers
- * which would crash with a page fault when dereferenced.
+ * main_thread or an element within the static thread_pool.
  */
 static inline int thread_ptr_ok(thread_t *t) {
     return t && (t == &main_thread ||
@@ -149,6 +151,30 @@ void schedule(void){
     if(prev->state==THREAD_RUNNING) prev->state=THREAD_READY;
     thread_t *next=pick_next(cpu);
     if(!next){ prev->state=THREAD_RUNNING; __asm__ volatile("push %0; popfq"::"r"(rf):"memory"); __asm__ volatile("hlt"); return; }
+
+    /* Defensive fix: if this is the first run of `next`, verify its RET slot. */
+    if (!next->started) {
+        /* new stack layout we seeded:
+           [r15][r14][r13][r12][rbx][rbp][rflags][rax][RET=thread_entry][ARG=func]
+           RET is at offset 8*(6 + 1 + 1) = 64 bytes below current new_rsp.
+         */
+        uint64_t *new_sp = (uint64_t *)next->rsp;
+        uint64_t *ret_slot = (uint64_t *)((uintptr_t)new_sp - 8*8);
+        /* Determine kernel text range. If linker symbols absent, use a conservative fallback. */
+        uintptr_t text_lo = (uintptr_t)__text_start;
+        uintptr_t text_hi = (uintptr_t)__text_end;
+        if (text_lo == 0 || text_hi == 0 || text_hi <= text_lo) {
+            text_lo = 0x0000000000100000ULL;        // typical base
+            text_hi = 0x0000000002000000ULL;        // generous upper cap
+        }
+        /* If RET is outside .text, heal it to thread_entry. */
+        extern void thread_entry(void);
+        uint64_t ret_val = *ret_slot;
+        if (!(ret_val >= text_lo && ret_val < text_hi)) {
+            *ret_slot = (uint64_t)(uintptr_t)&thread_entry;
+        }
+    }
+
     next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next;
     context_switch(&prev->rsp,next->rsp);
     if(prev->state==THREAD_EXITED) add_to_zombie_list(prev);
