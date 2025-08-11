@@ -59,9 +59,3 @@ void nosm_entry(void) {
     for (;;) thread_yield();
 }
 
-void login_server(ipc_queue_t *q, uint32_t self_id) {
-    (void)q; (void)self_id;
-    kprintf("[login] server starting\n");
-    kprintf("[login] launching nsh...\n");
-    for (;;) thread_yield();
-}

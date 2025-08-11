@@ -115,6 +115,8 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
 	xxd -i out/agents/init.mo2 | \
 	sed 's/out_agents_init_mo2/init_bin/g; s/out_agents_init_mo2_len/init_bin_len/' > kernel/init_bin.h
+	xxd -i out/agents/login.bin | \
+	sed 's/out_agents_login_bin/login_bin/g; s/out_agents_login_bin_len/login_bin_len/' > kernel/login_bin.h
 	$(CC) $(CFLAGS) -c kernel/stubs.c -o kernel/stubs.o
 	$(CC) $(CFLAGS) -c nosm/drivers/IO/serial.c -o nosm/drivers/IO/serial.o
 # Linked-in security gate + core agents:
