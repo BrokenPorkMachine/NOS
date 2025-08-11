@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdatomic.h>
 
-// Bring in kernel printf for optional boot logs
+// Optional boot logging from kernel
 extern int kprintf(const char *fmt, ...);
 
 // Built-in agent images generated at build time
@@ -36,19 +36,16 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     // Preload essential agents so the registry can launch them.
     // IMPORTANT: store WITHOUT leading slash so fs_read_all() (which strips one) will match.
     int h = nosfs_create(&nosfs_root, "agents/init.mo2", init_bin_len, 0);
-    if (h >= 0) nosfs_write(&nosfs_root, h, 0, init_bin, init_bin_len);
+    if (h >= 0) (void)nosfs_write(&nosfs_root, h, 0, init_bin, init_bin_len);
 
     h = nosfs_create(&nosfs_root, "agents/login.bin", login_bin_len, 0);
-    if (h >= 0) nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
+    if (h >= 0) (void)nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
 
-    // Make filesystem contents visible to other threads and yield once on a cooperative scheduler
+    // Make filesystem contents visible to other threads
     atomic_store(&nosfs_ready, 1);
 
     // Optional one-time debug listing (uncomment if needed)
     // nosfs_debug_list_all();
-
-    extern void thread_yield(void);
-    thread_yield();
 
     ipc_message_t msg, resp;
 
@@ -65,34 +62,44 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
             resp.arg1 = nosfs_create(&nosfs_root, (const char *)msg.data,
                                      msg.arg1, msg.arg2);
             break;
+
         case NOSFS_MSG_WRITE:
             resp.arg1 = nosfs_write(&nosfs_root, msg.arg1, msg.arg2,
                                     msg.data, msg.len);
             break;
-        case NOSFS_MSG_READ:
-            resp.arg1 = nosfs_read(&nosfs_root, msg.arg1, msg.arg2,
-                                   resp.data, msg.len);
-            resp.len  = msg.len;
+
+        case NOSFS_MSG_READ: {
+            int rc = nosfs_read(&nosfs_root, msg.arg1, msg.arg2,
+                                resp.data, msg.len);
+            resp.arg1 = rc;
+            resp.len  = (rc == 0) ? msg.len : 0;
             break;
+        }
+
         case NOSFS_MSG_DELETE:
             resp.arg1 = nosfs_delete(&nosfs_root, msg.arg1);
             break;
+
         case NOSFS_MSG_RENAME:
             resp.arg1 = nosfs_rename(&nosfs_root, msg.arg1,
                                      (const char *)msg.data);
             break;
+
         case NOSFS_MSG_LIST:
             resp.arg1 = nosfs_list(&nosfs_root,
                                    (char (*)[NOSFS_NAME_LEN])resp.data,
                                    IPC_MSG_DATA_MAX / NOSFS_NAME_LEN);
-            resp.len  = resp.arg1 * NOSFS_NAME_LEN;
+            resp.len  = (resp.arg1 > 0) ? (resp.arg1 * NOSFS_NAME_LEN) : 0;
             break;
+
         case NOSFS_MSG_CRC:
             resp.arg1 = nosfs_compute_crc(&nosfs_root, msg.arg1);
             break;
+
         case NOSFS_MSG_VERIFY:
             resp.arg1 = nosfs_verify(&nosfs_root, msg.arg1);
             break;
+
         default:
             resp.type = 0xFFFFFFFF; // unknown request
             break;
