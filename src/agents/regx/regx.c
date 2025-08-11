@@ -8,6 +8,7 @@
 #include "../../kernel/agent_loader.h"
 #include "../../kernel/init_bin.h"
 #include "../../kernel/login_bin.h"
+#include "../../user/agents/nosfs/nosfs_server.h"
 extern void serial_putc(char c);
 
 // Kernel console
@@ -66,6 +67,10 @@ static void spawn_init_once(void) {
     int expected = 0;
     if (!atomic_compare_exchange_strong(&init_spawned, &expected, 1))
         return;
+
+    // Wait until the filesystem server has preloaded core agents.
+    while (!nosfs_is_ready())
+        thread_yield();
 
     for (;;) {
         kprintf("[regx] launching init (boot:init:regx)\n");
