@@ -116,12 +116,9 @@ kernel: libc agents bins
 	xxd -i out/agents/init.mo2 | \
 	sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_init_mo2/init_bin/g; s/out_agents_init_mo2_len/init_bin_len/' > kernel/init_bin.h
 	xxd -i out/agents/login.bin | \
-///	sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_login_bin/login_bin/g; s/out_agents_login_bin_len/login_bin_len/' > kernel/login_bin.h
-//	sed 's/out_agents_init_mo2/init_bin/g; s/out_agents_init_mo2_len/init_bin_len/' > kernel/init_bin.h
-//	sed 's/out_agents_login_bin/login_bin/g; s/out_agents_login_bin_len/login_bin_len/' > kernel/login_bin.h
-	$(CC) $(CFLAGS) -c kernel/stubs.c -o kernel/stubs.o
+        sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_login_bin/login_bin/g; s/out_agents_login_bin_len/login_bin_len/' > kernel/login_bin.h
 	$(CC) $(CFLAGS) -c nosm/drivers/IO/serial.c -o nosm/drivers/IO/serial.o
-n56# Linked-in security gate + core agents:
+# Linked-in security gate + core agents:
 	$(CC) $(CFLAGS) -c src/agents/regx/regx.c   -o src/agents/regx/regx.o
 	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs.c -o user/agents/nosfs/nosfs.o
 
