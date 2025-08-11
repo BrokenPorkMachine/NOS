@@ -1,5 +1,5 @@
 // kernel/arch/idt_guard.c
-#include "arch/idt_guard.h"
+#include "idt_guard.h"
 
 #include <string.h>
 #include <stdint.h>
