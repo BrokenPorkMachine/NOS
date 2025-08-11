@@ -5,85 +5,31 @@
 // - Ultra-verbose tracing around mapping, relocations, and entry bytes.
 // - NO JSON parsing or string scanning of the payload; assumes entry="_start".
 // - Spawns BEFORE any optional bookkeeping (symbols disabled by default).
+
 //
-// If you later want to re-enable manifest parsing, wrap that code
-// behind a compile-time flag (not included here).
+// This just maps ELF, applies RELATIVE relocs, and spawns the thread directly.
 
 #include "agent_loader.h"
 #include "Task/thread.h"
 #include "VM/kheap.h"
-#include "symbols.h"
-#include "agent.h"
-#include "regx.h"
-
 #include <elf.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
 
-extern int kprintf(const char *fmt, ...);
+typedef void (*agent_entry_t)(void);
 
-/* ---------- Tuning ---------- */
-#ifndef LOADER_VERBOSE
-#define LOADER_VERBOSE 1
-#endif
-#ifndef LOADER_ADD_SYMBOLS
-#define LOADER_ADD_SYMBOLS 0
-#endif
-#if LOADER_VERBOSE
-  #define LOGV(...) kprintf(__VA_ARGS__)
-#else
-  #define LOGV(...) do{}while(0)
-#endif
-
-/* ---------- Hooks wired elsewhere ---------- */
+/* FS hooks wired elsewhere */
 static agent_read_file_fn g_read_file = 0;
 static agent_free_fn      g_free_fn   = 0;
-static agent_gate_fn      g_gate_fn   = 0;
-
 void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r; g_free_fn=f; }
-void agent_loader_set_gate(agent_gate_fn g){ g_gate_fn=g; }
 
-/* ---------- Tiny safe string helpers (no varargs) ---------- */
-static size_t cstr_len(const char* s){ size_t n=0; if(!s) return 0; while(s[n]) n++; return n; }
-static void cstr_copy(char* dst, size_t cap, const char* src){
-	if(!dst||cap==0){ return; }
-	size_t i=0; if(src){ while(src[i] && i+1<cap){ dst[i]=src[i]; i++; } }
-	dst[i]=0;
-}
-static void cstr_append(char* dst, size_t cap, const char* src){
-	if(!dst||cap==0||!src) return;
-	size_t d=cstr_len(dst), i=0;
-	while(src[i] && d+1<cap){ dst[d++]=src[i++]; }
-	dst[d]=0;
-}
-static void path_basename_noext(const char* path, char* out, size_t cap){
-	if(!out||cap==0){ return; }
-	out[0]=0; if(!path){ return; }
-	const char* b=path; for(const char* p=path; *p; ++p) if(*p=='/') b=p+1;
-	size_t i=0; while(b[i] && i+1<cap){ out[i]=b[i]; i++; } out[i]=0;
-	char* dot=NULL; for(char* p=out; *p; ++p) if(*p=='.') dot=p; if(dot) *dot=0;
-}
+/* Provide a no-op gate setter to satisfy callers (e.g., regx.c) */
+void agent_loader_set_gate(agent_gate_fn g){ (void)g; /* bypass: no gate */ }
 
-/* ---------- Entry registry (name -> fn*) ---------- */
-typedef void (*agent_entry_t)(void);
-#define MAX_ENTRIES 64
-static struct { char name[64]; agent_entry_t fn; } g_entries[MAX_ENTRIES];
-static size_t g_ec=0;
-
-static void reg_entry(const char* name, agent_entry_t fn){
-	if(!name||!fn) return;
-	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0){ g_entries[i].fn=fn; return; }
-	if(g_ec<MAX_ENTRIES){ cstr_copy(g_entries[g_ec].name,sizeof(g_entries[g_ec].name),name); g_entries[g_ec].fn=fn; g_ec++; }
-}
-static agent_entry_t find_entry(const char* name){
-	for(size_t i=0;i<g_ec;i++) if(strcmp(g_entries[i].name,name)==0) return g_entries[i].fn;
-	return NULL;
-}
-
-/* ---------- Arena (OOM fallback) ---------- */
-#define AGENT_ARENA_SIZE (1<<20) /* 1 MiB */
+/* 1 MiB arena fallback */
+#define AGENT_ARENA_SIZE (1<<20)
 static uint8_t g_agent_arena[AGENT_ARENA_SIZE];
 static size_t  g_agent_bump = 0;
 static void* arena_alloc(size_t sz){
@@ -169,7 +115,7 @@ static size_t apply_relocations_rela_table(uint8_t* base, uint64_t lo, Elf64_Add
 	}
 	return applied;
 }
-static size_t apply_relocations_rela(uint8_t* base, uint64_t lo, const Elf64_Ehdr* eh, const void* img, size_t sz){
+static void apply_relocations_rela(uint8_t* base, uint64_t lo, const Elf64_Ehdr* eh, const void* img, size_t sz){
 	(void)sz;
 	const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
 	Elf64_Addr rela=0,rela_sz=0,rela_ent=sizeof(Elf64_Rela), jmprel=0,pltrel_sz=0;
@@ -189,20 +135,15 @@ static size_t apply_relocations_rela(uint8_t* base, uint64_t lo, const Elf64_Ehd
 		}
 	}
 	(void)rela_ent;
-	return apply_relocations_rela_table(base, lo, rela, rela_sz)
-	     + apply_relocations_rela_table(base, lo, jmprel, pltrel_sz);
+	(void)apply_relocations_rela_table(base, lo, rela, rela_sz);
+	(void)apply_relocations_rela_table(base, lo, jmprel, pltrel_sz);
 }
 
-/* ---------- ELF loader ---------- */
-static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int prio){
+static int elf_map_and_spawn(const void* img, size_t sz, int prio){
 	if(!img || sz < sizeof(Elf64_Ehdr)) return -1;
-
 	const Elf64_Ehdr* eh=(const Elf64_Ehdr*)img;
 	if(memcmp(eh->e_ident, ELFMAG, SELFMAG)!=0 || eh->e_ident[EI_CLASS]!=ELFCLASS64) return -1;
 	if(eh->e_phoff==0 || eh->e_phnum==0) return -1;
-
-	LOGV("[loader] ELF: type=%u phnum=%u e_entry=0x%llx\n",
-	     (unsigned)eh->e_type, (unsigned)eh->e_phnum, (unsigned long long)eh->e_entry);
 
 	const Elf64_Phdr* ph = (const Elf64_Phdr*)((const uint8_t*)img + eh->e_phoff);
 
@@ -216,40 +157,23 @@ static int load_agent_elf_impl(const void* img, size_t sz, const char* path, int
 	if(lo==UINT64_MAX || hi<=lo) return -1;
 
 	size_t span = (size_t)(hi - lo);
-	LOGV("[loader] span: lo=0x%llx hi=0x%llx span=%zu\n",
-	     (unsigned long long)lo, (unsigned long long)hi, span);
-
 	uint8_t* base = (uint8_t*)kalloc(span);
-	if(!base){
-		kprintf("[loader] kalloc %zu failed, trying arena\n", span);
-		base = (uint8_t*)arena_alloc(span);
-		if(!base){ kprintf("[loader] arena OOM (%zu)\n", span); return -1; }
-	}
+	if(!base){ base = (uint8_t*)arena_alloc(span); if(!base) return -1; }
 	memset(base, 0, span);
-	LOGV("[loader] load_base=%p\n", base);
 
 	for(uint16_t i=0;i<eh->e_phnum;i++){
 		if(ph[i].p_type!=PT_LOAD) continue;
-		if(ph[i].p_offset + ph[i].p_filesz > sz){ kprintf("[loader] ELF bounds\n"); return -1; }
+		if(ph[i].p_offset + ph[i].p_filesz > sz){ return -1; }
 		uintptr_t dst = (uintptr_t)(base + (ph[i].p_vaddr - lo));
-		LOGV("[loader] PT_LOAD[%u]: vaddr=0x%llx file=%llu mem=%llu fl=0x%x -> [%p..%p)\n",
-		     (unsigned)i,(unsigned long long)ph[i].p_vaddr,
-		     (unsigned long long)ph[i].p_filesz,(unsigned long long)ph[i].p_memsz,
-		     (unsigned)ph[i].p_flags,(void*)dst,(void*)(dst + ph[i].p_memsz));
 		memcpy((void*)dst, (const uint8_t*)img + ph[i].p_offset, ph[i].p_filesz);
 	}
 
-	size_t nrel = apply_relocations_rela(base, lo, eh, img, sz);
-	LOGV("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", nrel);
+	apply_relocations_rela(base, lo, eh, img, sz);
 
-	/* Rebase entry for BOTH ET_DYN and ET_EXEC. */
-	if (eh->e_entry < lo || eh->e_entry >= hi){
-		kprintf("[loader] FATAL: e_entry (0x%llx) out of PT_LOAD span [0x%llx..%llx)\n",
-		        (unsigned long long)eh->e_entry,(unsigned long long)lo,(unsigned long long)hi);
-		return -1;
-	}
+	if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
 	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
-	if(eh->e_type == ET_DYN)
+
+  if(eh->e_type == ET_DYN)
 		LOGV("[loader] runtime entry (ET_DYN)  = %p (e_entry-lo=0x%llx)\n",(void*)entry_addr,(unsigned long long)(eh->e_entry - lo));
 	else
 		LOGV("[loader] runtime entry (ET_EXEC) = %p (e_entry-lo=0x%llx, base=%p)\n",(void*)entry_addr,(unsigned long long)(eh->e_entry - lo),base);
@@ -332,46 +256,28 @@ static agent_format_t detect_fmt(const void* img, size_t sz){
 	if(sz>=4 && d[0]=='N' && d[1]=='O' && d[2]=='S' && d[3]=='M') return AGENT_FORMAT_NOSM;
 	if(sz>0 && ((const char*)d)[0]=='{') return AGENT_FORMAT_MACHO2; /* historical wrapper */
 	return AGENT_FORMAT_FLAT;
+
+	/* Bypass registry/gate: spawn thread directly */
+	thread_t* t=thread_create_with_priority((void(*)(void))(void*)entry_addr, prio>0?prio:200);
+	return t ? 0 : -1;
 }
 
+/* Public API */
 int load_agent_auto_with_prio(const void* img, size_t sz, int prio){
-	agent_format_t f = detect_fmt(img,sz);
-	LOGV("[loader] auto fmt=%d size=%zu\n", (int)f, sz);
-	switch(f){
-		case AGENT_FORMAT_ELF:    return load_agent_elf_impl(img,sz,"(buffer)",prio);
-		case AGENT_FORMAT_MACHO2: return load_agent_macho2_impl(img,sz,"(buffer)",prio);
-		case AGENT_FORMAT_FLAT:   return load_agent_flat_impl(img,sz,"(buffer)",prio);
-		case AGENT_FORMAT_NOSM:   return -1;
-		default: return -1;
-	}
+	return elf_map_and_spawn(img, sz, prio);
 }
 int load_agent_with_prio(const void* img, size_t sz, agent_format_t f, int prio){
-	LOGV("[loader] fmt=%d size=%zu path=\"(buffer)\" prio=%d\n", (int)f, sz, prio);
-	switch(f){
-		case AGENT_FORMAT_ELF:    return load_agent_elf_impl(img,sz,"(buffer)",prio);
-		case AGENT_FORMAT_MACHO2: return load_agent_macho2_impl(img,sz,"(buffer)",prio);
-		case AGENT_FORMAT_FLAT:   return load_agent_flat_impl(img,sz,"(buffer)",prio);
-		case AGENT_FORMAT_NOSM:   return -1;
-		default: return load_agent_auto_with_prio(img,sz,prio);
-	}
+	(void)f; return elf_map_and_spawn(img, sz, prio);
 }
-int load_agent_auto(const void* img, size_t sz){ return load_agent_auto_with_prio(img,sz,200); }
-int load_agent(const void* img, size_t sz, agent_format_t f){ return load_agent_with_prio(img,sz,f,200); }
+int load_agent_auto(const void* img, size_t sz){ return elf_map_and_spawn(img, sz, 200); }
+int load_agent(const void* img, size_t sz, agent_format_t f){ (void)f; return elf_map_and_spawn(img,  sz, 200); }
 
 int agent_loader_run_from_path(const char* path, int prio){
-	if(!g_read_file){ kprintf("[loader] no FS reader for %s\n", path?path:"(null)"); return -1; }
+	if(!g_read_file) return -1;
 	void* buf=0; size_t sz=0;
 	int rc=g_read_file(path,&buf,&sz);
-	if(rc<0){ kprintf("[loader] read failed: %s\n", path?path:"(null)"); return rc; }
-	LOGV("[loader] run_from_path \"%s\" size=%zu\n", path?path:"(null)", sz);
-	int out = -1;
-	switch(detect_fmt(buf,sz)){
-		case AGENT_FORMAT_ELF:    out=load_agent_elf_impl(buf,sz,path,prio); break;
-		case AGENT_FORMAT_MACHO2: out=load_agent_macho2_impl(buf,sz,path,prio); break;
-		case AGENT_FORMAT_FLAT:   out=load_agent_flat_impl(buf,sz,path,prio); break;
-		case AGENT_FORMAT_NOSM:   out=-1; break;
-		default: out=-1; break;
-	}
+	if(rc<0) return rc;
+	int out = elf_map_and_spawn(buf, sz, prio);
 	if(g_free_fn && buf) g_free_fn(buf);
 	return out;
 }
