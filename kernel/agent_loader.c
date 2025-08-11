@@ -287,7 +287,7 @@ static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int p
     serial_printf("[loader] entry first bytes: %02x %02x %02x %02x\n",
                   entry_ptr[0], entry_ptr[1], entry_ptr[2], entry_ptr[3]);
     serial_printf("[loader] dumping 64B around entry 0x%016lx\n", (unsigned long)runtime_entry);
-    hexdump_window(runtime_entry, entry_ptr, 0x20);
+    hexdump_window((const void*)runtime);
 
     // Inform the RegX security gate (if present)
     agent_gate_fn gate = agent_loader_get_gate();
