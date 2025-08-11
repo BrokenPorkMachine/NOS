@@ -127,8 +127,10 @@ void *buddy_alloc(uint32_t order, int preferred_node, int strict) {
         for (uint32_t o=order; o<=z->max_order; ++o) {
             if (z->free_list[o]) {
                 // Split down if necessary
-                while (o > order)
+                while (o > order) {
                     split_block(z, o-1);
+                    o--;
+                }
                 buddy_block_t *block = z->free_list[order];
                 if (!block) break; // Defensive (should not happen)
                 z->free_list[order] = block->next;
@@ -263,30 +265,33 @@ void buddy_init(const bootinfo_t *bootinfo) {
         z->frames = (z->length / PAGE_SIZE);
         if (z->frames == 0)
             continue;
-        z->max_order = PMM_BUDDY_MAX_ORDER;
-        z->free_frames = z->frames;
         z->lock = 0;
+        z->free_frames = z->frames;
+
+        // Determine the maximum order that fits entirely inside this zone.
+        uint32_t max_order = PMM_BUDDY_MAX_ORDER;
+        while (max_order > 0 && (1U << max_order) > z->frames)
+            max_order--;
+        z->max_order = max_order;
 
         size_t bm_bytes = BITMAP_SIZE(z->frames);
         z->bitmap = calloc(bm_bytes, 1);
 
-        // Mark all as free
+        // Clear all free lists
         for (uint32_t o = 0; o <= z->max_order; ++o)
             z->free_list[o] = NULL;
-        // Insert the entire region as a single large free block at max_order
-        uint32_t frames_this_order = (1U << z->max_order);
+
+        // Partition the zone into power-of-two blocks, largest first
         uint32_t frame = 0;
-        while (frame + frames_this_order <= z->frames) {
+        while (frame < z->frames) {
+            uint32_t remaining = z->frames - frame;
+            uint32_t o = z->max_order;
+            while ((1U << o) > remaining) o--;
+            while (frame & ((1U << o) - 1)) o--;
             buddy_block_t *blk = (buddy_block_t*)frame_to_addr(z, frame);
-            blk->next = z->free_list[z->max_order];
-            z->free_list[z->max_order] = blk;
-            frame += frames_this_order;
-        }
-        // Any leftover pages: break down to smaller blocks
-        for (; frame < z->frames; ++frame) {
-            buddy_block_t *blk = (buddy_block_t*)frame_to_addr(z, frame);
-            blk->next = z->free_list[0];
-            z->free_list[0] = blk;
+            blk->next = z->free_list[o];
+            z->free_list[o] = blk;
+            frame += (1U << o);
         }
     }
 }
