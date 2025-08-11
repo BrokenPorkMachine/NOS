@@ -164,16 +164,28 @@ int extract_manifest_macho2(const void *image,size_t size,char *out_json,size_t 
     return 0;
 }
 
-int extract_manifest_elf(const void *image,size_t size,char *out_json,size_t out_sz){
-    if(!image || !out_json || out_sz==0) return -1;
-    const unsigned char *d=(const unsigned char*)image;
-    const char *s=(const char*)memchr(d,'{',size);
-    if(!s) return -1;
-    size_t remain = size - (size_t)(s - (const char*)d);
-    const char *e=(const char*)memchr(s,'}',remain);
-    if(!e || e<=s || (size_t)(e-s+2)>out_sz) return -1;
-    memcpy(out_json,s,(size_t)(e-s+1));
-    out_json[e-s+1]=0;
+int extract_manifest_elf(const void *image,size_t size,
+                         char *out_json,size_t out_sz){
+    if (!image || !out_json || out_sz == 0) return -1;
+    const unsigned char *d = (const unsigned char *)image;
+
+    /*
+     * Older builds placed the manifest in a custom section which might not be
+     * the first '{' in the ELF file.  Searching for the first '{' caused random
+     * binary data to be treated as JSON and the real manifest to be missed.
+     * Instead, locate the "name" key and walk backwards to the start '{'.
+     */
+    const char *p = (const char *)memmem_local(d, size, "\"name\"", 6);
+    if (!p) return -1;
+    const char *s = p;
+    while (s > (const char *)d && *s != '{') s--;
+    if (*s != '{') return -1;
+
+    size_t remain = size - (size_t)(s - (const char *)d);
+    const char *e = (const char *)memchr(s, '}', remain);
+    if (!e || e <= s || (size_t)(e - s + 2) > out_sz) return -1;
+    memcpy(out_json, s, (size_t)(e - s + 1));
+    out_json[e - s + 1] = 0;
     return 0;
 }
 
