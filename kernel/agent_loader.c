@@ -180,33 +180,27 @@ static size_t apply_relocations_rela(uint8_t *load_base, uint64_t lo_for_exec,
 /* --------------------------------------------------------------------------------
  * Hex dump helpers
  * -------------------------------------------------------------------------------- */
-static void dump_bytes(const uint8_t *p, size_t len) {
-    static const char *hex = "0123456789abcdef";
-    for (size_t i = 0; i < len; i += 16) {
-        char line[80];
-        size_t off = 0;
-        off += snprintf(line + off, sizeof(line) - off, "[dump] %016lx : ", (unsigned long)(uintptr_t)(p + i));
-        for (size_t j = 0; j < 16; ++j) {
-            if (i + j < len) {
-                uint8_t b = p[i + j];
-                line[off++] = hex[(b >> 4) & 0xF];
-                line[off++] = hex[b & 0xF];
-                line[off++] = ' ';
-                if (off >= sizeof(line) - 4) break;
-            } else {
-                line[off++] = ' '; line[off++] = ' '; line[off++] = ' ';
-            }
+static void dump_bytes(uintptr_t addr, const uint8_t *p, size_t n) {
+#if VERBOSE
+    char line[96], hex[3*16+1], asc[17];
+    for (size_t i = 0; i < n; i += 16) {
+        size_t k = (n - i) < 16 ? (n - i) : 16;
+        for (size_t j = 0; j < k; ++j) {
+            unsigned v = p[i + j];
+            hex[3*j+0] = "0123456789abcdef"[v >> 4];
+            hex[3*j+1] = "0123456789abcdef"[v & 0xF];
+            hex[3*j+2] = ' ';
+            asc[j]     = (v >= 32 && v < 127) ? (char)v : '.';
         }
-        line[off++] = '|';
-        for (size_t j = 0; j < 16 && i + j < len; ++j) {
-            uint8_t c = p[i + j];
-            line[off++] = (c >= 32 && c < 127) ? (char)c : '.';
-        }
-        line[off++] = '|';
-        line[off++] = '\n';
-        line[off] = 0;
-        serial_puts(line);
+        hex[3*k] = 0; asc[k] = 0;
+
+        // build the whole line with snprintf, then emit with serial_puts (no variadics at call site)
+        int m = snprintf(line, sizeof(line),
+                         "[dump] %016lx : %s |%s|\r\n",
+                         (unsigned long)(addr + i), hex, asc);
+        if (m > 0) serial_puts(line);
     }
+#endif
 }
 static void hexdump_window(uintptr_t addr, const uint8_t *p, size_t prefix) {
     (void)addr; (void)prefix;
