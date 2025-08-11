@@ -1,10 +1,8 @@
-// kernel/agent_loader.c — SILENT patch IDT[6] + BYPASS loader + C trampoline
-// - No kprintf, no serial I/O, no regx/gate calls.
-// - Silently ensures IDT[6] (#UD) points to a valid 64-bit stub in kernel text.
-// - Maps ET_EXEC as PIE, applies RELATIVE RELA, spawns agent via trampoline
-//   that calls thread_exit() so it never falls off.
-//
-// Keep exported symbols consistent with agent_loader.h
+// kernel/agent_loader.c — SILENT patch IDT[6] + IDT[13] and BYPASS loader
+// - No printing/serial I/O and no regx/gate usage.
+// - Patches #UD and #GP handlers if they point to legacy low memory (0xA0000..0xFFFFF).
+// - Maps ELF ET_EXEC as PIE, applies RELATIVE RELA, spawns agent via a C trampoline
+//   that calls thread_exit() so it never returns into garbage.
 
 #include "agent_loader.h"
 #include "Task/thread.h"
@@ -29,7 +27,7 @@ struct __attribute__((packed)) idt_entry64 {
 	uint32_t zero;
 };
 
-/* Minimal UD handler stub: save/restore a few regs and iretq */
+/* Minimal #UD handler stub: saves/pops some regs then iretq (no error code) */
 __attribute__((naked)) void ud_safe_stub(void){
 	__asm__ __volatile__(
 		"push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
@@ -38,19 +36,27 @@ __attribute__((naked)) void ud_safe_stub(void){
 	);
 }
 
-static void ensure_ud_vector_safe(void){
+/* Minimal #GP handler stub: same, but consumes error code before iretq */
+__attribute__((naked)) void gp_safe_stub(void){
+	__asm__ __volatile__(
+		"push %rax; push %rcx; push %rdx; push %rsi; push %rdi; push %r8; push %r9; push %r10; push %r11;\n\t"
+		"pop %r11; pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi; pop %rdx; pop %rcx; pop %rax;\n\t"
+		"add $8, %rsp\n\t"   /* drop error code pushed by CPU for #GP */
+		"iretq\n\t"
+	);
+}
+
+static void ensure_vector_safe(int vec, void (*stub)(void)){
 	struct idt_desc64 idtr = {0};
 	__asm__ volatile("sidt %0" : "=m"(idtr));
 	if(!idtr.base) return;
-	if(idtr.limit + 1 < sizeof(struct idt_entry64)*7) return;
-
+	size_t need = (size_t)(vec+1) * sizeof(struct idt_entry64);
+	if((size_t)idtr.limit + 1 < need) return;
 	volatile struct idt_entry64* idt = (volatile struct idt_entry64*)(uintptr_t)idtr.base;
-	volatile struct idt_entry64 e6 = idt[6];
-	uint64_t off = ((uint64_t)e6.off_hi<<32) | ((uint64_t)e6.off_mid<<16) | e6.off_lo;
-
-	/* If handler lies in legacy low memory range, repoint to safe stub */
+	volatile struct idt_entry64 e = idt[vec];
+	uint64_t off = ((uint64_t)e.off_hi<<32) | ((uint64_t)e.off_mid<<16) | e.off_lo;
 	if(off>=0x00000000000A0000ULL && off<=0x00000000000FFFFFULL){
-		uint64_t h = (uint64_t)(uintptr_t)&ud_safe_stub;
+		uint64_t h = (uint64_t)(uintptr_t)stub;
 		uint16_t cs; __asm__ volatile("mov %%cs,%0":"=r"(cs));
 		struct idt_entry64 ne;
 		ne.off_lo   = (uint16_t)(h & 0xFFFF);
@@ -60,8 +66,14 @@ static void ensure_ud_vector_safe(void){
 		ne.off_mid  = (uint16_t)((h>>16)&0xFFFF);
 		ne.off_hi   = (uint32_t)((h>>32)&0xFFFFFFFF);
 		ne.zero     = 0;
-		idt[6] = ne;
+		idt[vec] = ne;
 	}
+}
+
+static void ensure_core_vectors_safe_once(void){
+	static int done=0; if(done) return; done=1;
+	ensure_vector_safe(6,  ud_safe_stub); /* #UD */
+	ensure_vector_safe(13, gp_safe_stub); /* #GP */
 }
 
 /* ===== Loader internals ===== */
@@ -171,8 +183,8 @@ static int elf_map_and_spawn(const void* img, size_t sz, int prio){
 	if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
 	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
 
-	/* Ensure #UD handler will not vector to legacy memory */
-	static int patched=0; if(!patched){ patched=1; ensure_ud_vector_safe(); }
+	/* Ensure #UD and #GP handlers won't vector to legacy memory */
+	ensure_core_vectors_safe_once();
 
 	/* Use a C trampoline so the entry can never return to garbage */
 	g_agent_entry = (agent_entry_t)(void*)entry_addr;
