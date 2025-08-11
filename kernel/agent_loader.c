@@ -297,8 +297,9 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
     char manifest[512];
     if (extract_manifest_elf(image, size, manifest, sizeof(manifest)) != 0) {
         /*
-         * If no embedded manifest is found, derive a minimal one from the
-         * path so agents without metadata can still launch (e.g. init).
+         * Missing manifest is only allowed for a single, trusted early
+         * bootstrap agent (init). Any other unmanifested ELF is rejected to
+         * avoid bypassing regx security.
          */
         char name[32] = {0};
         if (path) {
@@ -313,9 +314,15 @@ static int load_agent_elf_impl(const void *image,size_t size,const char *path,in
         } else {
             snprintf(name, sizeof(name), "elf");
         }
+
+        if (strcmp(name, "init") != 0) {
+            kfree(mem);
+            return -1;
+        }
+
         snprintf(manifest, sizeof(manifest),
-                 "{\"name\":\"%s\",\"type\":4,\"version\":\"0\"," \
-                 "\"entry\":\"agent_main\",\"capabilities\":\"\"}",
+                 "{\"name\":\"%s\",\"type\":4,\"version\":\"0\","
+                 "\"entry\":\"agent_main\",\"capabilities\":\"missing-manifest\"}",
                  name);
     }
 
