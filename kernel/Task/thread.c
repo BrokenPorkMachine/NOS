@@ -26,9 +26,9 @@ extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.
 
 #define THREAD_MAGIC 0x74687264UL
 
-// Exposed by linker script (n2.ld); fallback range used if absent
-extern char __text_start[];
-extern char __text_end[];
++// Optional linker symbols; mark weak so build succeeds if n2.ld doesn't export them.
++extern char __text_start[] __attribute__((weak));
++extern char __text_end[]   __attribute__((weak));
 
 extern void context_switch(uint64_t *prev_rsp, uint64_t next_rsp);
 
