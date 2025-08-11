@@ -1,8 +1,4 @@
-// kernel/agent_loader.c — BYPASS version (no regx/gate calls, no prints)
-// Adds a no-op agent_loader_set_gate() to satisfy link dependencies.
-//
-// This just maps ELF, applies RELATIVE relocs, and spawns the thread directly.
-
+// kernel/agent_loader.c — BYPASS + C trampoline (no regx/gate/logs)
 #include "agent_loader.h"
 #include "Task/thread.h"
 #include "VM/kheap.h"
@@ -21,6 +17,17 @@ void agent_loader_set_read(agent_read_file_fn r, agent_free_fn f){ g_read_file=r
 
 /* Provide a no-op gate setter to satisfy callers (e.g., regx.c) */
 void agent_loader_set_gate(agent_gate_fn g){ (void)g; /* bypass: no gate */ }
+
+/* Global to hand entry into trampoline (API has no arg) */
+static agent_entry_t g_agent_entry = 0;
+static void agent_trampoline(void){
+	agent_entry_t fn = g_agent_entry;
+	if(fn) fn();
+	/* Never return: halt forever */
+	for(;;){
+		__asm__ __volatile__("cli; hlt" ::: "memory");
+	}
+}
 
 /* 1 MiB arena fallback */
 #define AGENT_ARENA_SIZE (1<<20)
@@ -71,8 +78,8 @@ static void apply_relocations_rela(uint8_t* base, uint64_t lo, const Elf64_Ehdr*
 		}
 	}
 	(void)rela_ent;
-	(void)apply_relocations_rela_table(base, lo, rela, rela_sz);
-	(void)apply_relocations_rela_table(base, lo, jmprel, pltrel_sz);
+	(void)apply_relocations_rela_table(base, lo, rela,     rela_sz);
+	(void)apply_relocations_rela_table(base, lo, jmprel,   pltrel_sz);
 }
 
 static int elf_map_and_spawn(const void* img, size_t sz, int prio){
@@ -109,8 +116,9 @@ static int elf_map_and_spawn(const void* img, size_t sz, int prio){
 	if (eh->e_entry < lo || eh->e_entry >= hi) return -1;
 	uintptr_t entry_addr = (uintptr_t)(base + (eh->e_entry - lo));
 
-	/* Bypass registry/gate: spawn thread directly */
-	thread_t* t=thread_create_with_priority((void(*)(void))(void*)entry_addr, prio>0?prio:200);
+	/* Use a C trampoline so the entry can never return */
+	g_agent_entry = (agent_entry_t)(void*)entry_addr;
+	thread_t* t=thread_create_with_priority(agent_trampoline, prio>0?prio:200);
 	return t ? 0 : -1;
 }
 
