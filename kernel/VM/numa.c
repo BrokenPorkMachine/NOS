@@ -34,9 +34,9 @@ void numa_init(const bootinfo_t *bootinfo) {
         nodes[0].base = best_base;
         nodes[0].length = best_len;
         node_cnt = 1;
-    } else {
-        /* Fallback: treat first entry as a single region. */
-        nodes[0].base = 0;
+    } else if (bootinfo->mmap_entries) {
+        /* Fallback: use the first entry if no usable region was found. */
+        nodes[0].base = bootinfo->mmap[0].addr;
         nodes[0].length = bootinfo->mmap[0].len;
         node_cnt = 1;
     }
