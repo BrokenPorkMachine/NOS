@@ -6,7 +6,7 @@
 
 #include "elf.h"
 #include "agent_loader.h"
-#include "VM/kheap.h"
+#include "VM/heap.h"
 #include "drivers/IO/serial.h"
 
 // Some tree headers provide these; define minimally if missing.

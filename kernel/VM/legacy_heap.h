@@ -7,9 +7,10 @@
 extern "C" {
 #endif
 
-void *kalloc(size_t sz);
-void  kfree(void *ptr);
-void  kheap_init(void);
+void *legacy_kmalloc(size_t sz);
+void  legacy_kfree(void *ptr);
+void *legacy_krealloc(void *ptr, size_t newsz);
+void  legacy_kheap_init(void);
 
 #ifdef __cplusplus
 }

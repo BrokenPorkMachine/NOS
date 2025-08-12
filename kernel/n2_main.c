@@ -17,7 +17,7 @@
 #include "Task/thread.h"
 #include "VM/numa.h"
 #include "VM/pmm_buddy.h"
-#include "VM/kheap.h"
+#include "VM/heap.h"
 #include "arch/CPU/lapic.h"
 #include "uaccess.h"
 #include "symbols.h"
@@ -81,6 +81,7 @@ void n2_main(bootinfo_t *bootinfo) {
 
     numa_init(bootinfo);
     buddy_init(bootinfo);
+    kheap_parse_bootarg(bootinfo->cmdline);
     kheap_init();
 
     __asm__ volatile("cli");

@@ -7,8 +7,12 @@ OBJCOPY := $(CROSS_COMPILE)objcopy
 NASM    := nasm
 
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
-	  -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-	  -I include -I boot/include -I nosm -no-pie -fcf-protection=none
+          -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+          -I include -I boot/include -I nosm -no-pie -fcf-protection=none
+
+ifeq ($(CONFIG_NITRO_HEAP),1)
+CFLAGS += -DCONFIG_NITRO_HEAP=1
+endif
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 
 all: libc kernel boot disk.img
@@ -139,7 +143,10 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/VM/paging_adv.c -o kernel/VM/paging_adv.o
 	$(CC) $(CFLAGS) -c kernel/VM/cow.c -o kernel/VM/cow.o
 	$(CC) $(CFLAGS) -c kernel/VM/numa.c -o kernel/VM/numa.o
-	$(CC) $(CFLAGS) -c kernel/VM/kheap.c -o kernel/VM/kheap.o
+	$(CC) $(CFLAGS) -c kernel/VM/legacy_heap.c -o kernel/VM/legacy_heap.o
+	$(CC) $(CFLAGS) -c kernel/VM/heap_select.c -o kernel/VM/heap_select.o
+	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/nitroheap.c -o kernel/VM/nitroheap/nitroheap.o
+	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/classes.c -o kernel/VM/nitroheap/classes.o
 	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
 	$(CC) $(CFLAGS) -c kernel/nosfs_pub.c -o kernel/nosfs_pub.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader_pub.c -o kernel/agent_loader_pub.o
@@ -147,7 +154,9 @@ kernel: libc agents bins
 	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o \
 	    kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
-	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o \
+            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
+            kernel/VM/heap_select.o kernel/VM/legacy_heap.o \
+            kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o kernel/uaccess.o \
 	    kernel/proc_launch.o kernel/trap.o kernel/symbols.o \
 	    kernel/arch/idt_guard.o \
 	    kernel/nosfs_pub.o \
@@ -191,7 +200,9 @@ clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
 	    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o \
 	    kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
-	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o kernel/VM/kheap.o kernel/uaccess.o kernel/proc_launch.o kernel/trap.o \
+            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
+            kernel/VM/heap_select.o kernel/VM/legacy_heap.o kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o \
+            kernel/uaccess.o kernel/proc_launch.o kernel/trap.o \
 	    kernel/symbols.o kernel/arch/idt_guard.o \
 	    $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_MO2) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
 	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
