@@ -79,7 +79,8 @@ static int map_segment_paged(const uint8_t* file, size_t file_sz,
     if (mem_sz > f_sz) memset((uint8_t*)base + f_sz, 0, (size_t)(mem_sz - f_sz));
 
     vmm_prot(base, map_sz, prot_from_flags(flags));
-    if (out_va) *out_va = base; if (out_sz) *out_sz = map_sz;
+    if (out_va) *out_va = base; 
+    if (out_sz) *out_sz = map_sz;
     return 0;
 }
 
