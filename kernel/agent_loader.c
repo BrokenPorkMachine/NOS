@@ -80,11 +80,11 @@ static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
 }
 
 /* Optional tiny JSON helpers kept for future manifest usage (currently unused). */
-static int json_get_str(const char *json, const char *key, char *out, size_t osz) {
+__attribute__((unused)) static int json_get_str(const char *json, const char *key, char *out, size_t osz) {
     (void)json; (void)key; (void)out; (void)osz;
     return -1;
 }
-static int json_get_int(const char *json, const char *key, long *out) {
+__attribute__((unused)) static int json_get_int(const char *json, const char *key, long *out) {
     (void)json; (void)key; (void)out;
     return -1;
 }
