@@ -158,6 +158,9 @@ endif
 	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
 	$(CC) $(CFLAGS) -c kernel/nosfs_pub.c -o kernel/nosfs_pub.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader_pub.c -o kernel/agent_loader_pub.o
+	$(CC) $(CFLAGS) -c kernel/loader_vm_pmm_shims.c -o kernel/loader_vm_pmm_shims.o
+	$(CC) $(CFLAGS) -c regx/regx_launch_adapters.c -o regx/regx_launch_adapters.o
+	
 
 	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o \
@@ -177,6 +180,10 @@ endif
 	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
 	    user/libc/libc.o \
 	    $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o,) \
+		# link (near the other kernel objects)
+	    kernel/loader_vm_pmm_shims.o \
+    	regx/regx_launch_adapters.o \
+	
 	    -o kernel.bin
 
 	cp kernel.bin n2.bin
