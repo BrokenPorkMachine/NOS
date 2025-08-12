@@ -1,0 +1,27 @@
+// regx/regx_launch_adapters.c
+// Adapts to your thread/stack APIs so regx_launch_elf_paged links cleanly.
+
+#include <stddef.h>
+#include <stdint.h>
+
+// ====== EDIT THESE externs to match your kernel ======
+// Create a user-mode stack, return top-of-stack (or pointer your thread API expects)
+extern void* proc_create_user_stack(size_t size);
+// Spawn a user thread at RIP with given stack top & prio; returns 0 on success
+extern int   thread_spawn_user(uintptr_t rip, void* user_stack_top, uint32_t prio, uint32_t* out_tid);
+// Logging utility
+extern void  klogf(const char* fmt, ...);
+
+// ====== Adapters with the names regx_launch_elf_paged.c expects ======
+void*  create_user_stack(size_t sz) { return proc_create_user_stack(sz); }
+int    thread_spawn(uintptr_t rip, void* user_stack_top, uint32_t prio, uint32_t* out_tid) {
+    return thread_spawn_user(rip, user_stack_top, prio, out_tid);
+}
+void   log(const char* fmt, ...) {
+    // Forward to klogf variadically
+    __builtin_va_list ap; __builtin_va_start(ap, fmt);
+    // If you have vprintf-like, use it; otherwise, provide a small vsnprintf bridge.
+    // For now, call klogf (assumes it handles varargs).
+    klogf(fmt, ap);
+    __builtin_va_end(ap);
+}
