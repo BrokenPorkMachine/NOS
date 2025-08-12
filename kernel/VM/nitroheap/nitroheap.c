@@ -42,6 +42,9 @@ typedef struct {
 } nh_class_state_t;
 static nh_class_state_t nh_classes[NH_CLASS_LIMIT];
 
+#define NH_LARGE_ORDERS 32
+static nh_free_node_t* nh_large_freelists[NH_LARGE_ORDERS];
+
 static void nh_remove_span_blocks(nh_class_state_t* cs, nh_span_t* sp) {
     nh_free_node_t** cur = &cs->freelist;
     while (*cur) {
@@ -109,6 +112,7 @@ static nh_span_t* nh_alloc_span(int cls) {
 
 void nitroheap_init(void) {
     memset(nh_classes, 0, sizeof(nh_class_state_t) * NH_CLASS_LIMIT);
+    memset(nh_large_freelists, 0, sizeof(nh_large_freelists));
 }
 
 void* nitro_kmalloc(size_t sz, size_t align) {
@@ -119,8 +123,15 @@ void* nitro_kmalloc(size_t sz, size_t align) {
         uint32_t order = 0;
         size_t min_align = align ? align : 1;
         while (alloc_bytes < total || alloc_bytes < min_align) { alloc_bytes <<= 1; order++; }
-        nh_block_header_t* bh = buddy_alloc(order, 0, 0);
-        if (!bh) return NULL;
+        nh_block_header_t* bh;
+        if (order < NH_LARGE_ORDERS && nh_large_freelists[order]) {
+            nh_free_node_t* n = nh_large_freelists[order];
+            nh_large_freelists[order] = n->next;
+            bh = ((nh_block_header_t*)n) - 1;
+        } else {
+            bh = buddy_alloc(order, 0, 0);
+            if (!bh) return NULL;
+        }
         bh->span = NULL;
         bh->size = sz;
         bh->order = order;
@@ -154,7 +165,13 @@ void nitro_kfree(void* p) {
     if (!p) return;
     nh_block_header_t* bh = ((nh_block_header_t*)p) - 1;
     if (!bh->span) {
-        buddy_free(bh, bh->order, 0);
+        if (bh->order < NH_LARGE_ORDERS) {
+            nh_free_node_t* node = (nh_free_node_t*)p;
+            node->next = nh_large_freelists[bh->order];
+            nh_large_freelists[bh->order] = node;
+        } else {
+            buddy_free(bh, bh->order, 0);
+        }
         return;
     }
     nh_class_state_t* cs = &nh_classes[bh->span->class_idx];
@@ -243,6 +260,15 @@ void nitro_kheap_trim(void) {
             }
             sp = next;
         }
+    }
+    for (size_t o = 0; o < NH_LARGE_ORDERS; ++o) {
+        nh_free_node_t* n = nh_large_freelists[o];
+        while (n) {
+            nh_free_node_t* next = n->next;
+            buddy_free(((nh_block_header_t*)n) - 1, o, 0);
+            n = next;
+        }
+        nh_large_freelists[o] = NULL;
     }
 }
 
