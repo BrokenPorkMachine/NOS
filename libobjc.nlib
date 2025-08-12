@@ -1,0 +1,303 @@
+// NitrOS Objective‑C Runtime (libobjc_nitros) — v0 minimal
+// Goals
+// - Enough runtime to compile + run small Objective‑C 2.0 programs on NitrOS
+// - ARC-compatible entry points (retain/release/autorelease, simple autorelease pool)
+// - Selector interning, class registry, method lookup with a tiny cache
+// - objc_msgSend (generic/slow C version), class creation/registration
+// - NSObject base class, example Hello.m
+// - No exceptions, no weak references, no categories/protocols (add later)
+// - No dynamic library dependencies; compatible with your dyld2 / MO2 format
+//
+// Build sketch (hosted clang targeting your toolchain objects):
+//   clang -fobjc-arc -fno-objc-exceptions -fblocks \
+//         -Iinclude -c src/objc_runtime.c -o objc_runtime.o2
+//   clang -fobjc-arc -fno-objc-exceptions -fblocks \
+//         -Iinclude -c src/NSObject.m -o NSObject.o2
+//   clang -fobjc-arc -fno-objc-exceptions -fblocks \
+//         -Iinclude -c examples/Hello.m -o Hello.o2
+//   mo2ld -pie Hello.o2 NSObject.o2 objc_runtime.o2 -o Hello.mo2
+//
+// =====================================================================================
+// include/objc_nitros.h — public runtime API for the compiler and user code
+// =====================================================================================
+#ifndef OBJC_NITROS_H
+#define OBJC_NITROS_H
+#include <stdint.h>
+#include <stdarg.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct objc_class *Class;
+typedef struct objc_object *id;
+typedef const struct objc_selector *SEL;
+typedef id (*IMP)(id, SEL, ...);
+
+#ifndef nil
+#define nil ((id)0)
+#endif
+
+// Core API used by compiler/emitted code
+SEL   sel_registerName(const char *name);
+const char* sel_getName(SEL sel);
+Class objc_getClass(const char *name);
+Class objc_allocateClassPair(Class superclass, const char *name, size_t extraBytes);
+void  objc_registerClassPair(Class cls);
+int   class_addMethod(Class cls, SEL name, IMP imp, const char *types);
+IMP   class_getMethodImplementation(Class cls, SEL name);
+
+// ARC hooks (minimal)
+id    objc_retain(id obj);
+void  objc_release(id obj);
+id    objc_autorelease(id obj);
+void* objc_autoreleasePoolPush(void);
+void  objc_autoreleasePoolPop(void *pool);
+
+// Generic message sends (slow C versions)
+id    objc_msgSend(id self, SEL _cmd, ...);
+
+// NSObject layout
+struct objc_object { Class isa; };
+
+#ifdef __cplusplus
+}
+#endif
+#endif // OBJC_NITROS_H
+
+// =====================================================================================
+// include/objc_private.h — internal structures
+// =====================================================================================
+#ifndef OBJC_PRIVATE_H
+#define OBJC_PRIVATE_H
+#include "objc_nitros.h"
+
+#define OBJC_METHOD_CACHE_BUCKETS 64
+
+typedef struct method {
+    SEL name;
+    const char *types; // simplified encoding; not parsed in v0
+    IMP imp;
+} method_t;
+
+typedef struct method_list {
+    uint32_t count;
+    method_t *methods; // heap array
+} method_list_t;
+
+typedef struct cache_bucket { SEL key; IMP imp; } cache_bucket_t;
+
+typedef struct method_cache { cache_bucket_t b[OBJC_METHOD_CACHE_BUCKETS]; } method_cache_t;
+
+struct objc_class {
+    struct objc_class *isa;         // meta-class for class objects
+    struct objc_class *superclass;  // nil for root
+    const char *name;
+    uint32_t instanceSize;          // bytes
+    method_list_t methods;          // instance methods
+    method_cache_t cache;           // direct-mapped cache
+};
+
+// Selector
+struct objc_selector { const char *name; uint32_t hash; };
+
+// Simple registry node
+typedef struct cls_node { Class cls; struct cls_node *next; } cls_node_t;
+
+typedef struct sel_node { SEL sel; struct sel_node *next; } sel_node_t;
+
+#endif
+
+// =====================================================================================
+// src/objc_runtime.c — implementation
+// =====================================================================================
+#include "../include/objc_private.h"
+#include <stdlib.h>
+#include <string.h>
+
+// ---------- basic hashing ----------
+static uint32_t djb2(const char *s){ uint32_t h=5381; int c; while((c=*s++)) h=((h<<5)+h)^c; return h; }
+
+// ---------- registries ----------
+static cls_node_t *g_classes = 0;       // linked list of classes
+static sel_node_t *g_selectors = 0;     // linked list of selectors
+static struct objc_class g_MetaClass;   // shared meta for root
+
+// Autorelease pool (single-thread v0)
+#define POOL_MAX 1024
+static id g_pool[POOL_MAX];
+static int g_pool_top = 0;
+
+// ---------- selector API ----------
+SEL sel_registerName(const char *name){
+    if(!name) return 0; uint32_t h = djb2(name);
+    for(sel_node_t *n=g_selectors;n;n=n->next){ if(n->sel->hash==h && strcmp(n->sel->name,name)==0) return n->sel; }
+    SEL s = (SEL)malloc(sizeof(*s)); if(!s) return 0; ((struct objc_selector*)s)->name = strdup(name); ((struct objc_selector*)s)->hash = h;
+    sel_node_t *node=(sel_node_t*)malloc(sizeof(*node)); node->sel=s; node->next=g_selectors; g_selectors=node; return s;
+}
+const char* sel_getName(SEL sel){ return sel? sel->name : "<null>"; }
+
+// ---------- class registry ----------
+static void class_cache_insert(method_cache_t *c, SEL k, IMP v){
+    uint32_t i = k->hash & (OBJC_METHOD_CACHE_BUCKETS-1);
+    c->b[i].key=k; c->b[i].imp=v;
+}
+static IMP class_cache_lookup(method_cache_t *c, SEL k){
+    uint32_t i = k->hash & (OBJC_METHOD_CACHE_BUCKETS-1);
+    return (c->b[i].key==k)? c->b[i].imp : 0;
+}
+
+Class objc_allocateClassPair(Class superclass, const char *name, size_t extraBytes){
+    (void)extraBytes; if(!name) return 0;
+    Class cls = (Class)calloc(1, sizeof(*cls)); if(!cls) return 0; cls->name=strdup(name);
+    cls->superclass = superclass; cls->instanceSize = superclass? superclass->instanceSize : sizeof(struct objc_object);
+    // meta-class: for v0, share one global meta for all classes (no class methods yet)
+    if(!g_MetaClass.name){ g_MetaClass.name = "<meta>"; g_MetaClass.instanceSize = sizeof(struct objc_class); }
+    cls->isa = &g_MetaClass; return cls;
+}
+
+void objc_registerClassPair(Class cls){
+    if(!cls) return; cls_node_t *n=(cls_node_t*)malloc(sizeof(*n)); n->cls=cls; n->next=g_classes; g_classes=n;
+}
+
+Class objc_getClass(const char *name){
+    for(cls_node_t*n=g_classes;n;n=n->next){ if(strcmp(n->cls->name,name)==0) return n->cls; } return 0;
+}
+
+int class_addMethod(Class cls, SEL name, IMP imp, const char *types){
+    if(!cls||!name||!imp) return 0; uint32_t count = cls->methods.count;
+    method_t *newv = (method_t*)realloc(cls->methods.methods, (count+1)*sizeof(method_t)); if(!newv) return 0;
+    cls->methods.methods=newv; cls->methods.methods[count].name=name; cls->methods.methods[count].imp=imp; cls->methods.methods[count].types=types?types:""; cls->methods.count=count+1;
+    class_cache_insert(&cls->cache, name, imp); // warm cache
+    return 1;
+}
+
+IMP class_getMethodImplementation(Class cls, SEL name){
+    if(!cls||!name) return 0; IMP imp=class_cache_lookup(&cls->cache,name); if(imp) return imp;
+    for(Class c=cls; c; c=c->superclass){
+        for(uint32_t i=0;i<c->methods.count;i++){
+            if(c->methods.methods[i].name==name){ IMP v=c->methods.methods[i].imp; class_cache_insert(&cls->cache,name,v); return v; }
+        }
+    }
+    return 0; // method not found
+}
+
+// ---------- ARC: retain/release/autorelease ----------
+// v0 uses naive refcount stored in a side table (hash map) to keep object layout clean
+
+typedef struct rc_ent{ id key; uint32_t rc; struct rc_ent* next; } rc_ent;
+static rc_ent* g_rc[256];
+static uint32_t hptr(id p){ uintptr_t u=(uintptr_t)p; return (uint32_t)((u>>4) & 255); }
+
+static uint32_t rc_get(id o){ rc_ent*e; for(e=g_rc[hptr(o)]; e; e=e->next) if(e->key==o) return e->rc; return 0; }
+static void rc_set(id o, uint32_t v){ uint32_t i=hptr(o); rc_ent*e; for(e=g_rc[i]; e; e=e->next) if(e->key==o){ e->rc=v; return; } e=(rc_ent*)malloc(sizeof(*e)); e->key=o; e->rc=v; e->next=g_rc[i]; g_rc[i]=e; }
+
+id objc_retain(id obj){ if(!obj) return obj; uint32_t v=rc_get(obj); rc_set(obj,v+1); return obj; }
+void objc_release(id obj){ if(!obj) return; uint32_t v=rc_get(obj); if(v>1){ rc_set(obj,v-1); return; } /* v<=1 -> dealloc */
+    // call -dealloc if present
+    Class cls = *((Class*)obj); SEL s = sel_registerName("dealloc"); IMP imp = class_getMethodImplementation(cls,s); if(imp){ imp(obj,s); }
+    // free object memory (assume malloc-based alloc)
+    free(obj);
+}
+id objc_autorelease(id obj){ if(!obj) return obj; if(g_pool_top<POOL_MAX) g_pool[g_pool_top++]=obj; return obj; }
+void* objc_autoreleasePoolPush(void){ int* mark=(int*)malloc(sizeof(int)); *mark=g_pool_top; return mark; }
+void  objc_autoreleasePoolPop(void* pool){ if(!pool) return; int mark=*(int*)pool; while(g_pool_top>mark){ id o=g_pool[--g_pool_top]; objc_release(o); } free(pool); }
+
+// ---------- objc_msgSend ----------
+id objc_msgSend(id self, SEL _cmd, ...){
+    if(!self||!_cmd) return 0; Class cls = *((Class*)self); IMP imp = class_getMethodImplementation(cls,_cmd);
+    if(!imp){ /* doesNotRecognizeSelector */ return 0; }
+    // Tail-call through IMP. We cannot portably forward varargs; but Clang will type-check calls.
+    // We cast IMP back to a varargs fn and forward the va_list by reloading from the caller's stack.
+    // This is undefined but works for simple cases; for real speed/ABI, provide arch asm stubs later.
+    typedef id (*VIMP)(id, SEL, ...);
+    VIMP f = (VIMP)imp;
+    va_list ap; va_start(ap, _cmd); // not actually used here; just keep prototype sane
+    va_end(ap);
+    return f(self, _cmd);
+}
+
+// =====================================================================================
+// src/NSObject.m — base class
+// =====================================================================================
+#include "../include/objc_nitros.h"
+#include <stdlib.h>
+#include <string.h>
+
+// Forward declarations of ivar-less object allocation; we piggyback on malloc.
+static id nsobject_alloc(id self, SEL _cmd){
+    (void)_cmd; Class cls = *(Class*)self; id obj = (id)malloc(cls->instanceSize); if(!obj) return nil; *(Class*)obj = cls; return objc_retain(obj); }
+static id nsobject_init(id self, SEL _cmd){ (void)_cmd; return self; }
+static void nsobject_dealloc(id self, SEL _cmd){ (void)_cmd; /* subclasses free resources; base does nothing */ }
+
+// Class object for NSObject
+static struct objc_class g_NSObjectClass;
+
+__attribute__((constructor)) static void objc_bootstrap_NSObject(void){
+    // Create root class
+    Class cls = &g_NSObjectClass; memset(cls,0,sizeof(*cls));
+    cls->name = "NSObject"; cls->instanceSize = sizeof(struct objc_object);
+    cls->isa = (Class)cls; /* simple self-meta for root in v0 */
+    objc_registerClassPair(cls);
+
+    // Methods
+    SEL s_alloc = sel_registerName("alloc");
+    SEL s_init  = sel_registerName("init");
+    SEL s_dealloc = sel_registerName("dealloc");
+    class_addMethod(cls, s_alloc, (IMP)nsobject_alloc, "@@:");
+    class_addMethod(cls, s_init,  (IMP)nsobject_init,  "@@:");
+    class_addMethod(cls, s_dealloc,(IMP)nsobject_dealloc, "v@:");
+}
+
+// =====================================================================================
+// examples/Hello.m — sample program using the runtime
+// =====================================================================================
+#include "../include/objc_nitros.h"
+#include <stdint.h>
+
+// Simple puts from AgentAPI will be wired later; here we assume a symbol:
+extern void nitros_puts(const char*);
+
+@interface Greeter : NSObject
+- (void)say;
+@end
+
+static id Greeter_say(id self, SEL _cmd){ (void)self;(void)_cmd; nitros_puts("Hello from Objective‑C on NitrOS!\n"); return self; }
+
+static struct objc_class GreeterClass;
+__attribute__((constructor)) static void build_Greeter(void){
+    Class super = objc_getClass("NSObject");
+    Class cls = &GreeterClass; memset(cls,0,sizeof(*cls)); cls->name="Greeter"; cls->superclass=super; cls->instanceSize=super?super->instanceSize:sizeof(struct objc_object); cls->isa=super?super->isa:cls; objc_registerClassPair(cls);
+    class_addMethod(cls, sel_registerName("say"), (IMP)Greeter_say, "v@:");
+}
+
+int main(int argc, const char** argv){ (void)argc;(void)argv;
+    void* pool = objc_autoreleasePoolPush();
+    Class Greeter = objc_getClass("Greeter");
+    id tmp = (id)&GreeterClass; // stand-in to send +alloc to class object
+    id g = objc_msgSend(tmp, sel_registerName("alloc"));
+    g = objc_msgSend(g, sel_registerName("init"));
+    objc_msgSend(g, sel_registerName("say"));
+    objc_release(g);
+    objc_autoreleasePoolPop(pool);
+    return 0;
+}
+
+// =====================================================================================
+// Wiring to NitrOS: provide nitros_puts, or bridge to your AgentAPI
+// =====================================================================================
+// In your runtime shim (linked into Hello.mo2), export:
+//   void nitros_puts(const char* s) { if (G && G->puts) G->puts(s); }
+// or link against a tiny support lib that knows AgentAPI.
+
+// =====================================================================================
+// Next steps (suggested roadmap)
+// =====================================================================================
+// 1) Replace the generic C objc_msgSend with arch-specific asm stubs for x86_64 and arm64
+//    to properly forward arguments (float, struct returns, etc.).
+// 2) Add categories & protocols and merge method lists at class registration.
+// 3) Add ivar layout, +allocWithZone:, object_copy, and class_createInstance with extra bytes.
+// 4) Implement weak references + zeroing (ARC requires runtime hooks; can stub initially).
+// 5) Blocks support: implement _Block_copy/_Block_release and a simple libclosure.
+// 6) Exceptions (later): start with -fno-objc-exceptions; add DWARF EH only when your toolchain is ready.
+// 7) Foundation-lite: NSString, NSArray backed by your libc/malloc; or interop with your existing C APIs.
