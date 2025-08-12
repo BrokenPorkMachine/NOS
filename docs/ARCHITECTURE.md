@@ -99,6 +99,34 @@ typedef struct {
 } nosfs_superblock_t;
 ```
 
+## Memory Management
+
+The N2 kernel relies on a two-tiered memory system. A physical memory manager
+initializes from the UEFI map and hands out frames via a buddy allocator, while
+the virtual memory manager builds per-task page tables with NX, SMEP and SMAP
+protection. 4 KiB and 2 MiB pages are mixed to balance granularity with TLB
+pressure. Copy‑on‑write and NUMA‑aware placement are planned to support large
+multi-socket machines. See [MEMORY_MANAGEMENT.md](MEMORY_MANAGEMENT.md) for the
+full design.
+
+## CPU Handling and Caches
+
+CPUs are enumerated through ACPI and `CPUID` and brought online with the local
+APIC. Each core maintains its own scheduler data and per‑CPU structure. Memory
+operations use explicit barriers and shootdowns to keep caches coherent; TLBs
+are flushed on context switches and inter‑processor interrupts coordinate page
+table updates. Future revisions will explore cache coloring and non‑temporal
+loads for IO‑heavy agents.
+
+## Threading & Tasking
+
+Threads run inside task address spaces managed by the scheduler. Each CPU has a
+run queue with round‑robin time slicing, and tasks may spawn multiple threads
+that share an IPC mail box. Context switches save and restore full register
+state, including FPU and SIMD units. Priorities and more advanced policies such
+as affinity or fair scheduling are planned. Additional details live in
+[CPU_THREADING_TASKING.md](CPU_THREADING_TASKING.md).
+
 ## System Calls & Tools
 
 The kernel exposes a small syscall surface that userland tools build upon.
