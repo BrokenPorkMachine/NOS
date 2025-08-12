@@ -8,7 +8,8 @@ NASM    := nasm
 
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
           -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-          -I include -I boot/include -I nosm -no-pie -fcf-protection=none
+          -I include -I boot/include -I nosm -I loader -I src/agents/regx \
+          -no-pie -fcf-protection=none
 
 ifeq ($(CONFIG_NITRO_HEAP),1)
 CFLAGS += -DCONFIG_NITRO_HEAP=1
@@ -104,6 +105,13 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
 	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
 	$(CC) $(CFLAGS) -c kernel/trap.c -o kernel/trap.o
+	# New: page-mapped ELF loader + regx glue
+	$(CC) $(CFLAGS) -c loader/elf_paged_loader.c -o loader/elf_paged_loader.o
+	$(CC) $(CFLAGS) -c src/agents/regx/regx_launch_elf_paged.c -o src/agents/regx/regx_launch_elf_paged.o
+	# Optional (diagnostics) if present:
+ifneq ($(wildcard kernel/arch/ud_handler_patch.c),)
+	$(CC) $(CFLAGS) -c kernel/arch/ud_handler_patch.c -o kernel/arch/ud_handler_patch.o
+endif
 	$(CC) $(CFLAGS) -c kernel/symbols.c -o kernel/symbols.o
 	$(CC) $(CFLAGS) -c kernel/uaccess.c -o kernel/uaccess.o
 	$(CC) $(CFLAGS) -c kernel/proc_launch.c -o kernel/proc_launch.o
@@ -159,14 +167,17 @@ kernel: libc agents bins
             kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o kernel/uaccess.o \
 	    kernel/proc_launch.o kernel/trap.o kernel/symbols.o \
 	    kernel/arch/idt_guard.o \
+	    loader/elf_paged_loader.o \
+	    src/agents/regx/regx_launch_elf_paged.o \
 	    kernel/nosfs_pub.o \
 	    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
 	    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
 	    nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o \
 	    nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
 	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
-	    user/libc/libc.o -o kernel.bin
-
+	    user/libc/libc.o \
+	    $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o,) \
+	    -o kernel.bin
 
 	cp kernel.bin n2.bin
 
@@ -212,7 +223,9 @@ clean:
 	    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
 	    nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
 	    nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2 \
-	    kernel/login_bin.h
+	    kernel/login_bin.h \
+	    loader/elf_paged_loader.o src/agents/regx/regx_launch_elf_paged.o \
+	    kernel/arch/ud_handler_patch.o
 	rm -rf out
 	make -C boot clean
 
