@@ -48,7 +48,7 @@ test_thread: unit/test_thread.c ../kernel/Task/thread.c thread_test_stubs.c $(fi
 	$(CC) $(CFLAGS) -DUNIT_TEST $^ -Wl,--gc-sections -o $@
 
 test_nitroheap: unit/test_nitroheap.c ../kernel/VM/nitroheap/nitroheap.c \
-../kernel/VM/nitroheap/classes.c legacy_heap_stub.c $(LIBC_SRC)
+../kernel/VM/nitroheap/classes.c buddy_stub.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:

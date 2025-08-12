@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "../../kernel/VM/nitroheap/nitroheap.h"
 
-extern int legacy_allocs;
+extern int buddy_allocs;
 void smp_stub_set_cpu_index(uint32_t idx);
 
 int main(void) {
@@ -34,7 +34,7 @@ int main(void) {
     nitro_kfree(c);
     nitro_kfree(hold);
 
-    // Test realloc and large allocation fallback
+    // Test realloc and large allocation path
     void* p = nitro_kmalloc(5000, 8); // larger than any size class
     assert(p);
     p = nitro_krealloc(p, 8000, 8);
@@ -42,7 +42,7 @@ int main(void) {
     nitro_kfree(p);
 
     nitro_kheap_trim();
-    assert(legacy_allocs == 0);
+    assert(buddy_allocs == 0);
     printf("nitroheap unit tests passed\n");
     return 0;
 }

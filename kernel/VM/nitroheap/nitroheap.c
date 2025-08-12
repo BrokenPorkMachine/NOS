@@ -1,23 +1,25 @@
 #include "nitroheap.h"
 #include "classes.h"
-#include "../legacy_heap.h"
+#include "../pmm_buddy.h"
 #include "../../arch/CPU/smp.h"
 #include <string.h>
 #include <printf.h>
 
 // Simple production-ready NitroHeap implementation.
-// Provides size-class-based caching on top of legacy buddy allocator.
+// Provides size-class-based caching directly atop the buddy allocator.
 
 typedef struct nh_span {
     struct nh_span* next;
     int class_idx;
     size_t total_blocks;
     size_t free_blocks;
+    uint32_t order;      // buddy order used to allocate this span
 } nh_span_t;
 
 typedef struct nh_block_header {
     nh_span_t* span;   // NULL for big allocations
     size_t     size;   // class size or big allocation size
+    uint32_t   order;  // buddy order for big allocations
 } nh_block_header_t;
 
 typedef struct nh_free_node {
@@ -67,19 +69,27 @@ static void nh_remove_span_blocks(nh_class_state_t* cs, nh_span_t* sp) {
 static nh_span_t* nh_alloc_span(int cls) {
     nh_class_state_t* cs = &nh_classes[cls];
     size_t bsz = nh_size_classes[cls].size;
-    size_t span_bytes = 4096;
-    size_t blocks = (span_bytes - sizeof(nh_span_t)) / (bsz + sizeof(nh_block_header_t));
+    size_t block_sz = sizeof(nh_block_header_t) + bsz;
+    size_t span_bytes = PAGE_SIZE;
+    size_t blocks = (span_bytes - sizeof(nh_span_t)) / block_sz;
     if (blocks == 0) {
         blocks = 1;
-        span_bytes = sizeof(nh_span_t) + sizeof(nh_block_header_t) + bsz;
+        span_bytes = sizeof(nh_span_t) + block_sz;
     } else {
-        span_bytes = sizeof(nh_span_t) + blocks*(sizeof(nh_block_header_t)+bsz);
+        span_bytes = sizeof(nh_span_t) + blocks * block_sz;
     }
-    nh_span_t* sp = legacy_kmalloc(span_bytes);
+
+    uint32_t order = 0;
+    size_t alloc_bytes = PAGE_SIZE;
+    while (alloc_bytes < span_bytes) { alloc_bytes <<= 1; order++; }
+    nh_span_t* sp = buddy_alloc(order, 0, 0);
     if (!sp) return NULL;
+    sp->order = order;
     sp->next = cs->spans;
     cs->spans = sp;
     sp->class_idx = cls;
+    // use full allocation
+    blocks = (alloc_bytes - sizeof(nh_span_t)) / block_sz;
     sp->total_blocks = blocks;
     sp->free_blocks = blocks;
 
@@ -88,10 +98,11 @@ static nh_span_t* nh_alloc_span(int cls) {
         nh_block_header_t* bh = (nh_block_header_t*)ptr;
         bh->span = sp;
         bh->size = bsz;
+        bh->order = 0;
         nh_free_node_t* node = (nh_free_node_t*)(bh + 1);
         node->next = cs->freelist;
         cs->freelist = node;
-        ptr += sizeof(nh_block_header_t) + bsz;
+        ptr += block_sz;
     }
     return sp;
 }
@@ -104,10 +115,15 @@ void* nitro_kmalloc(size_t sz, size_t align) {
     int cls = size_class_for(sz, align);
     if (cls < 0) {
         size_t total = sizeof(nh_block_header_t) + sz;
-        nh_block_header_t* bh = legacy_kmalloc(total);
+        size_t alloc_bytes = PAGE_SIZE;
+        uint32_t order = 0;
+        size_t min_align = align ? align : 1;
+        while (alloc_bytes < total || alloc_bytes < min_align) { alloc_bytes <<= 1; order++; }
+        nh_block_header_t* bh = buddy_alloc(order, 0, 0);
         if (!bh) return NULL;
         bh->span = NULL;
         bh->size = sz;
+        bh->order = order;
         return bh + 1;
     }
 
@@ -138,7 +154,7 @@ void nitro_kfree(void* p) {
     if (!p) return;
     nh_block_header_t* bh = ((nh_block_header_t*)p) - 1;
     if (!bh->span) {
-        legacy_kfree(bh);
+        buddy_free(bh, bh->order, 0);
         return;
     }
     nh_class_state_t* cs = &nh_classes[bh->span->class_idx];
@@ -164,7 +180,7 @@ void nitro_kfree(void* p) {
         nh_span_t** cur = &cs->spans;
         while (*cur && *cur != bh->span) cur = &(*cur)->next;
         if (*cur == bh->span) *cur = bh->span->next;
-        legacy_kfree(bh->span);
+        buddy_free(bh->span, bh->span->order, 0);
     }
 }
 
@@ -174,11 +190,14 @@ void* nitro_krealloc(void* p, size_t newsz, size_t align) {
 
     nh_block_header_t* bh = ((nh_block_header_t*)p) - 1;
     if (!bh->span) {
-        nh_block_header_t* nb = legacy_krealloc(bh, sizeof(nh_block_header_t) + newsz);
-        if (!nb) return NULL;
-        nb->span = NULL;
-        nb->size = newsz;
-        return nb + 1;
+        size_t oldsz = bh->size;
+        if (newsz <= oldsz)
+            return p;
+        void* n = nitro_kmalloc(newsz, align);
+        if (!n) return NULL;
+        memcpy(n, p, oldsz < newsz ? oldsz : newsz);
+        nitro_kfree(p);
+        return n;
     }
 
     size_t oldsz = bh->size;
@@ -220,7 +239,7 @@ void nitro_kheap_trim(void) {
                 nh_span_t** cur = &cs->spans;
                 while (*cur && *cur != sp) cur = &(*cur)->next;
                 if (*cur == sp) *cur = sp->next;
-                legacy_kfree(sp);
+                buddy_free(sp, sp->order, 0);
             }
             sp = next;
         }
