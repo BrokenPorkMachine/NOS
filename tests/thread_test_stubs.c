@@ -1,7 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-uint32_t smp_cpu_index(void) { return 0; }
 void context_switch(uint64_t *prev, uint64_t next) { (void)prev; (void)next; }
 void regx_main(void) {}
 void nosm_entry(void) {}

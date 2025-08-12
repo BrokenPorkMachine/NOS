@@ -1,6 +1,7 @@
 #include "nitroheap.h"
 #include "classes.h"
 #include "../legacy_heap.h"
+#include "../../arch/CPU/smp.h"
 #include <string.h>
 #include <printf.h>
 
@@ -23,12 +24,20 @@ typedef struct nh_free_node {
     struct nh_free_node* next;
 } nh_free_node_t;
 
-typedef struct {
-    nh_free_node_t* freelist;
-    nh_span_t* spans;
-} nh_class_state_t;
-
 #define NH_CLASS_LIMIT 64
+#define NH_MAG_SIZE    16
+#define NH_MAX_CPUS    32
+
+typedef struct {
+    nh_free_node_t* head;
+    size_t          count;
+} nh_magazine_t;
+
+typedef struct {
+    nh_free_node_t* freelist;      // central freelist
+    nh_span_t*      spans;
+    nh_magazine_t   magazines[NH_MAX_CPUS]; // per-CPU magazines
+} nh_class_state_t;
 static nh_class_state_t nh_classes[NH_CLASS_LIMIT];
 
 static void nh_remove_span_blocks(nh_class_state_t* cs, nh_span_t* sp) {
@@ -39,6 +48,19 @@ static void nh_remove_span_blocks(nh_class_state_t* cs, nh_span_t* sp) {
             *cur = (*cur)->next;
         else
             cur = &(*cur)->next;
+    }
+    for (size_t cpu = 0; cpu < NH_MAX_CPUS; ++cpu) {
+        nh_magazine_t* mag = &cs->magazines[cpu];
+        nh_free_node_t** mcur = &mag->head;
+        while (*mcur) {
+            nh_block_header_t* bh = ((nh_block_header_t*)(*mcur)) - 1;
+            if (bh->span == sp) {
+                *mcur = (*mcur)->next;
+                if (mag->count) mag->count--;
+            } else {
+                mcur = &(*mcur)->next;
+            }
+        }
     }
 }
 
@@ -90,12 +112,23 @@ void* nitro_kmalloc(size_t sz, size_t align) {
     }
 
     nh_class_state_t* cs = &nh_classes[cls];
-    if (!cs->freelist) {
-        if (!nh_alloc_span(cls))
+    uint32_t cpu = smp_cpu_index();
+    if (cpu >= NH_MAX_CPUS) cpu = 0;
+    nh_magazine_t* mag = &cs->magazines[cpu];
+    if (!mag->head) {
+        if (!cs->freelist && !nh_alloc_span(cls))
             return NULL;
+        for (size_t i = 0; i < NH_MAG_SIZE && cs->freelist; ++i) {
+            nh_free_node_t* n = cs->freelist;
+            cs->freelist = n->next;
+            n->next = mag->head;
+            mag->head = n;
+            mag->count++;
+        }
     }
-    nh_free_node_t* node = cs->freelist;
-    cs->freelist = node->next;
+    nh_free_node_t* node = mag->head;
+    mag->head = node->next;
+    mag->count--;
     nh_block_header_t* bh = ((nh_block_header_t*)node) - 1;
     bh->span->free_blocks--;
     return node;
@@ -109,9 +142,22 @@ void nitro_kfree(void* p) {
         return;
     }
     nh_class_state_t* cs = &nh_classes[bh->span->class_idx];
+    uint32_t cpu = smp_cpu_index();
+    if (cpu >= NH_MAX_CPUS) cpu = 0;
+    nh_magazine_t* mag = &cs->magazines[cpu];
     nh_free_node_t* node = (nh_free_node_t*)p;
-    node->next = cs->freelist;
-    cs->freelist = node;
+    if (mag->count >= NH_MAG_SIZE) {
+        while (mag->head) {
+            nh_free_node_t* n = mag->head;
+            mag->head = n->next;
+            n->next = cs->freelist;
+            cs->freelist = n;
+        }
+        mag->count = 0;
+    }
+    node->next = mag->head;
+    mag->head = node;
+    mag->count++;
     bh->span->free_blocks++;
     if (bh->span->free_blocks == bh->span->total_blocks) {
         nh_remove_span_blocks(cs, bh->span);

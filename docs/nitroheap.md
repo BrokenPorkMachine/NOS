@@ -10,7 +10,6 @@ selected at runtime while providing its own size-class allocator.
   `krealloc`.
 
 The current implementation manages allocations using predefined size classes.
-Each class draws spans from the buddy allocator, caches freed blocks, and
-returns completely free spans to the system. Requests larger than any size
-class fall back to the legacy allocator. Per-CPU magazines may be added in the
-future to reduce contention.
+Each class draws spans from the buddy allocator, caches freed blocks in per-CPU
+magazines, and returns completely free spans to the system. Requests larger than
+any size class fall back to the legacy allocator.
