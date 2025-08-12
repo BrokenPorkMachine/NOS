@@ -107,7 +107,7 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/trap.c -o kernel/trap.o
 	# New: page-mapped ELF loader + regx glue
 	$(CC) $(CFLAGS) -c loader/elf_paged_loader.c -o loader/elf_paged_loader.o
-	$(CC) $(CFLAGS) -c src/agents/regx/regx_launch_elf_paged.c -o src/agents/regx/regx_launch_elf_paged.o
+	$(CC) $(CFLAGS) -c regx/regx_launch_elf_paged.c -o regx/regx_launch_elf_paged.o
 	# Optional (diagnostics) if present:
 ifneq ($(wildcard kernel/arch/ud_handler_patch.c),)
 	$(CC) $(CFLAGS) -c kernel/arch/ud_handler_patch.c -o kernel/arch/ud_handler_patch.o
