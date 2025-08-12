@@ -168,7 +168,7 @@ endif
 	    kernel/proc_launch.o kernel/trap.o kernel/symbols.o \
 	    kernel/arch/idt_guard.o \
 	    loader/elf_paged_loader.o \
-	    src/agents/regx/regx_launch_elf_paged.o \
+	    regx/regx_launch_elf_paged.o \
 	    kernel/nosfs_pub.o \
 	    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
 	    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
