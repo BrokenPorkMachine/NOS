@@ -115,7 +115,7 @@ int elf_load_paged(const uint8_t* file, size_t file_sz, elf_map_result_t* out)
 
     // Validate entry executable
     if (!vmm_is_mapped_x(out->entry_va)) {
-        kputs && kputs("[elf] entry VA not executable");
+        kputs("[elf] entry VA not executable");
         elf_unmap(out);
         return -22;
     }
