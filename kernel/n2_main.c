@@ -44,7 +44,8 @@ static void kprint(const char *s) { serial_puts(s); }
  * reserved space that won't collide with boot modules or loader data. */
 #define BOOTSTRAP_STACK_SIZE (64 * 1024)
 static uint8_t bootstrap_stack[BOOTSTRAP_STACK_SIZE] __attribute__((aligned(16)));
-uint8_t *_kernel_stack_top = bootstrap_stack + BOOTSTRAP_STACK_SIZE;
+/* Default kernel stack for TSS RSP0 */
+uint8_t *_kernel_stack_top = (uint8_t *)0x1FF000;
 
 #if VERBOSE
 #define vprint(s) kprint(s)
@@ -118,8 +119,8 @@ void n2_main(bootinfo_t *bootinfo) {
 
     // Guard: probe/log IDT very early (no SSE, see idt_guard.c)
     if (idt_guard_init_once) idt_guard_init_once();
-
-    // Install our full ISR/IRQ table and TSS before enabling interrupts
+ 
+    // Install our full ISR/IRQ table and GDT/TSS before enabling interrupts
     idt_install();
     gdt_tss_init(_kernel_stack_top);
     start_timer_interrupts();
