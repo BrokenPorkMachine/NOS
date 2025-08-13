@@ -26,7 +26,7 @@
 #include "uaccess.h"
 #include "symbols.h"
 #include "printf.h"
-#include "../user/agents/nosfs/nosfs.h"
+#include "nosfs.h"
 extern int nosfs_is_ready(void);
 extern nosfs_fs_t nosfs_root;
 
