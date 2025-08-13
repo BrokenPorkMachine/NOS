@@ -2,27 +2,32 @@
 #include "drivers/IO/serial.h"
 #include "panic.h"
 
+static int kvprintf(const char *fmt, va_list ap) {
+    serial_vprintf(fmt, ap);
+    return 0;
+}
+
 int printf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    serial_vprintf(fmt, ap);
+    int ret = kvprintf(fmt, ap);
     va_end(ap);
-    return 0;
+    return ret;
 }
 
 int kprintf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    serial_vprintf(fmt, ap);
+    int ret = kvprintf(fmt, ap);
     va_end(ap);
-    return 0;
+    return ret;
 }
 
 void panic(const char *fmt, ...) {
     va_list ap;
     serial_puts("[panic] ");
     va_start(ap, fmt);
-    serial_vprintf(fmt, ap);
+    kvprintf(fmt, ap);
     va_end(ap);
     serial_puts("\n");
     for (;;) {
