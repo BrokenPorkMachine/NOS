@@ -9,16 +9,12 @@
 ; ---------------------------
 %define GDT_SEL_KERNEL_CODE  0x08
 %define GDT_SEL_KERNEL_DATA  0x10
-%define GDT_SEL_USER_CODE    0x18
-%define GDT_SEL_USER_DATA    0x20
-%define GDT_SEL_RING1_CODE   0x28
-%define GDT_SEL_RING1_DATA   0x30
-%define GDT_SEL_RING2_CODE   0x38
-%define GDT_SEL_RING2_DATA   0x40
+%define GDT_SEL_USER_CODE    0x1B
+%define GDT_SEL_USER_DATA    0x23
 
 ; RPL=3 aliases for convenience (same table entry, different CPL on load)
-%define GDT_SEL_USER_CODE_R3 (GDT_SEL_USER_CODE | 3)
-%define GDT_SEL_USER_DATA_R3 (GDT_SEL_USER_DATA | 3)
+%define GDT_SEL_USER_CODE_R3 GDT_SEL_USER_CODE
+%define GDT_SEL_USER_DATA_R3 GDT_SEL_USER_DATA
 
 ; ---------------------------
 ; Optional system selectors
@@ -36,10 +32,6 @@
 %define GDT_IDX(sel)         ((sel) >> 3)
 %define GDT_IDX_KERNEL_CODE  GDT_IDX(GDT_SEL_KERNEL_CODE)
 %define GDT_IDX_KERNEL_DATA  GDT_IDX(GDT_SEL_KERNEL_DATA)
-%define GDT_IDX_RING1_CODE   GDT_IDX(GDT_SEL_RING1_CODE)
-%define GDT_IDX_RING1_DATA   GDT_IDX(GDT_SEL_RING1_DATA)
-%define GDT_IDX_RING2_CODE   GDT_IDX(GDT_SEL_RING2_CODE)
-%define GDT_IDX_RING2_DATA   GDT_IDX(GDT_SEL_RING2_DATA)
 %define GDT_IDX_USER_CODE    GDT_IDX(GDT_SEL_USER_CODE)
 %define GDT_IDX_USER_DATA    GDT_IDX(GDT_SEL_USER_DATA)
 %define GDT_IDX_TSS          GDT_IDX(GDT_SEL_TSS)

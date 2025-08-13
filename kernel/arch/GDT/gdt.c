@@ -114,20 +114,6 @@ static void gdt_fill_core_segments(void)
     gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_CODE), 0, 0xFFFFF, ACC_CODE64_DPL0, GRAN_CODE64);
     gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_DATA), 0, 0xFFFFF, ACC_DATA_DPL0,  GRAN_DATA);
 
-    /* Optional ring1/2 (if you defined them in segments.h) */
-#ifdef GDT_SEL_RING1_CODE
-    gdt_set_gate(SEL2IDX(GDT_SEL_RING1_CODE),  0, 0xFFFFF, (ACC_CODE64_DPL0 | ACC_DPL(1)), GRAN_CODE64);
-#endif
-#ifdef GDT_SEL_RING1_DATA
-    gdt_set_gate(SEL2IDX(GDT_SEL_RING1_DATA),  0, 0xFFFFF, (ACC_DATA_DPL0   | ACC_DPL(1)), GRAN_DATA);
-#endif
-#ifdef GDT_SEL_RING2_CODE
-    gdt_set_gate(SEL2IDX(GDT_SEL_RING2_CODE),  0, 0xFFFFF, (ACC_CODE64_DPL0 | ACC_DPL(2)), GRAN_CODE64);
-#endif
-#ifdef GDT_SEL_RING2_DATA
-    gdt_set_gate(SEL2IDX(GDT_SEL_RING2_DATA),  0, 0xFFFFF, (ACC_DATA_DPL0   | ACC_DPL(2)), GRAN_DATA);
-#endif
-
     /* User ring 3 */
     gdt_set_gate(SEL2IDX(GDT_SEL_USER_CODE),   0, 0xFFFFF, ACC_CODE64_DPL3, GRAN_CODE64);
     gdt_set_gate(SEL2IDX(GDT_SEL_USER_DATA),   0, 0xFFFFF, ACC_DATA_DPL3,   GRAN_DATA);

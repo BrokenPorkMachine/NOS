@@ -3,20 +3,12 @@
 /* ---------------- GDT selectors (byte values) ---------------- */
 #define GDT_SEL_KERNEL_CODE  0x08
 #define GDT_SEL_KERNEL_DATA  0x10
-#define GDT_SEL_USER_CODE    0x18
-#define GDT_SEL_USER_DATA    0x20
-#define GDT_SEL_RING1_CODE   0x28
-#define GDT_SEL_RING1_DATA   0x30
-#define GDT_SEL_RING2_CODE   0x38
-#define GDT_SEL_RING2_DATA   0x40
+#define GDT_SEL_USER_CODE    0x1B
+#define GDT_SEL_USER_DATA    0x23
 
-/* RPL-tagged convenience forms (same entry, different CPL on load) */
-#define GDT_SEL_RING1_CODE_R1 (GDT_SEL_RING1_CODE | 1)
-#define GDT_SEL_RING1_DATA_R1 (GDT_SEL_RING1_DATA | 1)
-#define GDT_SEL_RING2_CODE_R2 (GDT_SEL_RING2_CODE | 2)
-#define GDT_SEL_RING2_DATA_R2 (GDT_SEL_RING2_DATA | 2)
-#define GDT_SEL_USER_CODE_R3  (GDT_SEL_USER_CODE  | 3)
-#define GDT_SEL_USER_DATA_R3  (GDT_SEL_USER_DATA  | 3)
+/* RPL-tagged convenience forms (same value, explicit for legacy call sites) */
+#define GDT_SEL_USER_CODE_R3  GDT_SEL_USER_CODE
+#define GDT_SEL_USER_DATA_R3  GDT_SEL_USER_DATA
 
 /* Optional: 64-bit TSS selector (system descriptor, 16 bytes total) */
 #define GDT_SEL_TSS           0x48
