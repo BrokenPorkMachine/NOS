@@ -1,3 +1,12 @@
+%define BOOTSTRAP_STACK_SIZE (64 * 1024)
+
+section .bss
+align 16
+global _kernel_stack_top
+_kernel_stack_bottom:
+    resb BOOTSTRAP_STACK_SIZE
+_kernel_stack_top:
+
 section .text
 global _start
 
@@ -5,7 +14,11 @@ global _start
 extern n2_main
 
 _start:
+    cli
     cld
+    ; Set up a known-good stack before calling C code
+    mov rsp, _kernel_stack_top
+
     ; Enable SSE/FXSR before any C code runs
     mov rax, cr0
     and eax, 0xFFFFFFFB  ; clear EM
