@@ -2,7 +2,7 @@
 #include "login.h"
 
 // Real entry implemented in login.c
-void login_server(ipc_queue_t *fs_q, uint32_t self_id);
+void login_server(void *fs_q, uint32_t self_id);
 void thread_yield(void);
 
 // Manifest describing this agent
