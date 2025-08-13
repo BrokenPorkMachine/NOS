@@ -1,4 +1,4 @@
-		# ========= Config =========
+				# ========= Config =========
 #
 # Default to the host toolchain unless a cross compiler is explicitly
 # provided.  The previous default expected the cross prefix
@@ -19,9 +19,9 @@ BUILD_DIR := build
 OUT_DIR   := out
 
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
-          -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-          -I include -I boot/include -I nosm -I loader -I src/agents/regx -I user/agents/nosfs -I user/libc \
-          -fPIE -fcf-protection=none -I kernel
+	  -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+	  -I include -I boot/include -I nosm -I loader -I src/agents/regx -I user/agents/nosfs -I user/libc \
+	  -fPIE -fcf-protection=none -I kernel
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 
@@ -30,16 +30,16 @@ AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 # of stub placeholders.  Explicitly list the required sources so the linker sees
 # the concrete implementations.
 KERNEL_SRCS := $(filter-out kernel/O2.c,$(shell find kernel loader src/agents/regx -name '*.c')) \
-               user/agents/nosfs/nosfs.c user/agents/nosfs/nosfs_server.c \
-               user/agents/nosm/nosm.c \
-               nosm/drivers/IO/serial.c nosm/drivers/IO/usb.c \
-               nosm/drivers/IO/usbkbd.c nosm/drivers/IO/video.c \
-               nosm/drivers/IO/tty.c nosm/drivers/IO/keyboard.c \
-               nosm/drivers/IO/mouse.c nosm/drivers/IO/ps2.c \
-               nosm/drivers/IO/block.c nosm/drivers/IO/sata.c \
-               nosm/drivers/IO/pci.c nosm/drivers/IO/pic.c \
-               nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
-               user/libc/libc.c
+	       user/agents/nosfs/nosfs.c user/agents/nosfs/nosfs_server.c \
+	       user/agents/nosm/nosm.c \
+	       nosm/drivers/IO/serial.c nosm/drivers/IO/usb.c \
+	       nosm/drivers/IO/usbkbd.c nosm/drivers/IO/video.c \
+	       nosm/drivers/IO/tty.c nosm/drivers/IO/keyboard.c \
+	       nosm/drivers/IO/mouse.c nosm/drivers/IO/ps2.c \
+	       nosm/drivers/IO/block.c nosm/drivers/IO/sata.c \
+	       nosm/drivers/IO/pci.c nosm/drivers/IO/pic.c \
+	       nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
+	       user/libc/libc.c
 KERNEL_ASM_S   := $(shell find kernel -name '*.S')
 KERNEL_ASM_ASM := $(shell find kernel -name '*.asm')
 # Convert each source type to its object path without leaving the original
@@ -51,10 +51,24 @@ KERNEL_OBJS := \
     $(patsubst %.S,$(BUILD_DIR)/%.o,$(KERNEL_ASM_S)) \
     $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(KERNEL_ASM_ASM))
 
-AGENT_DIRS := user/agents/init
+AGENT_DIRS := user/agents/init user/agents/login
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
-AGENT_SRCS := $(wildcard $(foreach d,$(AGENT_DIRS),$(d)/*.c))
-AGENT_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(AGENT_SRCS))
+
+# Generate per-agent build rules so each agent's objects are explicitly
+# listed when linking. Wildcards previously produced targets literally
+# named "*.o" which prevented all sources from being included.
+define BUILD_AGENT
+AGENT_$1_SRCS := $(wildcard user/agents/$1/*.c)
+AGENT_$1_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(AGENT_$1_SRCS))
+
+$(OUT_DIR)/agents/$1.elf: $(BUILD_DIR)/user/rt/rt0_user.o \
+	$(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o \
+	$$(AGENT_$1_OBJS)
+	@mkdir -p $$(@D)
+	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
+endef
+
+$(foreach agent,$(AGENT_NAMES),$(eval $(call BUILD_AGENT,$(agent))))
 
 BIN_SRCS := $(wildcard bin/*.c)
 BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
@@ -91,10 +105,6 @@ kernel: $(KERNEL_OBJS)
 
 agents: $(AGENT_NAMES:%=$(OUT_DIR)/agents/%.mo2)
 
-$(OUT_DIR)/agents/%.elf: $(BUILD_DIR)/user/rt/rt0_user.o $(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o $(BUILD_DIR)/user/agents/%/*.o
-	@mkdir -p $(dir $@)
-	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $^ -o $@
-
 $(OUT_DIR)/agents/%.mo2: $(OUT_DIR)/agents/%.elf
 	cp $< $@
 
@@ -112,17 +122,19 @@ modules: $(OUT_DIR)/modules/hello.mo2
 $(OUT_DIR)/modules/hello.mo2: $(MODULE_OBJS) $(BUILD_DIR)/user/libc/libc.o
 	@mkdir -p $(dir $@)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $(OUT_DIR)/modules/hello.elf
-	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property $(OUT_DIR)/modules/hello.elf $@
+	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id \
+	    --remove-section=.note.gnu.property $(OUT_DIR)/modules/hello.elf $@
 
-image: disk.img
+image: disk.img fs.img
 
 disk.img: boot kernel agents bins modules
-	dd if=/dev/zero of=disk.img bs=1M count=64
+	dd if=/dev/zero of=disk.img bs=1M count=128
 	mkfs.vfat -F 32 disk.img
 	mmd -i disk.img ::/EFI ::/EFI/BOOT
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img O2.bin ::/
 	mcopy -i disk.img n2.bin ::/
+	mcopy -i disk.img boot/menu.cfg ::/menu.cfg
 	mmd -i disk.img ::/agents
 	mcopy -i disk.img $(OUT_DIR)/agents/*.mo2 ::/agents/
 	mmd -i disk.img ::/bin
@@ -130,18 +142,23 @@ disk.img: boot kernel agents bins modules
 	mmd -i disk.img ::/modules
 	mcopy -i disk.img $(OUT_DIR)/modules/*.mo2 ::/modules/
 
+fs.img:
+	dd if=/dev/zero of=fs.img bs=1M count=128
+
 # ========= Utility =========
 clean:
-	rm -rf $(BUILD_DIR) $(OUT_DIR) disk.img kernel.bin n2.bin O2.elf O2.bin
+	rm -rf $(BUILD_DIR) $(OUT_DIR) disk.img fs.img kernel.bin n2.bin O2.elf O2.bin
 	make -C boot clean
 
-run: disk.img
+run: disk.img fs.img
 	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
+	    -drive file=fs.img,format=raw \
 	    -m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
 	    -device i8042 -serial stdio -display sdl
 
-runmac: disk.img
+runmac: disk.img fs.img
 	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
+	-drive file=fs.img,format=raw \
 	-m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
 	-device i8042 -serial stdio -display cocoa
 

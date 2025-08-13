@@ -3,9 +3,12 @@
 #include <stdint.h>
 #include <stddef.h>
 
+void __chkstk(void) {}
+
 #define O2_NAME    L"\\O2.bin"
-#define N2_NAME    L"\\n2.bin"
 #define MAX_MODULES 16
+#define MAX_MENU_ENTRIES 8
+#define MAX_MENU_MODULES 8
 #define FBINFO_MAGIC 0xF00DBA66
 #define BOOTINFO_MAGIC_UEFI 0x4F324255
 
@@ -29,6 +32,11 @@ static void *memset(void *dst, int c, size_t n) { uint8_t *d=dst; while (n--) *d
 static int memcmp(const void *a, const void *b, size_t n) { const uint8_t *x=a, *y=b; while (n--) { if (*x!=*y) return *x-*y; x++; y++; } return 0; }
 static size_t strlen(const char *s) { size_t i=0; while(s[i]) ++i; return i; }
 static void strcpy(char *dst, const char *src) { while((*dst++ = *src++)); }
+static void strncpy(char *dst, const char *src, size_t n) {
+    size_t i = 0;
+    for (; i + 1 < n && src[i]; ++i) dst[i] = src[i];
+    dst[i] = 0;
+}
 
 static void print_ascii(EFI_SYSTEM_TABLE *st, const char *s) {
     CHAR16 buf[256]; size_t i=0;
@@ -47,6 +55,81 @@ static void print_dec(EFI_SYSTEM_TABLE *st, uint64_t v) {
     if (!v) *--p = '0';
     while (v) { *--p = '0'+(v%10); v/=10; }
     print_ascii(st, p);
+}
+
+static void ascii_to_ucs2_path(const char *src, CHAR16 *dst) {
+    *dst++ = L'\\';
+    while (*src) {
+        char c = *src++;
+        if (c == '/') c = '\\';
+        if (c >= 'a' && c <= 'z') c -= 32;
+        *dst++ = (CHAR16)c;
+    }
+    *dst = 0;
+}
+
+typedef struct {
+    char  title[64];
+    char  kernel[64];
+    char  modules[MAX_MENU_MODULES][64];
+    UINTN module_count;
+} menu_entry_t;
+EFI_STATUS load_file(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root, const CHAR16 *path,
+                     UINTN mem_type, void **buf, UINTN *size);
+
+static UINTN load_menu_cfg(EFI_SYSTEM_TABLE *st, EFI_FILE_PROTOCOL *root, menu_entry_t *entries) {
+    void *buf = NULL; UINTN sz = 0;
+    if (EFI_ERROR(load_file(st, root, L"\\MENU.CFG", EfiLoaderData, &buf, &sz)))
+        return 0;
+    UINTN count = 0;
+    char *p = buf, *end = (char*)buf + sz;
+    while (p < end && count < MAX_MENU_ENTRIES) {
+        char *line = p;
+        while (p < end && *p != '\n' && *p != '\r') p++;
+        *p = 0; p++;
+        if (!line[0] || line[0] == '#') continue;
+        char *k1 = line; char *k2 = NULL; char *k3 = NULL;
+        for (char *c=line; *c; ++c) { if (*c=='|' && !k2) { *c=0; k2=c+1; } else if (*c=='|' && !k3) { *c=0; k3=c+1; } }
+        if (!k2) continue;
+        strncpy(entries[count].title, k1, sizeof(entries[count].title));
+        strncpy(entries[count].kernel, k2, sizeof(entries[count].kernel));
+        entries[count].module_count = 0;
+        if (k3 && *k3) {
+            char *m = k3;
+            while (*m && entries[count].module_count < MAX_MENU_MODULES) {
+                char *start = m;
+                while (*m && *m != ',') m++;
+                char tmp = *m; *m = 0;
+                strncpy(entries[count].modules[entries[count].module_count], start, 64);
+                entries[count].module_count++;
+                if (tmp == 0) break;
+                m++;
+            }
+        }
+        count++;
+    }
+    st->BootServices->FreePool(buf);
+    return count;
+}
+
+static UINTN show_menu(EFI_SYSTEM_TABLE *st, menu_entry_t *entries, UINTN count) {
+    vprint_ascii(st, "[nboot] Boot Menu\r\n");
+    for (UINTN i = 0; i < count; ++i) {
+        vprint_dec(st, i+1); vprint_ascii(st, ": ");
+        vprint_ascii(st, entries[i].title); vprint_ascii(st, "\r\n");
+    }
+    typedef EFI_STATUS (EFIAPI *EFI_WAIT_FOR_EVENT)(UINTN, EFI_EVENT*, UINTN*);
+    EFI_WAIT_FOR_EVENT WaitForEvent = (EFI_WAIT_FOR_EVENT)st->BootServices->WaitForEvent;
+    st->ConIn->Reset(st->ConIn, FALSE);
+    EFI_INPUT_KEY key;
+    while (1) {
+        UINTN idx = 0;
+        WaitForEvent(1, &st->ConIn->WaitForKey, &idx);
+        if (!EFI_ERROR(st->ConIn->ReadKeyStroke(st->ConIn, &key))) {
+            if (key.UnicodeChar >= L'1' && key.UnicodeChar < L'1' + count)
+                return key.UnicodeChar - L'1';
+        }
+    }
 }
 
 // --- EFI File read helper ---
@@ -111,6 +194,17 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     EFI_FILE_PROTOCOL *root;
     status = fs->OpenVolume(fs, &root);
     if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "OpenVolume failed\r\n"); return status; }
+    menu_entry_t menu[MAX_MENU_ENTRIES];
+    UINTN menu_count = load_menu_cfg(SystemTable, root, menu);
+    if (!menu_count) {
+        strcpy(menu[0].title, "Live Boot NitrOS");
+        strcpy(menu[0].kernel, "n2.bin");
+        menu[0].module_count = 2;
+        strcpy(menu[0].modules[0], "agents/init.mo2");
+        strcpy(menu[0].modules[1], "agents/login.mo2");
+        menu_count = 1;
+    }
+    UINTN choice = show_menu(SystemTable, menu, menu_count);
 
     // --- Allocate bootinfo struct ---
     bootinfo_t *bi;
@@ -142,19 +236,39 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->kernel_segments[0].flags  = 0;
     strcpy(bi->kernel_segments[0].name, "O2.bin");
 
-    // --- Load n2.bin as module ---
+    // --- Load selected kernel and modules ---
     void *n2_buf = NULL; UINTN n2_size = 0;
-    status = load_file(SystemTable, root, N2_NAME, EfiLoaderData, &n2_buf, &n2_size);
-    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "n2.bin not found\r\n"); return status; }
-    vprint_ascii(SystemTable, "[nboot] Loaded n2.bin: ");
-    vprint_hex(SystemTable, (uint64_t)(uintptr_t)n2_buf); vprint_ascii(SystemTable, " sz=");
-    vprint_hex(SystemTable, n2_size); vprint_ascii(SystemTable, "\r\n");
-
-    // --- Fill in module slot ---
-    bi->modules[0].name = "n2.bin";
+    CHAR16 n2_path[128];
+    ascii_to_ucs2_path(menu[choice].kernel, n2_path);
+    status = load_file(SystemTable, root, n2_path, EfiLoaderData, &n2_buf, &n2_size);
+    if (EFI_ERROR(status)) { vprint_ascii(SystemTable, "[nboot] kernel not found\r\n"); return status; }
+    char *kcopy = NULL; UINTN klen = strlen(menu[choice].kernel) + 1;
+    if (!EFI_ERROR(SystemTable->BootServices->AllocatePool(EfiLoaderData, klen, (void **)&kcopy)))
+        strcpy(kcopy, menu[choice].kernel);
+    bi->modules[0].name = kcopy ? kcopy : menu[choice].kernel;
     bi->modules[0].base = n2_buf;
     bi->modules[0].size = n2_size;
     bi->module_count = 1;
+
+    for (UINTN i = 0; i < menu[choice].module_count && bi->module_count < MAX_MODULES; ++i) {
+        void *buf = NULL; UINTN sz = 0;
+        CHAR16 path16[128];
+        ascii_to_ucs2_path(menu[choice].modules[i], path16);
+        if (EFI_ERROR(load_file(SystemTable, root, path16, EfiLoaderData, &buf, &sz))) {
+            vprint_ascii(SystemTable, "[nboot] missing ");
+            vprint_ascii(SystemTable, menu[choice].modules[i]);
+            vprint_ascii(SystemTable, "\r\n");
+            continue;
+        }
+        char *name_copy = NULL; UINTN name_len = strlen(menu[choice].modules[i]) + 1;
+        if (!EFI_ERROR(SystemTable->BootServices->AllocatePool(EfiLoaderData, name_len, (void **)&name_copy)))
+            strcpy(name_copy, menu[choice].modules[i]);
+        bi->modules[bi->module_count].name = name_copy ? name_copy : menu[choice].modules[i];
+        bi->modules[bi->module_count].base = buf;
+        bi->modules[bi->module_count].size = sz;
+        bi->module_count++;
+    }
+
     vprint_ascii(SystemTable, "[nboot] Module count: ");
     vprint_dec(SystemTable, bi->module_count);
     vprint_ascii(SystemTable, "\r\n");

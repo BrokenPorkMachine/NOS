@@ -29,6 +29,10 @@ typedef UINT16              CHAR16;
 typedef void                VOID;
 typedef VOID*               EFI_HANDLE;
 typedef signed short        INT16;
+typedef unsigned char       BOOLEAN;
+#define TRUE 1
+#define FALSE 0
+typedef VOID*               EFI_EVENT;
 
 // ====================
 // Status Codes (Common)
@@ -116,6 +120,19 @@ struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL; typedef struct EFI_SIMPLE_TEXT_INPUT_PROT
 struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL; typedef struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 struct EFI_FILE_PROTOCOL; typedef struct EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
 typedef struct EFI_MEMORY_DESCRIPTOR EFI_MEMORY_DESCRIPTOR;
+
+typedef struct {
+    UINT16 ScanCode;
+    CHAR16 UnicodeChar;
+} EFI_INPUT_KEY;
+
+typedef EFI_STATUS (EFIAPI *EFI_INPUT_RESET)(EFI_SIMPLE_TEXT_INPUT_PROTOCOL*, BOOLEAN);
+typedef EFI_STATUS (EFIAPI *EFI_INPUT_READ_KEY)(EFI_SIMPLE_TEXT_INPUT_PROTOCOL*, EFI_INPUT_KEY*);
+struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
+    EFI_INPUT_RESET    Reset;
+    EFI_INPUT_READ_KEY ReadKeyStroke;
+    EFI_EVENT          WaitForKey;
+};
 
 // ====================
 // EFI_TABLE_HEADER
