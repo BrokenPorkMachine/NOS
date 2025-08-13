@@ -1,22 +1,21 @@
-; user/rt/rt0_user.S — NASM syntax
-; Generic CRT0 for NOS user programs
-; Will call _agent_main() if present, else main()
-
+; ============================================================================
+; user/rt/rt0_user.S — NASM syntax, generic startup for NOS user programs
+; Calls _agent_main() if present, else main(), else halts
+; ============================================================================
 BITS 64
 default rel
 
-; External but weak so linker won't fail if missing
-extern _agent_main
-extern main
+; Declare them weak so missing ones won't error at link time
 global _start
+extern _agent_main   weak
+extern main          weak
 
 section .text
 
 _start:
-    ; Align stack
-    and     rsp, -16
+    and     rsp, -16        ; keep stack aligned
 
-    ; Try calling _agent_main if it exists
+    ; Try _agent_main first
     mov     rax, _agent_main
     test    rax, rax
     jz      .try_main
@@ -32,3 +31,5 @@ _start:
 .done:
     hlt
     jmp     .done
+
+section .note.GNU-stack noalloc noexec nowrite progbits
