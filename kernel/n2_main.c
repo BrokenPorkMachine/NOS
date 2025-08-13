@@ -15,6 +15,7 @@
 #include "drivers/IO/usb.h"
 #include "drivers/IO/usbkbd.h"
 #include "Task/thread.h"
+#include "arch/IDT/idt.h"
 #include "arch/GDT/tss.h"
 #include "VM/numa.h"
 #include "VM/pmm_buddy.h"
@@ -74,6 +75,9 @@ void n2_main(bootinfo_t *bootinfo) {
 
     // Guard: probe/log IDT very early (no SSE, see idt_guard.c)
     if (idt_guard_init_once) idt_guard_init_once();
+
+    // Install our full ISR/IRQ table before enabling interrupts
+    idt_install();
 
     print_acpi_info(bootinfo);
     print_cpu_topology(bootinfo);
