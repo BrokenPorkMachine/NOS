@@ -1,9 +1,9 @@
 #include "idt.h"
 #include <string.h>
 #include "../GDT/gdt_selectors.h"
+#include "drivers/IO/serial.h"
 #ifndef kprintf
-#include <stdio.h>
-#define kprintf printf
+#define kprintf serial_printf
 #endif
 
 static struct idt_entry idt[IDT_ENTRIES];
@@ -74,12 +74,12 @@ void idt_dump_vec(int v) {
     uint64_t off = ((uint64_t)idt[v].offset_high << 32) |
                    ((uint64_t)idt[v].offset_mid  << 16) |
                    (uint64_t)idt[v].offset_low;
-    kprintf("[idt] vec=%3d sel=%#06x off=%016llx attr=%02x ist=%u\n",
-            v,
-            (unsigned)idt[v].selector,
-            (unsigned long long)off,
-            (unsigned)idt[v].type_attr,
-            (unsigned)(idt[v].ist & 7));
+    serial_printf("[idt] vec=%3d sel=%#06x off=%016lx attr=%02x ist=%u\n",
+                  v,
+                  (unsigned)idt[v].selector,
+                  (unsigned long)off,
+                  (unsigned)idt[v].type_attr,
+                  (unsigned)(idt[v].ist & 7));
 }
 
 /* Self-test with proper masks (no -Woverflow) */

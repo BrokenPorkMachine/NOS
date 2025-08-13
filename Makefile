@@ -1,4 +1,4 @@
-CC      := $(CROSS_COMPILE)gcc
+		CC      := $(CROSS_COMPILE)gcc
 LD      := $(CROSS_COMPILE)ld
 AS      := $(CROSS_COMPILE)as
 AR      := $(CROSS_COMPILE)ar
@@ -28,14 +28,14 @@ AGENT_OBJS   := $(patsubst %.c,%.o,$(AGENT_C_SRCS))
 
 $(AGENT_OBJS): %.o : %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
+	$(CC) $(O2_CFLAGS) -nostdlib -c $< -o $@
 
 define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
 out/agents/$(1).elf: $$(AGENT_$(1)_OBJS) user/rt/rt0_agent.o user/libc/libc.o
 	@mkdir -p $$(@D)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
+	$(CC) $(O2_CFLAGS) -nostdlib -shared -Wl,-pie $$^ -o $$@
 
 out/agents/$(1).mo2: out/agents/$(1).elf
 	cp $$< $$@
@@ -170,7 +170,7 @@ endif
 
 	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o \
-            kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
+	    kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
 	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
 	    kernel/VM/heap_select.o kernel/VM/legacy_heap.o \
 	    kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o kernel/uaccess.o \

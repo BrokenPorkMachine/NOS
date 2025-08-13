@@ -4,6 +4,7 @@
 #include "../../user/libc/libc.h"
 #include "../../user/rt/agent_abi.h"
 #include "../../nosm/drivers/IO/serial.h"
+#include "../arch/IDT/isr.h"
 #include <stdint.h>
 #include <string.h>
 #include "arch_x86_64/gdt_tss.h"
@@ -249,8 +250,17 @@ __attribute__((noreturn)) void thread_exit(void){
 __attribute__((noreturn,used)) static void thread_start(void (*f)(void)){
     void (* volatile entry)(const AgentAPI*, uint32_t) = (void(*)(const AgentAPI*, uint32_t))f;
     uint32_t tid = thread_self();
-    kprintf("[thread] id=%u first timeslice entry=%p\n", tid, (void*)entry);
+
+    if (!entry) {
+        kprintf("[thread] id=%u null entry\n", tid);
+        thread_exit();
+    }
+
+    kprintf("[thread] id=%u about to jump to entry @ %p\n", tid, (void*)entry);
+    arm_init_watchdog(1000); /* ~N ms depending on timer freq */
     entry(&k_agent_api, tid);
+    arm_init_watchdog(0);
+    kprintf("[thread] id=%u returned from entry\n", tid);
     thread_exit();
 }
 
