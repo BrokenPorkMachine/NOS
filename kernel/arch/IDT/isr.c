@@ -1,5 +1,5 @@
 #include <string.h>
-#include "arch/IDT/isr.h"
+#include "isr.h"
 
 /* Example timer handler that hands off to scheduler safely:
    make an aligned local copy to avoid taking address of a packed member. */
