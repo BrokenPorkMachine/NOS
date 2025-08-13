@@ -1,0 +1,9 @@
+{
+  "name": "nosia",
+  "version": "0.1",
+  "description": "NOSIA – NitrOS installer agent",
+  "entrypoint": "nosia_main",
+  "capabilities": ["filesystem"],
+  "permissions": ["read_disk", "write_disk"],
+  "sandbox": { "profile": "installer-default", "max_mem": "64M" }
+}
