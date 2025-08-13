@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "arch/APIC/lapic.h"
+#include "lapic.h"
 
 extern void lapic_eoi(void);  /* defined in your existing LAPIC module */
 
