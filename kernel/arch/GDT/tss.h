@@ -19,4 +19,4 @@ struct tss64 {
     uint16_t iopb_offset;
 } __attribute__((packed));
 
-void tss_install(void);
+void gdt_tss_init(void *stack_top);
