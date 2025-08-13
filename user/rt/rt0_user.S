@@ -1,12 +1,8 @@
-; user/rt/rt0_user.S
-global _start
-extern main
-section .text
+// user/rt/rt0_stackshim.S
+    .text
+    .globl _start
 _start:
-    xor ebp, ebp
-    call main
-.hang:
-    hlt
-    jmp .hang
-
-section .note.GNU-stack noalloc
+    mov   8(%rsp), %rdi     # api
+    mov  16(%rsp), %rsi     # tid
+    andq  $-16, %rsp
+    jmp   _start_with_args
