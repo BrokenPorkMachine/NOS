@@ -13,8 +13,8 @@ extern int kprintf(const char *fmt, ...);
 // Shared filesystem instance defined in nosfs.c
 extern nosfs_fs_t nosfs_root;
 
-// Keep readiness private here; expose via nosfs_is_ready()
-static _Atomic int nosfs_ready = 0;
+// Readiness flag provided by nosfs.c
+extern _Atomic int nosfs_ready;
 int nosfs_is_ready(void) { return atomic_load(&nosfs_ready); }
 
 // Optional: enumerate files present (nice for early boot-debug)
@@ -42,7 +42,7 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     if (h >= 0) (void)nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
 
     // Make filesystem contents visible to other threads
-    atomic_store(&nosfs_ready, 1);
+      atomic_store(&nosfs_ready, 1);
 
     // Optional one-time debug listing (uncomment if needed)
     nosfs_debug_list_all();
