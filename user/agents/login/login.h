@@ -1,8 +1,24 @@
 #ifndef LOGIN_H
 #define LOGIN_H
 
+#include <stdint.h>
 #include "../../libc/libc.h"
-#include "../../../kernel/IPC/ipc.h"
+
+// Minimal IPC types so this header can be used without kernel internals
+#ifndef IPC_MSG_DATA_MAX
+#define IPC_MSG_DATA_MAX 64
+#endif
+
+typedef struct {
+    uint32_t type;
+    uint32_t sender;
+    uint32_t arg1;
+    uint32_t arg2;
+    uint32_t len;
+    uint8_t  data[IPC_MSG_DATA_MAX];
+} ipc_message_t;
+
+typedef struct ipc_queue ipc_queue_t; // Opaque to the agent
 
 #ifdef __cplusplus
 extern "C" {

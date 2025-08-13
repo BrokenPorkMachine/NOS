@@ -1,5 +1,4 @@
 #include "../../libc/libc.h"
-#include "../../../kernel/IPC/ipc.h"
 #include "login.h"
 
 // Real entry implemented in login.c

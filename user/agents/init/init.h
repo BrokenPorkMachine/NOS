@@ -3,12 +3,21 @@
 
 #include <stdint.h>
 
-/*
- * This header is usable in both agent (standalone) and kernel-linked builds.
- * In AGENT builds, we still rely on the same IPC ABI headers that the libc
- * exposes, which map to the kernel’s IPC structures.
- */
-#include "../../../kernel/IPC/ipc.h"
+// Minimal IPC definitions to avoid depending on kernel headers
+#ifndef IPC_MSG_DATA_MAX
+#define IPC_MSG_DATA_MAX 64
+#endif
+
+typedef struct {
+    uint32_t type;
+    uint32_t sender;
+    uint32_t arg1;
+    uint32_t arg2;
+    uint32_t len;
+    uint8_t  data[IPC_MSG_DATA_MAX];
+} ipc_message_t;
+
+typedef struct ipc_queue ipc_queue_t;
 
 #ifdef __cplusplus
 extern "C" {
