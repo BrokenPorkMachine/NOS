@@ -47,12 +47,10 @@ static int api_regx_load(const char *path, const char *args, uint32_t *out_tid){
 static int api_regx_ping(void){ return 1; }
 static int api_puts(const char *s){ serial_puts(s); return 0; }
 static AgentAPI k_agent_api = {
-    .self        = thread_self,     // REMOVE or change to correct field
-    .puts        = api_puts,        // adjust type if needed
-    .fs_read_all = api_fs_read_all, // make sure signature matches
-    .regx_load   = api_regx_load,   // adjust type
-    .regx_ping   = api_regx_ping,   // REMOVE or change to correct field
-    .yield       = api_yield        // keep yield last if struct matches
+    .puts        = api_puts,
+    .fs_read_all = api_fs_read_all,
+    .regx_load   = api_regx_load,
+    .yield       = thread_yield   // or scheduler_yield, or whatever function you actually have
 };
 
 #ifndef STACK_SIZE
