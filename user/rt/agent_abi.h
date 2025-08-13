@@ -2,19 +2,21 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * Public “AgentAPI” that regx passes to every agent at startup.
- * Kernel/regx implements these function pointers; agents only call them.
- *
- * NOTES:
- *  - regx must jump to the agent's _start with:
- *      RDI = (const AgentAPI*) api_table;
- *      RSI = (uint32_t)        self_tid;
- *  - The ABI is stable C: all functions use the standard SysV calling conv.
+ * regx must jump to the agent's _start with:
+ *   RDI = (const AgentAPI*) api_table;
+ *   RSI = (uint32_t)        self_tid;
+ * All functions use the SysV x86-64 calling convention.
  */
 
-/* Keep a tight ABI: no implicit padding and fixed field offsets */
-#pragma pack(push,1)
+_Static_assert(sizeof(void*) == 8, "Agent ABI requires 64-bit");
+
+#pragma pack(push, 1)
 typedef struct AgentAPI {
     void (*puts)(const char*);
     int  (*printf)(const char*, ...);
@@ -23,12 +25,15 @@ typedef struct AgentAPI {
 } AgentAPI;
 #pragma pack(pop)
 
-#include <stddef.h>
 _Static_assert(offsetof(AgentAPI, puts)      == 0,  "puts off");
 _Static_assert(offsetof(AgentAPI, printf)    == 8,  "printf off");
 _Static_assert(offsetof(AgentAPI, regx_load) == 16, "regx_load off");
 _Static_assert(offsetof(AgentAPI, yield)     == 24, "yield off");
 
-/* Set by the agent runtime (rt0_agent.c) from registers (RDI/RSI). */
+/* Set by the agent runtime (rt0/entry) from RDI/RSI. */
 extern const AgentAPI *NOS;
 extern uint32_t        NOS_TID;
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
