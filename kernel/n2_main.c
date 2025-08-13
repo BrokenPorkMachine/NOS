@@ -165,6 +165,7 @@ void n2_main(bootinfo_t *bootinfo) {
     serial_printf("[N2] runqueue len cpu0=%d\n", thread_runqueue_length(0));
 
     for (uint32_t i = 0; i < bootinfo->module_count; ++i) load_module(&bootinfo->modules[i]);
+    nosfs_save_device(&nosfs_root, 0);
 
     regx_start();
     scheduler_loop();

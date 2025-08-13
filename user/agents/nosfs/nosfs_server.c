@@ -26,8 +26,12 @@ static void nosfs_debug_list_all(void) {
 void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     (void)self_id;
 
-    // Initialise the in-memory FS and mark it ready for use
+    // Initialise filesystem; attempt to load existing NOSFS from block device.
     nosfs_init(&nosfs_root);
+    if (nosfs_load_device(&nosfs_root, 0) == 0)
+        kprintf("[nosfs] loaded filesystem from disk\n");
+    else
+        kprintf("[nosfs] formatting new filesystem\n");
     atomic_store(&nosfs_ready, 1);
     kprintf("[nosfs] server ready\n");
 
