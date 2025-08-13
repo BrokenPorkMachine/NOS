@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "tss.h"
 #include "gdt.h"
-#include "../../drivers/IO/serial.h"
+#include "drivers/IO/serial.h"
 
 static struct tss64 tss;
 static uint8_t tss_stack[4096];

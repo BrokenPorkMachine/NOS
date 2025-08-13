@@ -2,7 +2,7 @@
 #include "segments.h"
 #include <stdint.h>
 #include <string.h>
-#include "../../drivers/IO/serial.h"
+#include "drivers/IO/serial.h"
 
 /* ----- GDTR ----- */
 struct gdt_ptr {
