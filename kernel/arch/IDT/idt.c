@@ -1,4 +1,4 @@
-#include "arch/IDT/idt.h"
+#include "idt.h"
 #include <string.h>
 
 #ifndef kprintf
