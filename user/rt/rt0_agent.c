@@ -5,7 +5,7 @@ const AgentAPI *NOS = 0;
 uint32_t        NOS_TID = 0;
 
 /* Every agent provides this. Keep it free of kernel headers. */
-extern void agent_main(void) __attribute__((noreturn));
+extern void agent_main(void);
 
 /* Entry called by regx:
  *   rdi -> AgentAPI*
@@ -19,9 +19,12 @@ void _start(const AgentAPI *api, uint32_t self_tid)
 
     /* Minimal C runtime could go here if needed (ctors, etc.) */
 
-    agent_main(); /* never returns */
-    /* Safety if agent_main ever returns */
+    agent_main(); /* should not return, but guard just in case */
     for (;;) {
-        if (NOS && NOS->yield) NOS->yield();
+        if (NOS && NOS->yield) {
+            NOS->yield();
+        } else {
+            __asm__ __volatile__("pause");
+        }
     }
 }
