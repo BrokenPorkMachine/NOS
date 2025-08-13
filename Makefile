@@ -12,7 +12,7 @@ OUT_DIR   := out
 
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
           -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-          -I include -I boot/include -I nosm -I loader -I src/agents/regx \
+          -I include -I boot/include -I nosm -I loader -I src/agents/regx -I user/agents/nosfs \
           -no-pie -fcf-protection=none -I kernel
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
