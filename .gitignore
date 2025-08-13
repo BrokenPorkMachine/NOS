@@ -15,3 +15,7 @@ qemu_output.txt
 kernel/login_bin.h
 
 tests/test_*
+
+# Python artifacts
+__pycache__/
+*.pyc

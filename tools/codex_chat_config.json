@@ -1,0 +1,10 @@
+{
+  "topic": "future of modular operating systems",
+  "options": {
+    "model_a": "code-davinci-002",
+    "model_b": "code-cushman-001",
+    "temperature": 0.5,
+    "max_tokens": 120,
+    "turns": 6
+  }
+}
