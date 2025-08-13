@@ -231,7 +231,7 @@ clean:
 	    nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
 	    nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2 \
 	    kernel/login_bin.h \
-	    loader/elf_paged_loader.o src/agents/regx/regx_launch_elf_paged.o \
+            loader/elf_paged_loader.o regx/regx_launch_elf_paged.o \
 	    kernel/arch/ud_handler_patch.o
 	rm -rf out
 	make -C boot clean
