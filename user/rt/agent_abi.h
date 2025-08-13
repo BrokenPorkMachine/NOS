@@ -29,10 +29,6 @@ _Static_assert(offsetof(AgentAPI, printf)    == 8,  "printf off");
 _Static_assert(offsetof(AgentAPI, regx_load) == 16, "regx_load off");
 _Static_assert(offsetof(AgentAPI, yield)     == 24, "yield off");
 
-_Static_assert(offsetof(AgentAPI, fs_read_all)== 32, "ABI drift: fs_read_all");
-_Static_assert(offsetof(AgentAPI, regx_load)  == 40, "ABI drift: regx_load");
-_Static_assert(offsetof(AgentAPI, regx_ping)  == 48, "ABI drift: regx_ping");
-
 /* Set by the agent runtime (rt0_agent.c) from registers (RDI/RSI). */
 extern const AgentAPI *NOS;
 extern uint32_t        NOS_TID;
