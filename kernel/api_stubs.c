@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <kernel/api.h>
 
 // ---- Forward declarations for the actual kernel functions ----
 // Logging

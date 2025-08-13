@@ -24,6 +24,15 @@ typedef int (*agent_gate_fn)(const char *path,
 extern void agent_loader_set_gate(agent_gate_fn gate);
 extern int  agent_loader_run_from_path(const char *path, int prio);
 
+static int _regx_load_agent(const char *path, const char *arg, uint32_t *out) {
+    (void)arg;
+    int tid = agent_loader_run_from_path(path, 200);
+    if (tid >= 0 && out) {
+        *out = (uint32_t)tid;
+    }
+    return tid;
+}
+
 int regx_load(const char *name, const char *arg, uint32_t *out) {
     return _regx_load_agent(name, arg, out);
 }

@@ -9,6 +9,7 @@
 #include <string.h>
 #include "arch_x86_64/gdt_tss.h"
 #include "../arch/CPU/smp.h"
+#include <kernel/api.h>
 
 extern int kprintf(const char *fmt, ...);
 
@@ -28,10 +29,6 @@ extern int fs_read_all(const char *path, void **out, size_t *out_sz);
 extern void regx_main(void);                         // src/agents/regx/regx.c
 extern void nosm_entry(void);                        // user/agents/nosm/nosm.c
 extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.c
-int  api_puts(const char *s);
-int  api_fs_read_all(const char *path, void *buf, size_t len, size_t *outlen);
-int  api_regx_load(const char *name, const char *arg, uint32_t *out);
-void api_yield(void);
 
 // ---- AgentAPI helpers ----
 // --- Adapters to match AgentAPI signatures exactly ---
@@ -54,9 +51,10 @@ static void api_yield_wrap(void) {
 // --- Agent API table with corrected types ---
 AgentAPI k_agent_api = {
     .puts        = api_puts_wrap,
-    .fs_read_all = api_fs_read_all_wrap,
+    .printf      = kprintf,
     .regx_load   = api_regx_load_wrap,
-    .yield       = api_yield_wrap
+    .yield       = api_yield_wrap,
+    .fs_read_all = api_fs_read_all_wrap,
 };
 
 
