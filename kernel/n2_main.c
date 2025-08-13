@@ -41,8 +41,7 @@ __attribute__((weak)) void idt_guard_init_once(void);
 static void kprint(const char *s) { serial_puts(s); }
 
 /* Default kernel stack for TSS RSP0 */
-static uint8_t kernel_stack[4096] __attribute__((aligned(16)));
-uint8_t *_kernel_stack_top = kernel_stack + sizeof(kernel_stack);
+uint8_t *_kernel_stack_top = (uint8_t *)0x1FF000;
 
 #if VERBOSE
 #define vprint(s) kprint(s)
@@ -117,10 +116,10 @@ void n2_main(bootinfo_t *bootinfo) {
     // Guard: probe/log IDT very early (no SSE, see idt_guard.c)
     if (idt_guard_init_once) idt_guard_init_once();
 
-    // Install our full ISR/IRQ table before enabling interrupts
+    // Install our full ISR/IRQ table and GDT/TSS before enabling interrupts
     idt_install();
-    start_timer_interrupts();
     gdt_tss_init(_kernel_stack_top);
+    start_timer_interrupts();
 
     print_acpi_info(bootinfo);
     print_cpu_topology(bootinfo);
