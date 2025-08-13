@@ -4,7 +4,7 @@
 #include <stdatomic.h>
 #include "../user/libc/libc.h"
 #include "nosfs.h"
-// libc.h already provides malloc/str* prototypes and time.
+
 extern unsigned char init_bin[];
 extern unsigned int init_bin_len;
 extern unsigned char login_bin[];
@@ -117,6 +117,22 @@ void *alloc_stack(size_t size, int user_mode) {
         return NULL;
     return mem + size;
 }
+=======
+// Stub build always considers filesystem ready
+_Atomic int nosfs_ready = 1;
+nosfs_fs_t nosfs_root;
+
+int nosfs_is_ready(void) { return nosfs_ready; }
+int nosfs_create(nosfs_fs_t *fs, const char *name, uint32_t capacity, uint32_t perm) {
+    (void)fs; (void)name; (void)capacity; (void)perm; return -1;
+}
+int nosfs_write(nosfs_fs_t *fs, int handle, uint32_t offset, const void *buf, uint32_t len) {
+    (void)fs; (void)handle; (void)offset; (void)buf; (void)len; return -1;
+}
+
+/* Miscellaneous stubs required for linking without full hardware support */
+void *alloc_thread_struct(void) { return NULL; }
+void *alloc_stack(size_t size, int user_mode) { (void)size; (void)user_mode; return NULL; }
 unsigned char init_bin[] = {0};
 unsigned int init_bin_len = 0;
 unsigned char login_bin[] = {0};
