@@ -69,3 +69,4 @@ void idt_set_with_ist(int vec, void *isr, uint8_t type_attr, uint8_t ist_slot);
 
 /* Debug */
 void idt_dump_vec(int v);
+void idt_selftest(void);   // NEW: quick sanity test
