@@ -1,21 +1,4 @@
-/* ==== selectors bootstrap (robust) ==== */
-#if defined(__has_include)
-#  if __has_include("arch/GDT/gdt_selectors.h")
-#    include "arch/GDT/gdt_selectors.h"
-#  endif
-#endif
-
-#ifndef KERNEL_CS
-  /* Default to your logged GDT: CS=0x0008, DS=0x0010, TR=0x0028 */
-  #define KERNEL_CS  0x0008
-  #define KERNEL_DS  0x0010
-  #define KERNEL_TSS 0x0028
-  /* If you don’t want a default, remove these three #defines
-     and instead define them in your build (e.g., -DKERNEL_CS=0x08 …) */
-#endif
-/* ===================================== */
-
-#include "idt.h"
+#include "arch/IDT/idt.h"
 #include <string.h>
 
 #ifndef kprintf
@@ -92,12 +75,14 @@ void idt_dump_vec(int v) {
                    ((uint64_t)idt[v].offset_mid  << 16) |
                    (uint64_t)idt[v].offset_low;
     kprintf("[idt] vec=%3d sel=%#06x off=%016llx attr=%02x ist=%u\n",
-            v, idt[v].selector, (unsigned long long)off, idt[v].type_attr, idt[v].ist & 7);
+            v,
+            (unsigned)idt[v].selector,
+            (unsigned long long)off,
+            (unsigned)idt[v].type_attr,
+            (unsigned)(idt[v].ist & 7));
 }
 
-/* Check a few vectors: selector, type, and nonzero offsets */
-/* Replace your existing check_vec() and idt_selftest() with these */
-
+/* Self-test with proper masks (no -Woverflow) */
 static int check_vec(int v, uint16_t allow_mask) {
     uint64_t off = ((uint64_t)idt[v].offset_high << 32) |
                    ((uint64_t)idt[v].offset_mid  << 16) |
@@ -112,14 +97,10 @@ static int check_vec(int v, uint16_t allow_mask) {
         kprintf("[idt][FAIL] vec=%d not present (attr=%#x)\n", v, idt[v].type_attr);
         return -1;
     }
-
-    /* gate type is low nibble: 0xE = interrupt, 0xF = trap */
-    uint8_t gtype = idt[v].type_attr & 0x0F;
+    uint8_t gtype = (uint8_t)(idt[v].type_attr & 0x0F);
     if (((uint16_t)(1u << gtype) & allow_mask) == 0) {
-        kprintf("[idt][WARN] vec=%d unexpected gate type=%#x\n", v, gtype);
-        /* not a hard fail; return 0 if you want to allow */
+        kprintf("[idt][WARN] vec=%d unexpected gate=%#x\n", v, gtype);
     }
-
     if (off < 0x10000) {
         kprintf("[idt][FAIL] vec=%d offset suspicious: %016llx\n",
                 v, (unsigned long long)off);
@@ -129,23 +110,21 @@ static int check_vec(int v, uint16_t allow_mask) {
 }
 
 void idt_selftest(void) {
-    /* Build masks with 1u<<type (types are <= 0xF), so use 16-bit container */
-    const uint16_t ALLOW_INT  = (uint16_t)(1u << IDT_ATTR_INT_GATE);   /* 1<<0xE */
-    const uint16_t ALLOW_TRAP = (uint16_t)(1u << IDT_ATTR_TRAP_GATE);  /* 1<<0xF */
+    const uint16_t ALLOW_INT  = (uint16_t)(1u << 0xE);
+    const uint16_t ALLOW_TRAP = (uint16_t)(1u << 0xF);
 
     int ok = 0;
-    ok += check_vec(6,  (uint16_t)(ALLOW_INT | ALLOW_TRAP)); /* #UD may be int or trap */
-    ok += check_vec(13, (uint16_t)(ALLOW_INT | ALLOW_TRAP)); /* #GP may be int or trap */
-    ok += check_vec(32, (uint16_t)(ALLOW_INT));              /* timer must be interrupt */
+    ok += check_vec(6,  (uint16_t)(ALLOW_INT | ALLOW_TRAP));
+    ok += check_vec(13, (uint16_t)(ALLOW_INT | ALLOW_TRAP));
+    ok += check_vec(32, (uint16_t)(ALLOW_INT));
 
-    if (ok == 0) kprintf("[idt] selftest: OK\n");
-    else         kprintf("[idt] selftest: FAILED (%d)\n", ok);
+    kprintf("[idt] selftest: %s\n", ok == 0 ? "OK" : "FAILED");
 }
 
 void idt_install(void) {
     idt_populate_all();
 
-    /* Explicitly set critical vectors you care about */
+    /* Pin key vectors */
     idt_set_interrupt_gate(6,  isr_ud_stub);     /* #UD */
     idt_set_interrupt_gate(32, isr_timer_stub);  /* APIC timer */
 
@@ -157,7 +136,7 @@ void idt_install(void) {
     idt_dump_vec(6);
     idt_dump_vec(13);
     idt_dump_vec(32);
-    idt_selftest();   // <— add this
+    idt_selftest();
 }
 
 void idt_reload(void) {
