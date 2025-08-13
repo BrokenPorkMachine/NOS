@@ -1,3 +1,20 @@
+/* ==== selectors bootstrap (robust) ==== */
+#if defined(__has_include)
+#  if __has_include("arch/GDT/gdt_selectors.h")
+#    include "arch/GDT/gdt_selectors.h"
+#  endif
+#endif
+
+#ifndef KERNEL_CS
+  /* Default to your logged GDT: CS=0x0008, DS=0x0010, TR=0x0028 */
+  #define KERNEL_CS  0x0008
+  #define KERNEL_DS  0x0010
+  #define KERNEL_TSS 0x0028
+  /* If you don’t want a default, remove these three #defines
+     and instead define them in your build (e.g., -DKERNEL_CS=0x08 …) */
+#endif
+/* ===================================== */
+
 #include "idt.h"
 #include <string.h>
 
