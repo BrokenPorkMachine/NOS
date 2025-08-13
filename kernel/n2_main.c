@@ -28,6 +28,7 @@
 #include "nosfs.h"
 extern int nosfs_is_ready(void);
 extern nosfs_fs_t nosfs_root;
+extern void regx_start(void);
 
 extern int timer_ready;
 __attribute__((weak)) void idt_guard_init_once(void);
@@ -164,6 +165,8 @@ void n2_main(bootinfo_t *bootinfo) {
     serial_printf("[N2] runqueue len cpu0=%d\n", thread_runqueue_length(0));
 
     for (uint32_t i = 0; i < bootinfo->module_count; ++i) load_module(&bootinfo->modules[i]);
+    nosfs_save_device(&nosfs_root, 0);
 
+    regx_start();
     scheduler_loop();
 }

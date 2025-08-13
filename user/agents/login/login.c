@@ -1,5 +1,16 @@
 #include "login.h"
 
+/* Minimal manifest so the loader can discover the entry point when the
+ * agent is packaged as a Mach-O2 binary. */
+__attribute__((used, section("\"__O2INFO,__manifest\"")))
+static const char manifest[] =
+"{\n"
+"  \"name\": \"login\",\n"
+"  \"type\": 4,\n"
+"  \"version\": \"1.0.0\",\n"
+"  \"entry\": \"login_server\"\n"
+"}\n";
+
 /* Provide weak stubs for the minimal services the login agent relies on.
  * In standalone unit tests these will be overridden by test-specific
  * implementations. */
