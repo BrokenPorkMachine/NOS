@@ -1,30 +1,15 @@
-#include "agent_abi.h"
-
-/* Globals visible to agents */
-const AgentAPI *NOS = 0;
-uint32_t        NOS_TID = 0;
-
-/* Every agent provides this. Keep it free of kernel headers. */
-extern void agent_main(void);
-
-/* Entry called by regx:
- *   rdi -> AgentAPI*
- *   rsi -> self tid
- */
+// user/rt/rt0_agent.c
 __attribute__((noreturn))
-void _start(const AgentAPI *api, uint32_t self_tid)
-{
-    NOS      = api;
-    NOS_TID  = self_tid;
+void agent_entry(void);
+extern void init_main(void);
 
-    /* Minimal C runtime could go here if needed (ctors, etc.) */
+__attribute__((noreturn))
+void agent_entry(void) {
+    // System V ABI: 16-byte alignment before call
+    asm volatile ("andq $-16, %%rsp" ::: "rsp");
+    init_main();
 
-    agent_main(); /* should not return, but guard just in case */
-    for (;;) {
-        if (NOS && NOS->yield) {
-            NOS->yield();
-        } else {
-            __asm__ __volatile__("pause");
-        }
-    }
+    // If it returns, park cleanly
+    for (;;)
+        asm volatile ("hlt");
 }
