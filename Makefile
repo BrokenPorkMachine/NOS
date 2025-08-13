@@ -162,8 +162,8 @@ endif
 	$(CC) $(CFLAGS) -c kernel/VM/numa.c -o kernel/VM/numa.o
 	$(CC) $(CFLAGS) -c kernel/VM/legacy_heap.c -o kernel/VM/legacy_heap.o
 	$(CC) $(CFLAGS) -c kernel/VM/heap_select.c -o kernel/VM/heap_select.o
-	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/nitroheap.o -o kernel/VM/nitroheap/nitroheap.o
-	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/classes.o -o kernel/VM/nitroheap/classes.o
+	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/nitroheap.c -o kernel/VM/nitroheap/nitroheap.o
+	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/classes.c -o kernel/VM/nitroheap/classes.o
 	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.o -o kernel/arch/idt_guard.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/idt.c -o kernel/arch/IDT/idt.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/isr.c -o kernel/arch/IDT/isr.o
