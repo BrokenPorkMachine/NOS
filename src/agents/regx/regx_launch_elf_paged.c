@@ -1,9 +1,9 @@
 // ============================================================================
-// File: regx/regx_launch_elf_paged.c  (optional glue)
+// File: src/agents/regx/regx_launch_elf_paged.c  (optional glue)
 // Purpose: Helper to launch an ELF agent using the page-mapped loader
 // ============================================================================
 #include <stdint.h>
-#include "../loader/elf_paged_loader.h"
+#include "../../../loader/elf_paged_loader.h"
 
 // Kernel/threading hooks (provided by your kernel)
 extern int   thread_spawn(uintptr_t rip, void* user_stack_top, uint32_t prio, uint32_t* out_tid);

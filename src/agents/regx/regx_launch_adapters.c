@@ -1,4 +1,4 @@
-// regx/regx_launch_adapters.c
+// src/agents/regx/regx_launch_adapters.c
 // Adapts to your thread/stack APIs so regx_launch_elf_paged links cleanly.
 
 #include <stddef.h>
@@ -6,8 +6,8 @@
 #include <stdarg.h>
 
 #include "drivers/IO/serial.h"
-#include "../kernel/VM/legacy_heap.h"
-#include "../kernel/Task/thread.h"
+#include "../../../kernel/VM/legacy_heap.h"
+#include "../../../kernel/Task/thread.h"
 
 // Allocate a simple stack for user threads
 void* create_user_stack(size_t size) {
