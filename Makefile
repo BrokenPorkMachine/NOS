@@ -62,7 +62,7 @@ user/rt/rt0_user.o: user/rt/rt0_user.S
 	@mkdir -p $(dir $@)
 	$(NASM) -f elf64 $< -o $@
 
-user/rt/rt0_agent.o: user/rt/rt0_stubs.c
+user/rt/rt_stubs.o: user/rt/rt_stubs.c
 	@mkdir -p $(dir $@)
 	$(CC) $(AGENT_CFLAGS) -c $< -o $@
 
