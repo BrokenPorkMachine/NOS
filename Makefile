@@ -34,7 +34,7 @@ $(AGENT_OBJS): %.o : %.c
 define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
-# init uses entry.o, others use rt0_user.o
+# All agents now link with rt0_user.o + rt_stubs.o
 out/agents/$(1).elf: user/rt/rt0_user.o user/rt/rt_stubs.o $$(AGENT_$(1)_OBJS) user/libc/libc.o
 	@mkdir -p $$(@D)
 	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
