@@ -53,20 +53,40 @@ static void safe_dump_window(const uint8_t* load_base, uint64_t span, const uint
     serial_puts("\r\n");
 }
 
-/* Very small allocator shim: try a page-aligned kalloc; no arena fallback here. */
+/*
+ * Very small allocator shim: try a page-aligned kalloc first.  Early in boot
+ * the full kernel heap may not be available which previously caused agent
+ * loading to fail outright.  If kalloc() returns NULL, fall back to a tiny
+ * static arena so we can still bootstrap built-in agents.
+ */
 static void* kalloc_aligned_or_arena(size_t bytes, size_t align) {
     size_t need = bytes;
     if (align < sizeof(void*)) align = sizeof(void*);
-    // Over-allocate and align manually to keep it simple and freestanding.
+
+    // Primary attempt: use the real kernel allocator.
     uint8_t* raw = (uint8_t*)kalloc(need + align);
     if (!raw) {
-        serial_printf("[loader] kalloc %zu failed\n", (unsigned long)bytes);
-        return NULL;
+        // Fallback arena: single static buffer used only when the heap is not
+        // yet ready.  This is intentionally small but sufficient for early
+        // boot agents.
+        static uint8_t arena[512 * 1024];
+        static size_t arena_off = 0;
+        uintptr_t base = (uintptr_t)arena;
+        uintptr_t p = (base + arena_off + (align - 1)) & ~(uintptr_t)(align - 1);
+        size_t new_off = (size_t)(p - base) + need;
+        if (new_off <= sizeof(arena)) {
+            arena_off = new_off;
+            raw = (uint8_t*)p;
+        } else {
+            serial_printf("[loader] kalloc %zu failed and arena exhausted\n",
+                          (unsigned long)bytes);
+            return NULL;
+        }
     }
+
     uintptr_t p = (uintptr_t)raw;
     uintptr_t aligned = (p + (align - 1)) & ~(uintptr_t)(align - 1);
     // NOTE: no free of leading slack; in this usage agents are short-lived.
-    (void)p;
     return (void*)aligned;
 }
 
