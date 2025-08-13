@@ -5,7 +5,7 @@ global enter_user_mode
 ; void enter_user_mode(void *entry, void *user_stack)
 ;   rdi = user RIP
 ;   rsi = user RSP (ideally 16-byte aligned)
-; GDT_SEL_USER_DATA_R3 = 0x23, GDT_SEL_USER_CODE_R3 = 0x1B
+; GDT_SEL_USER_DATA_R3 = 0x1B, GDT_SEL_USER_CODE_R3 = 0x23
 
 section .text
 enter_user_mode:

@@ -15,6 +15,7 @@
 #include "drivers/IO/usb.h"
 #include "drivers/IO/usbkbd.h"
 #include "Task/thread.h"
+#include "arch/GDT/tss.h"
 #include "VM/numa.h"
 #include "VM/pmm_buddy.h"
 #include "VM/heap.h"
@@ -54,6 +55,7 @@ void n2_main(bootinfo_t *bootinfo) {
 
     threads_early_init();
     serial_init();
+    tss_install();
     vprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
     vprint("[N2] Booted by: ");
     const char *bl = bootinfo->bootloader_name;

@@ -15,17 +15,32 @@ void* vmm_reserve(size_t size, size_t align) {
 }
 
 // Map one 4K page at VA->PA with protection flags
+// Protection flags
+#define PROT_EXEC  0x1
+#define PROT_WRITE 0x2
+#define PROT_READ  0x4
+#define PROT_USER  0x8
+
+static inline uint64_t prot_to_flags(int prot) {
+    uint64_t flags = 0;
+    if (prot & PROT_WRITE) flags |= PAGE_WRITABLE;
+    if (prot & PROT_USER)  flags |= PAGE_USER;
+    if (!(prot & PROT_EXEC)) flags |= PAGE_NO_EXEC;
+    return flags;
+}
+
 int vmm_map(void* va, uintptr_t pa, int prot) {
-    paging_map_adv((uint64_t)va, pa, prot, 0, current_cpu_node());
+    paging_map_adv((uint64_t)va, pa, prot_to_flags(prot), 0, current_cpu_node());
     return 0;
 }
 
 // Change page protections on a VA range
 void vmm_prot(void* va, size_t size, int prot) {
+    uint64_t flags = prot_to_flags(prot);
     for (size_t off = 0; off < size; off += PAGE_SIZE) {
         uint64_t phys = paging_virt_to_phys_adv((uint64_t)va + off);
         if (phys)
-            paging_map_adv((uint64_t)va + off, phys, prot, 0, current_cpu_node());
+            paging_map_adv((uint64_t)va + off, phys, flags, 0, current_cpu_node());
     }
 }
 

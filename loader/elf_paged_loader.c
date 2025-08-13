@@ -52,7 +52,18 @@ typedef struct {                // Elf64_Ehdr (packed subset)
 // ---- Internals -------------------------------------------------------------
 #define PAGE_SZ 4096ULL
 static inline size_t up(size_t x, size_t a){ return (x + (a-1)) & ~(a-1); }
-static inline int prot_from_flags(uint32_t f){ int p=0; if(f&PF_X)p|=1; if(f&PF_W)p|=2; if(f&PF_R)p|=4; return p; }
+#define PROT_EXEC  0x1
+#define PROT_WRITE 0x2
+#define PROT_READ  0x4
+#define PROT_USER  0x8
+
+static inline int prot_from_flags(uint32_t f){
+    int p=0;
+    if(f&PF_X) p|=PROT_EXEC;
+    if(f&PF_W) p|=PROT_WRITE;
+    if(f&PF_R) p|=PROT_READ;
+    return p;
+}
 
 static int map_segment_paged(const uint8_t* file, size_t file_sz,
                              uint64_t f_off, uint64_t f_sz,
@@ -68,7 +79,7 @@ static int map_segment_paged(const uint8_t* file, size_t file_sz,
     for (; mapped < map_sz; mapped += PAGE_SZ){
         uintptr_t pa = pmm_alloc_page();
         if (!pa) { vmm_unmap(base, mapped); return -12; }
-        if (vmm_map((uint8_t*)base + mapped, pa, /*RW temp*/ (4|2)) != 0){
+        if (vmm_map((uint8_t*)base + mapped, pa, PROT_READ | PROT_WRITE | PROT_USER) != 0){
             vmm_unmap(base, mapped);
             return -5;
         }
@@ -78,7 +89,8 @@ static int map_segment_paged(const uint8_t* file, size_t file_sz,
     memcpy(base, file + f_off, (size_t)f_sz);
     if (mem_sz > f_sz) memset((uint8_t*)base + f_sz, 0, (size_t)(mem_sz - f_sz));
 
-    vmm_prot(base, map_sz, prot_from_flags(flags));
+    int prot = prot_from_flags(flags) | PROT_USER;
+    vmm_prot(base, map_sz, prot);
     if (out_va) *out_va = base; 
     if (out_sz) *out_sz = map_sz;
     return 0;
