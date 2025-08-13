@@ -90,13 +90,42 @@ static void* kalloc_aligned_or_arena(size_t bytes, size_t align) {
     return (void*)aligned;
 }
 
-/* RELATIVE-only relocations (many simple ET_EXEC/ET_DYN agents have none). Safe no-op. */
+/* Apply R_X86_64_RELATIVE relocations when present. */
 static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
                                      const Elf64_Ehdr* eh, const void* img, size_t sz)
 {
-    (void)load_base; (void)lo_for_exec; (void)eh; (void)img; (void)sz;
-    // Keep this simple for now; your current agents show "applied 0".
-    return 0;
+    const Elf64_Phdr *ph = (const Elf64_Phdr *)((const uint8_t*)img + eh->e_phoff);
+    uint64_t base_adj = (eh->e_type == ET_EXEC) ? lo_for_exec : 0;
+    size_t applied = 0;
+
+    for (uint16_t i = 0; i < eh->e_phnum; ++i) {
+        if (ph[i].p_type != PT_DYNAMIC) continue;
+
+        const Elf64_Dyn *dyn = (const Elf64_Dyn*)((const uint8_t*)img + ph[i].p_offset);
+        const Elf64_Dyn *dyn_end = dyn + (ph[i].p_filesz / sizeof(Elf64_Dyn));
+
+        uint64_t rela_off = 0, rela_sz = 0, rela_ent = sizeof(Elf64_Rela);
+        for (const Elf64_Dyn *d = dyn; d < dyn_end; ++d) {
+            if (d->d_tag == DT_RELA)      rela_off = d->d_un.d_ptr;
+            else if (d->d_tag == DT_RELASZ) rela_sz = d->d_un.d_val;
+            else if (d->d_tag == DT_RELAENT) rela_ent = d->d_un.d_val;
+        }
+
+        if (rela_off && rela_sz) {
+            const Elf64_Rela *rela = (const Elf64_Rela*)((const uint8_t*)img + (rela_off - base_adj));
+            size_t count = rela_sz / rela_ent;
+            for (size_t r = 0; r < count; ++r) {
+                uint32_t type = ELF64_R_TYPE(rela[r].r_info);
+                if (type == R_X86_64_RELATIVE) {
+                    uint64_t *where = (uint64_t*)(load_base + (rela[r].r_offset - base_adj));
+                    *where = (uint64_t)(load_base + rela[r].r_addend);
+                    applied++;
+                }
+            }
+        }
+    }
+
+    return applied;
 }
 
 /* Optional tiny JSON helpers kept for future manifest usage (currently unused). */
