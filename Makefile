@@ -1,3 +1,5 @@
+# ========= Config =========
+CROSS_COMPILE ?= x86_64-unknown-linux-gnu-
 CC      := $(CROSS_COMPILE)gcc
 LD      := $(CROSS_COMPILE)ld
 AS      := $(CROSS_COMPILE)as
@@ -5,263 +7,110 @@ AR      := $(CROSS_COMPILE)ar
 OBJCOPY := $(CROSS_COMPILE)objcopy
 NASM    := nasm
 
-CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
-	  -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-	  -I include -I boot/include -I nosm -I loader -I src/agents/regx \
-	  -no-pie -fcf-protection=none -I kernel
+BUILD_DIR := build
+OUT_DIR   := out
 
-ifeq ($(CONFIG_NITRO_HEAP),1)
-CFLAGS += -DCONFIG_NITRO_HEAP=1
-endif
+CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
+          -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+          -I include -I boot/include -I nosm -I loader -I src/agents/regx \
+          -no-pie -fcf-protection=none -I kernel
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 
-all: libc kernel boot disk.img
+# ========= Source Discovery =========
+KERNEL_SRCS := $(wildcard kernel/**/*.c kernel/*.c loader/*.c src/agents/regx/*.c user/agents/nosfs/*.c user/agents/nosm/*.c nosm/drivers/**/*.c)
+KERNEL_ASM  := $(wildcard kernel/**/*.S kernel/**/*.asm)
+KERNEL_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS)) $(patsubst %.S,$(BUILD_DIR)/%.o,$(KERNEL_ASM)) $(patsubst %.asm,$(BUILD_DIR)/%.o,$(KERNEL_ASM))
 
-# ===== Standalone Agents on Disk =====
 AGENT_DIRS := user/agents/init user/agents/login
-AGENT_DIRS_NONEMPTY := $(AGENT_DIRS)
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
-AGENT_ELFS  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).elf)
-AGENT_MO2  := $(foreach n,$(AGENT_NAMES),out/agents/$(n).mo2)
-AGENT_C_SRCS := $(foreach d,$(AGENT_DIRS_NONEMPTY),$(wildcard $(d)/*.c))
-AGENT_OBJS   := $(patsubst %.c,%.o,$(AGENT_C_SRCS))
+AGENT_SRCS := $(wildcard $(foreach d,$(AGENT_DIRS),$(d)/*.c))
+AGENT_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(AGENT_SRCS))
 
-$(AGENT_OBJS): %.o : %.c
+BIN_SRCS := $(wildcard bin/*.c)
+BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
+BIN_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(BIN_SRCS))
+
+MODULE_SRCS := $(wildcard nosm/drivers/example/hello/*.c)
+MODULE_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(MODULE_SRCS))
+
+# ========= Pattern Rules =========
+$(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(AGENT_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
-define MAKE_AGENT_RULES
-AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
-
-# All agents now link with rt0_user.o + rt_stubs.o
-out/agents/$(1).elf: user/rt/rt0_user.o user/rt/rt_stubs.o $$(AGENT_$(1)_OBJS) user/libc/libc.o
-	@mkdir -p $$(@D)
-	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
-
-out/agents/$(1).mo2: out/agents/$(1).elf
-	cp $$< $$@
-endef
-$(foreach n,$(AGENT_NAMES),$(eval $(call MAKE_AGENT_RULES,$(n))))
-
-agents: $(AGENT_ELFS) $(AGENT_MO2)
-
-# ===== NOSM modules =====
-nosm/drivers/example/hello/hello_nmod.o: nosm/drivers/example/hello/hello_nmod.c
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
-
-out/modules/hello.mo2: nosm/drivers/example/hello/hello_nmod.o user/libc/libc.o
-	@mkdir -p $(@D)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $(@:.mo2=.elf)
-	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property $(@:.mo2=.elf) $@
-
-modules: out/modules/hello.mo2
-
-# ===== /bin user programs =====
-user/rt/rt0_user.o: user/rt/rt0_user.S
+$(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(dir $@)
 	$(NASM) -f elf64 $< -o $@
 
-user/rt/rt_stubs.o: user/rt/rt_stubs.c
+$(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(dir $@)
-	$(CC) $(AGENT_CFLAGS) -c $< -o $@
+	$(NASM) -f elf64 $< -o $@
 
-user/rt/entry.o: user/rt/entry.S
-	@mkdir -p $(dir $@)
-	$(CC) $(AGENT_CFLAGS) -c $< -o $@
+# ========= Build Targets =========
+all: boot kernel agents bins modules image
 
-BIN_SRCS  := $(wildcard bin/*.c)
-BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
-BIN_ELFS  := $(foreach n,$(BIN_NAMES),out/bin/$(n).elf)
-BIN_BINS  := $(foreach n,$(BIN_NAMES),out/bin/$(n).bin)
-BIN_OBJS  := $(patsubst %.c,%.o,$(BIN_SRCS))
-
-$(BIN_OBJS): %.o : %.c
-	@mkdir -p $(dir $@)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
-
-define MAKE_BIN_RULES
-out/bin/$(1).elf: user/rt/rt0_user.o user/rt/rt_stubs.o bin/$(1).o user/libc/libc.o
-	@mkdir -p $$(@D)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
-
-out/bin/$(1).bin: out/bin/$(1).elf
-	$(OBJCOPY) -O binary \
-		--remove-section=.note.gnu.build-id \
-		--remove-section=.note.gnu.property \
-		$$< $$@
-endef
-$(foreach n,$(BIN_NAMES),$(eval $(call MAKE_BIN_RULES,$(n))))
-
-bins: user/rt/rt0_user.o $(BIN_ELFS) $(BIN_BINS)
-
-# ===== libc =====
-user/libc/libc.o: user/libc/libc.c
-	$(CC) $(AGENT_CFLAGS) -c $< -o $@
-
-libc: user/libc/libc.o
-
-# ===== kernel =====
-kernel: libc agents bins
-	# (kernel build stays the same)
-	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
-	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch_asm.o
-	$(CC) $(CFLAGS) -c kernel/Task/context_switch.c -o kernel/Task/context_switch.o
-	$(CC) $(O2_CFLAGS) -c kernel/O2.c -o kernel/O2.o
-	$(CC) $(CFLAGS) -c kernel/n2_main.c -o kernel/n2_main.o
-	$(CC) $(CFLAGS) -c kernel/api_stubs.c -o kernel/api_stubs.o
-	$(CC) $(CFLAGS) -c kernel/builtin_nosfs.c -o kernel/builtin_nosfs.o
-	$(CC) $(CFLAGS) -c kernel/agent.c -o kernel/agent.o
-	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
-	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
-	$(CC) $(CFLAGS) -c kernel/trap.c -o kernel/trap.o
-        $(CC) $(CFLAGS) -c loader/elf_paged_loader.c -o loader/elf_paged_loader.o
-        $(CC) $(CFLAGS) -c src/agents/regx/regx_launch.c -o src/agents/regx/regx_launch.o
-ifneq ($(wildcard kernel/arch/ud_handler_patch.c),)
-	$(CC) $(CFLAGS) -c kernel/arch/ud_handler_patch.c -o kernel/arch/ud_handler_patch.o
-endif
-	$(CC) $(CFLAGS) -c kernel/symbols.c -o kernel/symbols.o
-	$(CC) $(CFLAGS) -c kernel/uaccess.c -o kernel/uaccess.o
-	$(CC) $(CFLAGS) -c kernel/proc_launch.c -o kernel/proc_launch.o
-	$(CC) $(CFLAGS) -c kernel/IPC/ipc.c -o kernel/IPC/ipc.o
-	$(CC) $(CFLAGS) -c kernel/Task/thread.c -o kernel/Task/thread.o
-	xxd -i out/agents/init.mo2 | \
-	sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_init_mo2/init_bin/g; s/out_agents_init_mo2_len/init_bin_len/' > kernel/init_bin.h
-	xxd -i out/agents/login.mo2 | \
-	sed 's/unsigned char/static unsigned char/; s/unsigned int/static unsigned int/; s/out_agents_login_mo2/login_bin/g; s/out_agents_login_mo2_len/login_bin_len/' > kernel/login_bin.h
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/serial.c   -o nosm/drivers/IO/serial.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/usb.c      -o nosm/drivers/IO/usb.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/usbkbd.c   -o nosm/drivers/IO/usbkbd.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/video.c    -o nosm/drivers/IO/video.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/tty.c      -o nosm/drivers/IO/tty.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/ps2.c      -o nosm/drivers/IO/ps2.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/keyboard.c -o nosm/drivers/IO/keyboard.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/mouse.c    -o nosm/drivers/IO/mouse.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/pci.c      -o nosm/drivers/IO/pci.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/pic.c      -o nosm/drivers/IO/pic.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/pit.c      -o nosm/drivers/IO/pit.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/block.c    -o nosm/drivers/IO/block.o
-	$(CC) $(CFLAGS) -c nosm/drivers/IO/sata.c     -o nosm/drivers/IO/sata.o
-	$(CC) $(CFLAGS) -c nosm/drivers/Net/e1000.c   -o nosm/drivers/Net/e1000.o
-	$(CC) $(CFLAGS) -c nosm/drivers/Net/netstack.c -o nosm/drivers/Net/netstack.o
-	$(CC) $(CFLAGS) -c src/agents/regx/regx.c      -o src/agents/regx/regx.o
-	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs.c   -o user/agents/nosfs/nosfs.o
-	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs_server.c -o user/agents/nosfs/nosfs_server.o
-	$(CC) $(CFLAGS) -c user/agents/nosm/nosm.c     -o user/agents/nosm/nosm.o
-	$(CC) $(CFLAGS) -c kernel/arch/CPU/smp.c -o kernel/arch/CPU/smp.o
-	$(CC) $(CFLAGS) -c kernel/arch/APIC/lapic.c -o kernel/arch/APIC/lapic.o
-	$(NASM) -f elf64 -I kernel/arch/GDT/ kernel/arch/GDT/gdt.asm -o kernel/arch/GDT/gdt_flush.o
-	$(CC) $(CFLAGS) -c kernel/arch/GDT/gdt.c -o kernel/arch/GDT/gdt.o
-	$(CC) $(CFLAGS) -c kernel/arch/GDT/tss.c -o kernel/arch/GDT/tss.o
-	$(CC) $(CFLAGS) -c kernel/arch/x86/sel.c -o kernel/arch/x86/sel.o
-	$(CC) $(CFLAGS) -c kernel/macho2.c -o kernel/macho2.o
-	$(CC) $(CFLAGS) -c kernel/printf.c -o kernel/printf.o
-	$(CC) $(CFLAGS) -c kernel/nosm.c -o kernel/nosm.o
-	$(CC) $(CFLAGS) -c kernel/VM/pmm_buddy.c -o kernel/VM/pmm_buddy.o
-	$(CC) $(CFLAGS) -c kernel/VM/paging_adv.c -o kernel/VM/paging_adv.o
-	$(CC) $(CFLAGS) -c kernel/VM/cow.c -o kernel/VM/cow.o
-	$(CC) $(CFLAGS) -c kernel/VM/numa.c -o kernel/VM/numa.o
-	$(CC) $(CFLAGS) -c kernel/VM/legacy_heap.c -o kernel/VM/legacy_heap.o
-	$(CC) $(CFLAGS) -c kernel/VM/heap_select.c -o kernel/VM/heap_select.o
-	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/nitroheap.c -o kernel/VM/nitroheap/nitroheap.o
-	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/classes.c -o kernel/VM/nitroheap/classes.o
-	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
-	$(CC) $(CFLAGS) -c kernel/arch/IDT/idt.c -o kernel/arch/IDT/idt.o
-	$(CC) $(CFLAGS) -c kernel/arch/IDT/isr.c -o kernel/arch/IDT/isr.o
-	$(NASM) -f elf64 kernel/arch/IDT/isr_stub.asm -o kernel/arch/IDT/isr_stub.o
-	$(CC) $(CFLAGS) -c kernel/nosfs_pub.c -o kernel/nosfs_pub.o
-	$(CC) $(CFLAGS) -c kernel/agent_loader_pub.c -o kernel/agent_loader_pub.o
-        $(CC) $(CFLAGS) -c kernel/loader_vm_pmm_shims.c -o kernel/loader_vm_pmm_shims.o
-	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/api_stubs.o \
-	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o \
-	    kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
-	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
-	    kernel/VM/heap_select.o kernel/VM/legacy_heap.o \
-	    kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o kernel/uaccess.o \
-	    kernel/proc_launch.o kernel/trap.o kernel/symbols.o \
-	    kernel/arch/idt_guard.o kernel/arch/IDT/idt.o kernel/arch/IDT/isr.o kernel/arch/IDT/isr_stub.o \
-            loader/elf_paged_loader.o src/agents/regx/regx_launch.o \
-	    kernel/nosfs_pub.o \
-	    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
-	    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
-	    nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o \
-	    nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
-	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
-	    user/libc/libc.o $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o) \
-            kernel/loader_vm_pmm_shims.o \
-                -o kernel.bin
-	cp kernel.bin n2.bin
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.o -o O2.elf
-	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property O2.elf O2.bin
-
-# ===== boot & image =====
 boot:
 	make -C boot
+
+kernel: $(KERNEL_OBJS)
+	$(LD) -T kernel/n2.ld -Map $(OUT_DIR)/kernel.map $(KERNEL_OBJS) -o kernel.bin
+	cp kernel.bin n2.bin
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.c -o O2.elf
+	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property O2.elf O2.bin
+
+agents: $(AGENT_NAMES:%=$(OUT_DIR)/agents/%.mo2)
+
+$(OUT_DIR)/agents/%.elf: $(BUILD_DIR)/user/rt/rt0_user.o $(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o $(BUILD_DIR)/user/agents/%/*.o
+	@mkdir -p $(dir $@)
+	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $^ -o $@
+
+$(OUT_DIR)/agents/%.mo2: $(OUT_DIR)/agents/%.elf
+	cp $< $@
+
+bins: $(BIN_NAMES:%=$(OUT_DIR)/bin/%.bin)
+
+$(OUT_DIR)/bin/%.elf: $(BUILD_DIR)/user/rt/rt0_user.o $(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o $(BUILD_DIR)/bin/%.o
+	@mkdir -p $(dir $@)
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $@
+
+$(OUT_DIR)/bin/%.bin: $(OUT_DIR)/bin/%.elf
+	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property $< $@
+
+modules: $(OUT_DIR)/modules/hello.mo2
+
+$(OUT_DIR)/modules/hello.mo2: $(MODULE_OBJS) $(BUILD_DIR)/user/libc/libc.o
+	@mkdir -p $(dir $@)
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $(OUT_DIR)/modules/hello.elf
+	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property $(OUT_DIR)/modules/hello.elf $@
+
+image: disk.img
 
 disk.img: boot kernel agents bins modules
 	dd if=/dev/zero of=disk.img bs=1M count=64
 	mkfs.vfat -F 32 disk.img
-	mmd -i disk.img ::/EFI
-	mmd -i disk.img ::/EFI/BOOT
+	mmd -i disk.img ::/EFI ::/EFI/BOOT
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img O2.bin ::/
 	mcopy -i disk.img n2.bin ::/
-	mmd -i disk.img ::/agents || true
-	$(foreach b,$(AGENT_MO2), mcopy -i disk.img $(b) ::/agents/$(notdir $(b));)
-	mmd -i disk.img ::/bin || true
-	$(foreach b,$(BIN_BINS), mcopy -i disk.img $(b) ::/bin/$(notdir $(b));)
-	mmd -i disk.img ::/modules || true
-	mcopy -i disk.img out/modules/hello.mo2 ::/modules/hello.mo2
+	mmd -i disk.img ::/agents
+	mcopy -i disk.img $(OUT_DIR)/agents/*.mo2 ::/agents/
+	mmd -i disk.img ::/bin
+	mcopy -i disk.img $(OUT_DIR)/bin/*.bin ::/bin/
+	mmd -i disk.img ::/modules
+	mcopy -i disk.img $(OUT_DIR)/modules/*.mo2 ::/modules/
 
-# ===== utility =====
+# ========= Utility =========
 clean:
-	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
-                    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o \
-	            kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
-	            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
-	            kernel/VM/heap_select.o kernel/VM/legacy_heap.o kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o \
-	            kernel/uaccess.o kernel/proc_launch.o kernel/trap.o \
-	    kernel/symbols.o kernel/arch/idt_guard.o kernel/arch/IDT/idt.o kernel/arch/IDT/isr.o kernel/arch/IDT/isr_stub.o \
-	    $(AGENT_OBJS) $(AGENT_ELFS) $(AGENT_MO2) $(BIN_OBJS) $(BIN_ELFS) $(BIN_BINS) \
-	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
-	    kernel/symbols.o kernel/arch/idt_guard.o kernel/arch/IDT/idt.o kernel/arch/IDT/isr.o kernel/arch/IDT/isr_stub.o kernel/agent_loader_pub.o \
-		user/rt/rt0_user.o user/rt/rt0_agent.o \
-	    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
-	    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
-	    nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
-            nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2 \
-            kernel/login_bin.h \
-        loader/elf_paged_loader.o src/agents/regx/regx_launch.o \
-            kernel/arch/ud_handler_patch.o
-	rm -rf out
+	rm -rf $(BUILD_DIR) $(OUT_DIR) disk.img kernel.bin n2.bin O2.elf O2.bin
 	make -C boot clean
 
 run: disk.img
-	qemu-system-x86_64 \
-	-cpu max \
-	-bios OVMF.fd \
-	-drive file=disk.img,format=raw \
-	-m 512M \
-	-netdev user,id=n0 \
-	-device e1000,netdev=n0 \
-	-device i8042 \
-	-serial stdio -display sdl
+	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
+	    -m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
+	    -device i8042 -serial stdio -display sdl
 
 runmac: disk.img
-	qemu-system-x86_64 \
-	-cpu max \
-	-bios OVMF.fd \
-	-drive file=disk.img,format=raw \
-	-m 512M \
-	-netdev user,id=n0 \
-	-device e1000,netdev=n0 \
-	-device i8042 \
-	-serial stdio -display cocoa
-
-.PHONY: all libc kernel boot agents bins clean run runmac check-init
-
-check-init: out/agents/init.elf
-	@echo '[check-init] entry bytes:'
-	@objdump -d out/agents/init.elf | head -n 20
-	@echo '[check-init] symbols:'
-	@nm out/agents/init.elf | grep -E '(_start|init_main)'
+	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
+	    -m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
+	    -device i8042 -serial stdio -display cocoa
