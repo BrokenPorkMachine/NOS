@@ -19,7 +19,7 @@ Each registration maps directly to a RegX entry. `hal_init()` creates a
 root bus under which all HAL-managed devices are attached. Calls to
 `hal_register()` default to this root when no parent is supplied.
 
-During system startup the kernel invokes `hal_init()` and registers core
+\During system startup the kernel invokes `hal_init()` and registers core
 hardware components such as the USB and PS/2 buses, SATA controller, block
 device layer and network stack. These registrations appear in RegX and may
 be queried by other agents to discover available hardware.
