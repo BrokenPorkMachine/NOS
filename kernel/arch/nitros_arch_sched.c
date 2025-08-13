@@ -10,33 +10,13 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include "arch_x86_64/gdt_tss.h"
 
-/* -------- Public selectors (keep in sync with your IDT/syscall paths) -------- */
-#define GDT_KERNEL_CODE 0x08
-#define GDT_KERNEL_DATA 0x10
-#define GDT_USER_CODE   0x1B
-#define GDT_USER_DATA   0x23
-#define GDT_TSS         0x28  // TSS selector (occupies two GDT slots at indices 5+6)
+extern uint8_t _kernel_stack_top[];
 
 /* ------------------ Minimal logging hooks (replace with your own) ------------- */
 __attribute__((weak)) void log_error(const char *fmt, ...) { (void)fmt; }
 __attribute__((weak)) void log_info (const char *fmt, ...) { (void)fmt; }
-
-/* --------------------------- Core structs ------------------------------------ */
-struct __attribute__((packed)) gdt_ptr {
-    uint16_t limit;
-    uint64_t base;
-};
-
-struct __attribute__((packed)) tss64 {
-    uint32_t _rsvd0;
-    uint64_t rsp0, rsp1, rsp2;
-    uint64_t _rsvd1;
-    uint64_t ist1, ist2, ist3, ist4, ist5, ist6, ist7;
-    uint64_t _rsvd2;
-    uint16_t _rsvd3;
-    uint16_t iomap_base;
-};
 
 struct cpu_context {
     /* Callee-saved first keeps ABI happy if you ever use setjmp/longjmp style */
@@ -58,60 +38,6 @@ extern void   *alloc_thread_struct(void);
 extern void    scheduler_enqueue(struct thread *t);
 extern void    scheduler_pick_and_run(void); // you can keep yours; we also include a simple example below
 extern uint8_t _kernel_stack_top[];          // from linker script
-
-/* ----------------------- Arch globals (GDT/TSS) ------------------------------ */
-static uint64_t gdt[7];       // 0..4 segments + 5/6 TSS (two slots)
-static struct tss64 tss;
-static struct gdt_ptr gdtp;
-
-/* ----------------------- Helper: set 64-bit TSS descriptor ------------------- */
-static void set_tss_descriptor(uint64_t *table, int slot, struct tss64 *t)
-{
-    // slot must point to the first of two consecutive entries
-    uint64_t base  = (uint64_t)t;
-    uint64_t limit = sizeof(*t) - 1;
-
-    uint64_t low =
-        ((limit & 0xFFFFULL)) |
-        ((base  & 0xFFFFFFULL) << 16) |
-        (0x89ULL << 40) |                 // type=0x9 (Avail 64-bit TSS), present=1, DPL=0, G=0
-        ((limit & 0xF0000ULL) << 48) |
-        ((base  & 0xFF000000ULL) << 32);
-
-    uint64_t high = (base >> 32) & 0xFFFFFFFFULL; // upper 32 bits of base
-    table[slot]     = low;
-    table[slot + 1] = high;
-}
-
-/* -------------------------- lgdt + CS reload -------------------------------- */
-static inline void lgdt_and_reload_segments(const struct gdt_ptr *gp)
-{
-    // LGDT + reload data segs + far return to reload CS
-    __asm__ __volatile__ (
-        "lgdt (%0)\n\t"
-        "mov $0x10, %%ax\n\t"
-        "mov %%ax, %%ds\n\t"
-        "mov %%ax, %%es\n\t"
-        "mov %%ax, %%ss\n\t"
-        "mov %%ax, %%fs\n\t"
-        "mov %%ax, %%gs\n\t"
-        /* Far return to set CS = 0x08 */
-        "pushq $0x08\n\t"
-        "lea 1f(%%rip), %%rax\n\t"
-        "pushq %%rax\n\t"
-        "lretq\n\t"
-        "1:\n\t"
-        :
-        : "r"(gp)
-        : "rax", "memory"
-    );
-}
-
-/* --------------------------------- ltr -------------------------------------- */
-static inline void ltr(uint16_t sel)
-{
-    __asm__ __volatile__("ltr %0" : : "r"(sel) : "memory");
-}
 
 /* ---------------- Safe user-mode transition (uses iretq) -------------------- */
 __attribute__((noreturn)) static void switch_to_user(void *entry, void *user_stack_top)
@@ -135,33 +61,6 @@ __attribute__((noreturn)) static void switch_to_user(void *entry, void *user_sta
         : "rax", "memory"
     );
     __builtin_unreachable();
-}
-
-/* -------------------------- Public arch init API ---------------------------- */
-void arch_gdt_tss_init(void)
-{
-    // 0: null
-    gdt[0] = 0x0000000000000000ULL;
-    // 1: kernel code 64-bit
-    gdt[1] = 0x00AF9A000000FFFFULL;
-    // 2: kernel data
-    gdt[2] = 0x00AF92000000FFFFULL;
-    // 3: user code
-    gdt[3] = 0x00AFFA000000FFFFULL;
-    // 4: user data
-    gdt[4] = 0x00AFF2000000FFFFULL;
-    // 5/6: TSS (two entries)
-    memset(&tss, 0, sizeof(tss));
-    tss.rsp0 = (uint64_t)_kernel_stack_top;   // kernel RSP0 used on privilege transitions
-    tss.iomap_base = sizeof(tss);             // no IO bitmap
-    set_tss_descriptor(gdt, 5, &tss);
-
-    gdtp.limit = (uint16_t)(sizeof(gdt) - 1);
-    gdtp.base  = (uint64_t)gdt;
-
-    lgdt_and_reload_segments(&gdtp);
-    ltr(GDT_TSS);
-    log_info("[arch] GDT/TSS initialized (no LDT)");
 }
 
 /* ---------------------- Thread spawn helpers (safe selectors) --------------- */
@@ -296,7 +195,7 @@ __attribute__((weak)) void scheduler_pick_and_run(void)
 /* Call this from your n2_main() right after IDT init and before spawning threads. */
 void arch_early_init_and_start(void (*spawn_all)(void))
 {
-    arch_gdt_tss_init();
+    gdt_tss_init(_kernel_stack_top);
     // Your code should set up IDT earlier; if not, do it before this call.
     // After GDT/TSS is live, let the caller spawn kernel/user threads:
     if (spawn_all) spawn_all();
