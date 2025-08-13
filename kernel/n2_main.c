@@ -16,7 +16,7 @@
 #include "drivers/IO/usbkbd.h"
 #include "Task/thread.h"
 #include "arch/IDT/idt.h"
-#include "arch/GDT/tss.h"
+#include "arch_x86_64/gdt_tss.h"
 #include "VM/numa.h"
 #include "VM/pmm_buddy.h"
 #include "VM/heap.h"
@@ -33,6 +33,10 @@ __attribute__((weak)) void idt_guard_init_once(void);
 #endif
 
 static void kprint(const char *s) { serial_puts(s); }
+
+/* Default kernel stack for TSS RSP0 */
+static uint8_t kernel_stack[4096] __attribute__((aligned(16)));
+uint8_t *_kernel_stack_top = kernel_stack + sizeof(kernel_stack);
 
 #if VERBOSE
 #define vprint(s) kprint(s)
@@ -56,7 +60,6 @@ void n2_main(bootinfo_t *bootinfo) {
 
     threads_early_init();
     serial_init();
-    tss_install();
     vprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
     vprint("[N2] Booted by: ");
     const char *bl = bootinfo->bootloader_name;
@@ -78,6 +81,7 @@ void n2_main(bootinfo_t *bootinfo) {
 
     // Install our full ISR/IRQ table before enabling interrupts
     idt_install();
+    gdt_tss_init(_kernel_stack_top);
 
     print_acpi_info(bootinfo);
     print_cpu_topology(bootinfo);
