@@ -22,7 +22,7 @@ CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUIL
           -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
           -I include -I boot/include -I nosm -I loader -I src/agents/regx -I user/agents/nosfs -I user/libc \
           -no-pie -fcf-protection=none -I kernel
-O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
+O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 
 # ========= Source Discovery =========
@@ -86,7 +86,7 @@ kernel: $(KERNEL_OBJS)
 	@mkdir -p $(OUT_DIR)
 	$(LD) -T kernel/n2.ld -Map $(OUT_DIR)/kernel.map $(KERNEL_OBJS) -o kernel.bin
 	cp kernel.bin n2.bin
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.c -o O2.elf
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.c -fPIE -o O2.elf 
 	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property O2.elf O2.bin
 
 agents: $(AGENT_NAMES:%=$(OUT_DIR)/agents/%.mo2)
