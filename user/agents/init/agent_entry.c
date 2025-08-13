@@ -1,17 +1,12 @@
-// user/agents/init/agent_entry.c
-#include "../../rt/agent_abi.h"   // provides AgentAPI, NOS, NOS_TID
+// user/rt/rt0_agent.c
+#include "../rt/agent_abi.h"
+#include <stdint.h>
 
-// init.c provides this
 extern void init_main(const AgentAPI *api, uint32_t self_tid);
 
 __attribute__((noreturn))
-void agent_main(void) {
-    // Hand-off to the real entry (API + our TID are provided by rt0_agent)
-    init_main(NOS, NOS_TID);
-
-    // If init_main ever returned, just yield forever
-    for (;;) {
-        if (NOS && NOS->yield) NOS->yield();
-        else __asm__ __volatile__("pause");
-    }
+void _start(const AgentAPI *api, uint32_t self_tid) {
+    __asm__ __volatile__("andq $-16, %%rsp" ::: "rsp"); // keep 16B alignment
+    init_main(api, self_tid);
+    for (;;) __asm__ __volatile__("hlt");
 }
