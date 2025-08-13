@@ -32,6 +32,7 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
         kprintf("[nosfs] loaded filesystem from disk\n");
     else
         kprintf("[nosfs] formatting new filesystem\n");
+    atomic_store(&nosfs_ready, 1);
     kprintf("[nosfs] server ready\n");
 
     // Optional one-time debug listing (uncomment if needed)

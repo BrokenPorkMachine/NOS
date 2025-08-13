@@ -158,8 +158,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // --- Load user agents from disk ---
     const struct { const CHAR16 *path; const char *name; } agents[] = {
-        { L"\\AGENTS\\INIT.MO2",  "agents/init.mo2"  },
-        { L"\\AGENTS\\LOGIN.MO2", "agents/login.mo2" }
+        { L"\\agents\\init.mo2",  "agents/init.mo2"  },
+        { L"\\agents\\login.mo2", "agents/login.mo2" }
     };
     for (UINTN i = 0; i < sizeof(agents)/sizeof(agents[0]) && bi->module_count < MAX_MODULES; ++i) {
         void *buf = NULL; UINTN sz = 0;
