@@ -15,6 +15,7 @@
 #include "drivers/IO/usb.h"
 #include "drivers/IO/usbkbd.h"
 #include "Task/thread.h"
+#include "arch/GDT/gdt_selectors.h"
 #include "arch/IDT/idt.h"
 #include "arch_x86_64/gdt_tss.h"
 #include "VM/numa.h"
