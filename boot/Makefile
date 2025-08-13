@@ -1,3 +1,4 @@
+.RECIPEPREFIX = >
 CC=clang
 LD=lld-link
 
@@ -11,25 +12,20 @@ LDFLAGS=/entry:efi_main \
         /subsystem:efi_application \
         /nodefaultlib \
         /base:0 \
-        /filealign:32 \
-        /out:nboot.efi
+        /filealign:32
 
-# Build all C sources in this directory. The original build assumed sources
-# lived under a `src/` subdirectory, but `nboot.c` now resides at the top level
-# of `boot/`. Use a wildcard that matches files in the current directory so the
-# boot agent links correctly.
-SRC := $(wildcard *.c)
-OBJ := $(SRC:.c=.obj)
+all: nboot.efi nosformatu.bin
 
-all: nboot.efi
+nboot.efi: nboot.obj
+>$(LD) $(LDFLAGS) /out:nboot.efi nboot.obj
 
-nboot.efi: $(OBJ)
-	$(LD) $(LDFLAGS) $(OBJ)
+nosformatu.bin: nosformatu.obj
+>$(LD) $(LDFLAGS) /out:nosformatu.bin nosformatu.obj
 
 %.obj: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+>$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f *.obj *.efi
+>rm -f *.obj *.efi *.bin
 
 .PHONY: all clean
