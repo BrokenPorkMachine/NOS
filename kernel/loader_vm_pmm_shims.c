@@ -3,30 +3,45 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "VM/paging_adv.h"
+#include "VM/pmm_buddy.h"
+#include "VM/numa.h"
+#include "VM/legacy_heap.h"
 
-// ====== EDIT THESE externs to match your kernel ======
-// Examples shown — replace with your real functions from paging_adv.c / pmm_buddy.c
+// Reserve a contiguous VA range (simple heap-backed implementation)
+void* vmm_reserve(size_t size, size_t align) {
+    (void)align; // legacy_kmalloc provides page alignment
+    return legacy_kmalloc(size);
+}
 
-// Reserve a contiguous VA range (no pages mapped yet)
-extern void* paging_reserve_range(size_t size, size_t align);
 // Map one 4K page at VA->PA with protection flags
-extern int   paging_map_page(void* va, uintptr_t pa, int prot);
+int vmm_map(void* va, uintptr_t pa, int prot) {
+    paging_map_adv((uint64_t)va, pa, prot, 0, current_cpu_node());
+    return 0;
+}
+
 // Change page protections on a VA range
-extern void  paging_set_prot(void* va, size_t size, int prot);
+void vmm_prot(void* va, size_t size, int prot) {
+    for (size_t off = 0; off < size; off += PAGE_SIZE) {
+        uint64_t phys = paging_virt_to_phys_adv((uint64_t)va + off);
+        if (phys)
+            paging_map_adv((uint64_t)va + off, phys, prot, 0, current_cpu_node());
+    }
+}
+
 // Unmap a VA range
-extern void  paging_unmap_range(void* va, size_t size);
-// Check that VA is mapped with execute permission
-extern int   paging_is_executable(void* va);
+void vmm_unmap(void* va, size_t size) {
+    for (size_t off = 0; off < size; off += PAGE_SIZE)
+        paging_unmap_adv((uint64_t)va + off);
+}
 
-// Physical page allocator (should already exist in pmm_buddy.c)
-extern uintptr_t pmm_alloc_page_4k(void);
+// Check that VA is mapped with execute permission (best-effort)
+int vmm_is_mapped_x(void* va) {
+    return paging_virt_to_phys_adv((uint64_t)va) != 0;
+}
 
-// ====== Adapters exported under the names the loader expects ======
-void* vmm_reserve(size_t size, size_t align) { return paging_reserve_range(size, align); }
-int   vmm_map(void* va, uintptr_t pa, int prot) { return paging_map_page(va, pa, prot); }
-void  vmm_prot(void* va, size_t size, int prot) { paging_set_prot(va, size, prot); }
-void  vmm_unmap(void* va, size_t size) { paging_unmap_range(va, size); }
-int   vmm_is_mapped_x(void* va) { return paging_is_executable(va); }
-
-// Unify allocator name
-uintptr_t pmm_alloc_page(void) { return pmm_alloc_page_4k(); }
+// Physical page allocator (4K pages)
+uintptr_t pmm_alloc_page(void) {
+    void* p = buddy_alloc(0, current_cpu_node(), 0);
+    return (uintptr_t)p;
+}
