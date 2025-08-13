@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "libc.h"
-#include <stdio.h>
 #include "../boot/include/bootinfo.h"
 #include "agent.h"
 #include "drivers/IO/serial.h"
