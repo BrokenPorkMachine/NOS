@@ -16,7 +16,9 @@
 
 static inline uint32_t sanitize_rights(uint32_t m) {
     if (IPC_MAX_TASKS >= 32) return m;
-    uint32_t mask = (IPC_MAX_TASKS == 0) ? 0u : ((1u << IPC_MAX_TASKS) - 1u);
+    uint32_t mask = (IPC_MAX_TASKS == 0)
+                        ? 0u
+                        : (uint32_t)((1ULL << IPC_MAX_TASKS) - 1ULL);
     return m & mask;
 }
 
