@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "../arch/GDT/gdt.h"
+#include "../arch/x86/sel.h"
 
 extern void context_switch_asm(uint64_t *old_rsp, uint64_t new_rsp);
 
@@ -10,7 +10,7 @@ static inline uint16_t read_fs(void){ uint16_t v; __asm__ volatile("mov %%fs,%0"
 static inline uint16_t read_gs(void){ uint16_t v; __asm__ volatile("mov %%gs,%0":"=r"(v)); return v; }
 static inline uint16_t read_ss(void){ uint16_t v; __asm__ volatile("mov %%ss,%0":"=r"(v)); return v; }
 
-#define CHECK_SEG(reg, stage) assert_selector_gdt(read_##reg(), stage " " #reg)
+#define CHECK_SEG(reg, stage) assert_gdt_selector(read_##reg(), stage " " #reg)
 
 void context_switch(uint64_t *old_rsp, uint64_t new_rsp) {
     CHECK_SEG(cs, "context_switch entry");
