@@ -92,13 +92,14 @@ static void spawn_init_once(void) {
 // 1) Only allow files under /agents/ with .bin or .mo2 suffix
 // 2) Require a non-empty name + entry
 // 3) Capabilities must be a subset of a small allowlist
-static int regx_policy_gate(const char *path,
-                            const char *name,
-                            const char *version,
+static int regx_policy_gate(const char *name,
+                            const char *entry_sym,
+                            const char *entry_hex,
                             const char *capabilities,
-                            const char *entry)
+                            const char *path)
 {
-    (void)version;
+    (void)entry_sym;
+    (void)entry_hex;
 
     uint32_t tid = thread_self();
     void *caller = __builtin_return_address(0);
@@ -115,28 +116,28 @@ static int regx_policy_gate(const char *path,
     }
 
     // Validate pointers before any string ops
-    if (!is_canonical(path) || !is_canonical(name) || !is_canonical(entry) ||
+    if (!is_canonical(path) || !is_canonical(name) ||
         (capabilities && !is_canonical(capabilities))) {
-        kprintf("[regx] deny: bad pointer(s) path=%p name=%p entry=%p caps=%p\n",
-                path, name, entry, capabilities);
-        return 0;
+        kprintf("[regx] deny: bad pointer(s) path=%p name=%p caps=%p\n",
+                path, name, capabilities);
+        return -1;
     }
 
     size_t path_len = safe_strnlen(path, 256);
-    if (!path || strcmp(path, "(buffer)") != 0) {
+    if (path && strcmp(path, "(buffer)") != 0) {
         if (path_len < 8 || strncmp(path, "/agents/", 8) != 0) {
-            kprintf("[regx] deny: path %s outside /agents/\n", path?path:"(null)");
-            return 0;
+            kprintf("[regx] deny: path %s outside /agents/\n", path ? path : "(null)");
+            return -1;
         }
         if (path_len < 5 || (strcmp(path + (path_len - 4), ".bin") != 0 &&
                              strcmp(path + (path_len - 4), ".mo2") != 0)) {
             kprintf("[regx] deny: path %s not .bin/.mo2\n", path);
-            return 0;
+            return -1;
         }
     }
-    if (!name || !name[0] || !entry || !entry[0]) {
-        kprintf("[regx] deny: missing name/entry (path=%s)\n", path);
-        return 0;
+    if (!name || !name[0] || !entry_sym || !entry_sym[0]) {
+        kprintf("[regx] deny: missing name/entry (path=%s)\n", path ? path : "(null)");
+        return -1;
     }
 
     // Allowed capabilities (comma-separated): fs,net,pkg,upd,tty,gui
@@ -156,7 +157,7 @@ static int regx_policy_gate(const char *path,
             }
             if (!ok){
                 kprintf("[regx] deny: cap \"%s\" not allowed for %s\n", tok, name);
-                return 0;
+                return -1;
             }
             if (saved == ',') p++;
         }
@@ -165,11 +166,13 @@ static int regx_policy_gate(const char *path,
     serial_puts("[regx] allow: ");
     serial_putsn_bounded(name, 64);
     serial_puts(" (entry=");
-    serial_putsn_bounded(entry, 64);
+    serial_putsn_bounded(entry_sym, 64);
     serial_puts(" caps=");
     if (capabilities && capabilities[0]) serial_putsn_bounded(capabilities, 64);
+    serial_puts(" path=");
+    if (path && path[0]) serial_putsn_bounded(path, 64);
     serial_puts(")\n");
-    return 1;
+    return 0;
 }
 
 void regx_main(void){
