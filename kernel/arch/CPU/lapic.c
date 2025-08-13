@@ -95,11 +95,6 @@ uint32_t lapic_get_id(void) {
     return lapic_read(LAPIC_ID) >> 24;
 }
 
-void lapic_eoi(void) {
-    if (!lapic) return;
-    lapic_write(LAPIC_EOI, 0);
-}
-
 /* Fire a simple fixed IPI with given vector to a specific APIC ID (physical dest). */
 void lapic_send_ipi(uint8_t apic_id, uint8_t vector) {
     if (!lapic) return;
