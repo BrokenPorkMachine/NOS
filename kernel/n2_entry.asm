@@ -12,6 +12,8 @@ global _start
 
 ; Kernel entry symbol implemented in C
 extern n2_main
+; Top of the bootstrap stack provided by n2_main.c
+extern _kernel_stack_top
 
 _start:
     cli

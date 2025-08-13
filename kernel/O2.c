@@ -151,9 +151,12 @@ static int load_elf64(const void *image, size_t size, void **entry,
 
         if (p_type != 1) continue; // PT_LOAD
 
-        // --- Fix: Use vaddr if p_paddr is above 4GB
+        // Physical addresses of some segments may be either zero or lie
+        // above the 4 GB mark which our early loader cannot directly
+        // address.  In those cases fall back to the virtual address so the
+        // segment is copied to a sensible location.
         uintptr_t dst = (uintptr_t)p_paddr;
-        if (dst >= 0x100000000ULL) {
+        if (dst == 0 || dst >= 0x100000000ULL) {
             dst = (uintptr_t)p_vaddr;
         }
 
