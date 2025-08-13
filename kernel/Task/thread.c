@@ -9,6 +9,9 @@
 
 extern int kprintf(const char *fmt, ...);
 
+/* Stub invoked if a thread's entry pointer is invalid. */
+static void bad_agent_entry(const AgentAPI *api, uint32_t self_tid);
+
 // Loader hooks
 extern int agent_loader_run_from_path(const char *path, int prio);
 extern void agent_loader_set_read(int (*reader)(const char*, const void**, size_t*),
@@ -185,14 +188,15 @@ void schedule(void){
     thread_t *next=pick_next(cpu);
     if(!next){ prev->state=THREAD_RUNNING; __asm__ volatile("push %0; popfq"::"r"(rf):"memory"); __asm__ volatile("hlt"); return; }
 
-    /* Defensive fix: if this is the first run of `next`, verify its RET slot. */
+    /* Defensive fix: if this is the first run of `next`, verify its stack. */
     if (!next->started) {
         /* new stack layout we seeded:
            [r15][r14][r13][r12][rbx][rbp][rflags][rax][RET=thread_entry][ARG=func]
-           RET is 64 bytes above the current new_sp.
+           RET is 64 bytes above the current new_sp; ARG is at +72.
          */
         uint64_t *new_sp   = (uint64_t *)next->rsp;
         uint64_t *ret_slot = (uint64_t *)((uintptr_t)new_sp + 8*8);
+        uint64_t *arg_slot = (uint64_t *)((uintptr_t)new_sp + 9*8);
 
         /* Determine kernel text range. If linker symbols absent, use a conservative fallback. */
         uintptr_t text_lo = (uintptr_t)__text_start;
@@ -206,6 +210,13 @@ void schedule(void){
         uint64_t ret_val = *ret_slot;
         if (!(ret_val >= text_lo && ret_val < text_hi)) {
             *ret_slot = (uint64_t)(uintptr_t)&thread_entry;
+        }
+
+        /* Validate ARG: must be canonical and non-null. */
+        uint64_t arg_val = *arg_slot;
+        uint64_t high = arg_val >> 48;
+        if (!arg_val || (high != 0 && high != 0xFFFF)) {
+            *arg_slot = (uint64_t)(uintptr_t)&bad_agent_entry;
         }
     }
 
@@ -247,6 +258,11 @@ thread_entry(void){
         "xor %rbp, %rbp\n"  // clean frame root
         "jmp thread_start\n"
     );
+}
+
+static void bad_agent_entry(const AgentAPI *api, uint32_t self_tid) {
+    (void)api;
+    kprintf("[thread] invalid entry; tid=%u exiting\n", self_tid);
 }
 
 #ifdef UNIT_TEST
