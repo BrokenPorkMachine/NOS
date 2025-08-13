@@ -10,8 +10,10 @@
 #define GDT_SEL_USER_CODE_R3  GDT_SEL_USER_CODE
 #define GDT_SEL_USER_DATA_R3  GDT_SEL_USER_DATA
 
-/* Optional: 64-bit TSS selector (system descriptor, 16 bytes total) */
-#define GDT_SEL_TSS           0x48
+/* Optional: 64-bit TSS selector (system descriptor, 16 bytes total)
+ * Occupies entries 5 and 6 in our minimal GDT
+ */
+#define GDT_SEL_TSS           0x28
 
 /* Handy aliases used elsewhere */
 #define KERNEL_CS GDT_SEL_KERNEL_CODE
@@ -46,8 +48,8 @@
 #define GRAN_AVL         0x10
 
 /* Presets */
-#define GRAN_CODE64      (GRAN_G | GRAN_L) /* code: L=1, DB=0, G=1 */
-#define GRAN_DATA        (GRAN_G)          /* data: L=0, DB ignored in long mode */
+#define GRAN_CODE64      (GRAN_L)          /* code: L=1, G=0 */
+#define GRAN_DATA        0x00              /* data: L=0, G=0 */
 
 /* Index helper (entry number in the GDT) */
 #define GDT_IDX(sel)     ((unsigned)((sel) >> 3))

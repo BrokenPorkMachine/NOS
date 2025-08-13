@@ -30,7 +30,7 @@ struct gdt_tss_desc {
  * Keep some slack for TSS (2 slots) if defined.
  */
 #ifndef GDT_SLOTS
-# define GDT_SLOTS  11
+# define GDT_SLOTS  7
 #endif
 
 static struct gdt_entry gdt[GDT_SLOTS];   /* 8-byte entries */
@@ -54,6 +54,10 @@ static void arch_post_gdt_probe(void) {
 void assert_selector_gdt(uint16_t sel, const char* what) {
     if (sel & TI_BIT) {
         panic("LDT selector in %s: 0x%04x", what, sel);
+    }
+    unsigned idx = SEL2IDX(sel);
+    if (idx >= GDT_SLOTS) {
+        panic("Selector out of range in %s: 0x%04x", what, sel);
     }
 }
 
@@ -110,13 +114,13 @@ static void gdt_fill_core_segments(void)
     /* Null descriptor */
     gdt_set_gate(0, 0, 0, 0, 0);
 
-    /* Kernel ring 0: 64-bit code (L=1, D=0), data (G=1, DB=0, L=0) */
-    gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_CODE), 0, 0xFFFFF, ACC_CODE64_DPL0, GRAN_CODE64);
-    gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_DATA), 0, 0xFFFFF, ACC_DATA_DPL0,  GRAN_DATA);
+    /* Kernel ring 0: 64-bit code/data, flat base=0 limit=0 */
+    gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_CODE), 0, 0, ACC_CODE64_DPL0, GRAN_CODE64);
+    gdt_set_gate(SEL2IDX(GDT_SEL_KERNEL_DATA), 0, 0, ACC_DATA_DPL0,  GRAN_DATA);
 
     /* User ring 3 */
-    gdt_set_gate(SEL2IDX(GDT_SEL_USER_CODE),   0, 0xFFFFF, ACC_CODE64_DPL3, GRAN_CODE64);
-    gdt_set_gate(SEL2IDX(GDT_SEL_USER_DATA),   0, 0xFFFFF, ACC_DATA_DPL3,   GRAN_DATA);
+    gdt_set_gate(SEL2IDX(GDT_SEL_USER_CODE),   0, 0, ACC_CODE64_DPL3, GRAN_CODE64);
+    gdt_set_gate(SEL2IDX(GDT_SEL_USER_DATA),   0, 0, ACC_DATA_DPL3,   GRAN_DATA);
 }
 
 void gdt_install(void)

@@ -19,9 +19,9 @@
 ; ---------------------------
 ; Optional system selectors
 ; ---------------------------
-; 64-bit TSS descriptor (16 bytes) lives at 0x48..0x4F (low 8) and 0x50..0x57 (high 8)
+; 64-bit TSS descriptor (16 bytes) lives at 0x28..0x2F (low 8) and 0x30..0x37 (high 8)
 ; If you install a TSS in the GDT, use this selector with LTR.
-%define GDT_SEL_TSS          0x48
+%define GDT_SEL_TSS          0x28
 
 ; (If you ever add an LDT: it’s another 16-byte system descriptor)
 ;%define GDT_SEL_LDT          0x58
@@ -75,10 +75,10 @@
 %define GRAN_AVL             0x10
 
 ; Presets:
-;  - 64-bit code: L=1, D/B=0, G=1 (limit ignored in long mode for code)
-%define GRAN_CODE64          (GRAN_G | GRAN_L)
-;  - data: L=0, D/B ignored in long mode; keep DB=0 to be tidy, G=1
-%define GRAN_DATA            (GRAN_G)
+;  - 64-bit code: L=1, D/B=0, G=0 (limit ignored in long mode for code)
+%define GRAN_CODE64          (GRAN_L)
+;  - data: L=0, D/B ignored in long mode; G=0
+%define GRAN_DATA            0x00
 
 ; ---------------------------
 ; Sanity (doc only; enforce in C/ASM where possible)
