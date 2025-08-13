@@ -250,20 +250,24 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->modules[0].size = n2_size;
     bi->module_count = 1;
 
-    for (UINTN i = 0; i < menu[choice].module_count && bi->module_count < MAX_MODULES; ++i) {
+    // --- Load user agents from disk ---
+    const struct { const CHAR16 *path; const char *name; } agents[] = {
+        { L"\\agents\\init.mo2",  "agents/init.mo2"  },
+        { L"\\agents\\login.mo2", "agents/login.mo2" }
+    };
+    for (UINTN i = 0; i < sizeof(agents)/sizeof(agents[0]) && bi->module_count < MAX_MODULES; ++i) {
         void *buf = NULL; UINTN sz = 0;
-        CHAR16 path16[128];
-        ascii_to_ucs2_path(menu[choice].modules[i], path16);
-        if (EFI_ERROR(load_file(SystemTable, root, path16, EfiLoaderData, &buf, &sz))) {
+        if (EFI_ERROR(load_file(SystemTable, root, agents[i].path, EfiLoaderData, &buf, &sz))) {
             vprint_ascii(SystemTable, "[nboot] missing ");
-            vprint_ascii(SystemTable, menu[choice].modules[i]);
+            vprint_ascii(SystemTable, agents[i].name);
             vprint_ascii(SystemTable, "\r\n");
             continue;
         }
-        char *name_copy = NULL; UINTN name_len = strlen(menu[choice].modules[i]) + 1;
+        char *name_copy = NULL;
+        UINTN name_len = strlen(agents[i].name) + 1;
         if (!EFI_ERROR(SystemTable->BootServices->AllocatePool(EfiLoaderData, name_len, (void **)&name_copy)))
-            strcpy(name_copy, menu[choice].modules[i]);
-        bi->modules[bi->module_count].name = name_copy ? name_copy : menu[choice].modules[i];
+            strcpy(name_copy, agents[i].name);
+        bi->modules[bi->module_count].name = name_copy ? name_copy : agents[i].name;
         bi->modules[bi->module_count].base = buf;
         bi->modules[bi->module_count].size = sz;
         bi->module_count++;
