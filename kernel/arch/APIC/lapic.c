@@ -22,13 +22,6 @@ void lapic_eoi(void) {
     mmio_write32(LAPIC_REG(LAPIC_EOI), 0);
 }
 
-void lapic_enable(void) {
-    /* Enable bit (bit 8) + keep spurious vector at 0xFF */
-    uint32_t svr = 0x100 | 0xFF;
-    mmio_write32(LAPIC_REG(LAPIC_SVR), svr);
-    (void)mmio_read32(LAPIC_REG(LAPIC_SVR)); /* post */
-}
-
 void lapic_timer_init(uint8_t vector) {
     /* Divide by 16 */
     mmio_write32(LAPIC_REG(LAPIC_TMR_DIV), 0x3);
