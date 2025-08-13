@@ -10,6 +10,7 @@
 
 - O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
 - Configurable boot menu for live boot, installation, disk utilities, and kernel/module selection
+- NOSFormatU disk partitioning utility accessible from the boot menu
 - N2 agent-based kernel running in true x86_64 long mode
 - Signed, manifest-driven **NOSM** modules with hot reload
  - Transactional **NOSFS** (NitrFS) filesystem

@@ -5,6 +5,9 @@ libc.o
 disk.img
 bootloader/*.efi
 bootloader/src/*.obj
+boot/*.obj
+boot/*.efi
+boot/*.bin
 Kernel/*.bin
 Kernel/*.o
 qemu.log
