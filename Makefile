@@ -14,6 +14,7 @@ ifeq ($(CONFIG_NITRO_HEAP),1)
 CFLAGS += -DCONFIG_NITRO_HEAP=1
 endif
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
+AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 
 all: libc kernel boot disk.img
 
@@ -28,14 +29,14 @@ AGENT_OBJS   := $(patsubst %.c,%.o,$(AGENT_C_SRCS))
 
 $(AGENT_OBJS): %.o : %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(O2_CFLAGS) -nostdlib -c $< -o $@
+	$(CC) $(AGENT_CFLAGS) -c $< -o $@
 
 define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
-out/agents/$(1).elf: $$(AGENT_$(1)_OBJS) user/rt/rt0_agent.o user/libc/libc.o
+out/agents/$(1).elf: $(if $(filter $(1),init),user/rt/entry.o,user/rt/rt0_agent.o) $$(AGENT_$(1)_OBJS) user/libc/libc.o
 	@mkdir -p $$(@D)
-	$(CC) $(O2_CFLAGS) -nostdlib -shared -Wl,-pie $$^ -o $$@
+	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
 
 out/agents/$(1).mo2: out/agents/$(1).elf
 	cp $$< $$@
@@ -62,7 +63,11 @@ user/rt/rt0_user.o: user/rt/rt0_user.S
 
 user/rt/rt0_agent.o: user/rt/rt0_agent.c
 	@mkdir -p $(dir $@)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
+	$(CC) $(AGENT_CFLAGS) -c $< -o $@
+
+user/rt/entry.o: user/rt/entry.S
+	@mkdir -p $(dir $@)
+	$(CC) $(AGENT_CFLAGS) -c $< -o $@
 
 BIN_SRCS  := $(wildcard bin/*.c)
 BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
@@ -90,8 +95,10 @@ $(foreach n,$(BIN_NAMES),$(eval $(call MAKE_BIN_RULES,$(n))))
 bins: user/rt/rt0_user.o $(BIN_ELFS) $(BIN_BINS)
 
 # ===== libc =====
-libc:
-	$(CC) $(O2_CFLAGS) -c user/libc/libc.c -o user/libc/libc.o
+user/libc/libc.o: user/libc/libc.c
+	$(CC) $(AGENT_CFLAGS) -c $< -o $@
+
+libc: user/libc/libc.o
 
 # ===== kernel =====
 kernel: libc agents bins
@@ -261,4 +268,10 @@ runmac: disk.img
 	-device i8042 \
 	-serial stdio -display cocoa
 
-.PHONY: all libc kernel boot agents bins clean run runmac
+.PHONY: all libc kernel boot agents bins clean run runmac check-init
+
+check-init: out/agents/init.elf
+	@echo '[check-init] entry bytes:'
+	@objdump -d out/agents/init.elf | head -n 20
+	@echo '[check-init] symbols:'
+	@nm out/agents/init.elf | grep -E '(_start|init_main)'
