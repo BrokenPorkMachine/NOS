@@ -32,6 +32,8 @@ struct thread {
     /* ... add state fields as needed ... */
 };
 
+size_t thread_struct_size = sizeof(struct thread);
+
 /* ------------- Externals you typically already have in your kernel ----------- */
 extern void   *alloc_stack(size_t size, int user_mode);
 extern void   *alloc_thread_struct(void);
