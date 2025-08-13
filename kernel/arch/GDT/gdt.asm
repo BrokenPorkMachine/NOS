@@ -18,6 +18,10 @@ gdt_flush:
     push rax
     lgdt [rdi]
 
+    ; Ensure LDT is cleared
+    xor eax, eax
+    lldt ax
+
     ; Reload data segments (long mode: DS/ES ignored for addressing but keep sane)
     mov ax, 0x10              ; GDT_SEL_KERNEL_DATA
     mov ds, ax
@@ -47,6 +51,10 @@ gdt_flush_with_tr:
     push rcx
 
     lgdt [rdi]
+
+    ; Ensure LDT is cleared
+    xor eax, eax
+    lldt ax
 
     mov ax, GDT_SEL_KERNEL_DATA
     mov ds, ax
