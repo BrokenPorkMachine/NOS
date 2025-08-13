@@ -1,4 +1,9 @@
-%include "../arch/GDT/segments.inc"
+; NASM uses the current working directory (the repository root during the
+; build) as the base for relative includes.  The previous path assumed the
+; assembler executed from within `kernel/Task`, causing the include to fail
+; when run from the root.  Use an explicit path from the repository root so
+; the file is found regardless of invocation location.
+%include "kernel/arch/GDT/segments.inc"
 
 global enter_user_mode
 extern assert_gdt_selector
