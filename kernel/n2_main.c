@@ -26,6 +26,7 @@
 #include "symbols.h"
 #include "printf.h"
 #include "nosfs.h"
+#include "hal.h"
 extern int nosfs_is_ready(void);
 extern nosfs_fs_t nosfs_root;
 extern void regx_start(void);
@@ -133,18 +134,68 @@ void n2_main(bootinfo_t *bootinfo) {
     kheap_parse_bootarg(bootinfo->cmdline);
     kheap_init();
 
+    hal_init();
+
 
     vprint("[N2] Initializing USB stack...\r\n");
     usb_init();
+    {
+        hal_descriptor_t d = {
+            .type = REGX_TYPE_BUS,
+            .name = "usb",
+            .version = "1.0",
+            .abi = "hw",
+        };
+        hal_register(&d, 0);
+    }
     usb_kbd_init();
 
     const bootinfo_framebuffer_t *fb = (const bootinfo_framebuffer_t *)&bootinfo->fb;
     video_init(fb);
     tty_init();
     ps2_init();
+    {
+        hal_descriptor_t d = {
+            .type = REGX_TYPE_BUS,
+            .name = "ps2",
+            .version = "1.0",
+            .abi = "hw",
+        };
+        hal_register(&d, 0);
+    }
+
     block_init();
+    {
+        hal_descriptor_t d = {
+            .type = REGX_TYPE_DRIVER,
+            .name = "block",
+            .version = "1.0",
+            .abi = "hw",
+        };
+        hal_register(&d, 0);
+    }
+
     sata_init();
+    {
+        hal_descriptor_t d = {
+            .type = REGX_TYPE_BUS,
+            .name = "sata",
+            .version = "1.0",
+            .abi = "hw",
+        };
+        hal_register(&d, 0);
+    }
+
     net_init();
+    {
+        hal_descriptor_t d = {
+            .type = REGX_TYPE_DRIVER,
+            .name = "net",
+            .version = "1.0",
+            .abi = "hw",
+        };
+        hal_register(&d, 0);
+    }
     vprint("[N2] Starting Agent Registry\r\n");
 
     n2_agent_registry_reset();
