@@ -6,6 +6,8 @@ extern n2_main
 
 _start:
     cld
+    xor eax, eax
+    lldt ax              ; disable any LDT
     ; Enable SSE/FXSR before any C code runs
     mov rax, cr0
     and eax, 0xFFFFFFFB  ; clear EM

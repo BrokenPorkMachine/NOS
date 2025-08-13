@@ -132,9 +132,15 @@ void isr_gpf_handler(struct isr_context *ctx) {
     serial_printf("LDTR=%04x CS=%04x SS=%04x DS=%04x ES=%04x FS=%04x GS=%04x\n",
                   ldtr, cs, ss, ds, es, fs, gs);
 
-    uint64_t *sp = (uint64_t *)(uintptr_t)ctx->rsp;
-    serial_printf("Stack5: %016lx %016lx %016lx %016lx %016lx\n",
-                  sp[0], sp[1], sp[2], sp[3], sp[4]);
+    /* Instruction bytes at faulting RIP */
+    uint8_t *rip = (uint8_t *)(uintptr_t)ctx->rip;
+    serial_printf("Instr: %02x %02x %02x %02x %02x %02x\n",
+                  rip[0], rip[1], rip[2], rip[3], rip[4], rip[5]);
+
+    /* Dump the iret frame that was about to be popped */
+    uint64_t *frame = (uint64_t *)(uintptr_t)ctx->rsp;
+    serial_printf("IRET frame: SS=%04lx RSP=%016lx RFLAGS=%016lx CS=%04lx RIP=%016lx\n",
+                  frame[0], frame[1], frame[2], frame[3], frame[4]);
 
     backtrace_rbp(ctx->rbp, 16);
 

@@ -5,21 +5,13 @@
 #define GDT_SEL_KERNEL_DATA  0x10
 #define GDT_SEL_USER_CODE    0x18
 #define GDT_SEL_USER_DATA    0x20
-#define GDT_SEL_RING1_CODE   0x28
-#define GDT_SEL_RING1_DATA   0x30
-#define GDT_SEL_RING2_CODE   0x38
-#define GDT_SEL_RING2_DATA   0x40
 
 /* RPL-tagged convenience forms (same entry, different CPL on load) */
-#define GDT_SEL_RING1_CODE_R1 (GDT_SEL_RING1_CODE | 1)
-#define GDT_SEL_RING1_DATA_R1 (GDT_SEL_RING1_DATA | 1)
-#define GDT_SEL_RING2_CODE_R2 (GDT_SEL_RING2_CODE | 2)
-#define GDT_SEL_RING2_DATA_R2 (GDT_SEL_RING2_DATA | 2)
 #define GDT_SEL_USER_CODE_R3  (GDT_SEL_USER_CODE  | 3)
 #define GDT_SEL_USER_DATA_R3  (GDT_SEL_USER_DATA  | 3)
 
 /* Optional: 64-bit TSS selector (system descriptor, 16 bytes total) */
-#define GDT_SEL_TSS           0x48
+#define GDT_SEL_TSS           0x28
 
 /* Handy aliases used elsewhere */
 #define KERNEL_CS GDT_SEL_KERNEL_CODE

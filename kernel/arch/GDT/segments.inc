@@ -11,10 +11,6 @@
 %define GDT_SEL_KERNEL_DATA  0x10
 %define GDT_SEL_USER_CODE    0x18
 %define GDT_SEL_USER_DATA    0x20
-%define GDT_SEL_RING1_CODE   0x28
-%define GDT_SEL_RING1_DATA   0x30
-%define GDT_SEL_RING2_CODE   0x38
-%define GDT_SEL_RING2_DATA   0x40
 
 ; RPL=3 aliases for convenience (same table entry, different CPL on load)
 %define GDT_SEL_USER_CODE_R3 (GDT_SEL_USER_CODE | 3)
@@ -23,9 +19,9 @@
 ; ---------------------------
 ; Optional system selectors
 ; ---------------------------
-; 64-bit TSS descriptor (16 bytes) lives at 0x48..0x4F (low 8) and 0x50..0x57 (high 8)
+; 64-bit TSS descriptor (16 bytes) lives at 0x28..0x2F (low 8) and 0x30..0x37 (high 8)
 ; If you install a TSS in the GDT, use this selector with LTR.
-%define GDT_SEL_TSS          0x48
+%define GDT_SEL_TSS          0x28
 
 ; (If you ever add an LDT: it’s another 16-byte system descriptor)
 ;%define GDT_SEL_LDT          0x58
@@ -36,10 +32,6 @@
 %define GDT_IDX(sel)         ((sel) >> 3)
 %define GDT_IDX_KERNEL_CODE  GDT_IDX(GDT_SEL_KERNEL_CODE)
 %define GDT_IDX_KERNEL_DATA  GDT_IDX(GDT_SEL_KERNEL_DATA)
-%define GDT_IDX_RING1_CODE   GDT_IDX(GDT_SEL_RING1_CODE)
-%define GDT_IDX_RING1_DATA   GDT_IDX(GDT_SEL_RING1_DATA)
-%define GDT_IDX_RING2_CODE   GDT_IDX(GDT_SEL_RING2_CODE)
-%define GDT_IDX_RING2_DATA   GDT_IDX(GDT_SEL_RING2_DATA)
 %define GDT_IDX_USER_CODE    GDT_IDX(GDT_SEL_USER_CODE)
 %define GDT_IDX_USER_DATA    GDT_IDX(GDT_SEL_USER_DATA)
 %define GDT_IDX_TSS          GDT_IDX(GDT_SEL_TSS)

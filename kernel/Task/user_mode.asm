@@ -22,6 +22,13 @@ enter_user_mode:
     lea  rsi, [rel .str_cs]
     call assert_selector_gdt
 
+    ; Scrub segment registers to known-good kernel data selector
+    mov  ax, GDT_SEL_KERNEL_DATA
+    mov  ds, ax
+    mov  es, ax
+    mov  fs, ax
+    mov  gs, ax
+
     ; Build iretq frame: SS,RSP,RFLAGS,CS,RIP
     push GDT_SEL_USER_DATA_R3   ; SS (RPL=3)
     push r12                    ; RSP
