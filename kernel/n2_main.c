@@ -82,6 +82,9 @@ void n2_main(bootinfo_t *bootinfo) {
 
     // Install our full ISR/IRQ table before enabling interrupts
     idt_install();
+    lapic_enable();
+    lapic_timer_init(32);  // vector 32 matches your IDT
+    __asm__ __volatile__("sti");  // NOW enable interrupts
     gdt_tss_init(_kernel_stack_top);
 
     print_acpi_info(bootinfo);
