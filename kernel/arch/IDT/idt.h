@@ -1,99 +1,88 @@
 #pragma once
-
 #include <stdint.h>
-#include "context.h"  // if you export regs/context types from ISRs
+#include <stddef.h>
+
+#ifndef IDT_ENTRIES
+#define IDT_ENTRIES 256
+#endif
+
+/* Your 64-bit kernel code selector must be DPL=0, L=1, D=0 */
+#ifndef KERNEL_CS
+# error "KERNEL_CS must be defined (64-bit code segment, DPL=0, L=1, D=0)"
+#endif
+
+/* Attribute helpers */
+#define IDT_ATTR_PRESENT      0x80
+#define IDT_ATTR_TRAP_GATE    0x0F
+#define IDT_ATTR_INT_GATE     0x0E
+#define IDT_ATTR_DPL(n)       (((n) & 0x3) << 5)
+
+#define IDT_INTERRUPT_GATE    (IDT_ATTR_PRESENT | IDT_ATTR_INT_GATE | IDT_ATTR_DPL(0))
+#define IDT_TRAP_GATE         (IDT_ATTR_PRESENT | IDT_ATTR_TRAP_GATE | IDT_ATTR_DPL(0))
+#define IDT_USER_GATE         (IDT_ATTR_PRESENT | IDT_ATTR_INT_GATE | IDT_ATTR_DPL(3))
+#define IDT_USER_TRAP_GATE    (IDT_ATTR_PRESENT | IDT_ATTR_TRAP_GATE | IDT_ATTR_DPL(3))
+
+/* Optional IST picks (0..7; 0 = off) */
+#ifndef IST_NMI
+# define IST_NMI  1
+#endif
+#ifndef IST_DF
+# define IST_DF   2
+#endif
+
+/* 16-byte IDT entry (packed) */
+struct __attribute__((packed)) idt_entry {
+    uint16_t offset_low;    // 0..15
+    uint16_t selector;      // CS
+    uint8_t  ist;           // bits 0..2 used
+    uint8_t  type_attr;
+    uint16_t offset_mid;    // 16..31
+    uint32_t offset_high;   // 32..63
+    uint32_t zero;
+};
+
+/* 10-byte IDT pointer (packed) */
+struct __attribute__((packed)) idt_ptr {
+    uint16_t limit;
+    uint64_t base;
+};
+
+_Static_assert(sizeof(struct idt_entry) == 16, "IDT entry must be 16 bytes");
+_Static_assert(offsetof(struct idt_entry, offset_low)  == 0,  "off_low");
+_Static_assert(offsetof(struct idt_entry, selector)    == 2,  "selector");
+_Static_assert(offsetof(struct idt_entry, ist)         == 4,  "ist");
+_Static_assert(offsetof(struct idt_entry, type_attr)   == 5,  "type_attr");
+_Static_assert(offsetof(struct idt_entry, offset_mid)  == 6,  "off_mid");
+_Static_assert(offsetof(struct idt_entry, offset_high) == 8,  "off_high");
+_Static_assert(offsetof(struct idt_entry, zero)        == 12, "zero");
+
+_Static_assert(sizeof(struct idt_ptr) == 10, "IDT pointer must be 10 bytes");
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ---------------------------- Constants ---------------------------- */
+/* Populated by your assembly stubs */
+extern void (*isr_stub_table[IDT_ENTRIES])(void);
 
-#define IDT_ENTRIES 256
+/* Specific stubs you might override explicitly */
+extern void isr_ud_stub(void);     // #UD
+extern void isr_timer_stub(void);  // APIC timer (vector 32 typically)
 
-/* Segment selector for kernel code (must be a 64-bit code desc: L=1, D=0, DPL=0) */
-#ifndef KERNEL_CS
-# define KERNEL_CS 0x08
-#endif
-
-/* ---- IDT gate attribute helpers (64-bit) ---- */
-#define IDT_ATTR_PRESENT        0x80
-#define IDT_ATTR_TRAP_GATE      0x0F  /* type=1111b */
-#define IDT_ATTR_INT_GATE       0x0E  /* type=1110b */
-#define IDT_ATTR_DPL(n)         (((n) & 0x3) << 5)
-
-/* Common presets */
-#ifndef IDT_INTERRUPT_GATE      /* DPL=0 interrupt gate */
-# define IDT_INTERRUPT_GATE (IDT_ATTR_PRESENT | IDT_ATTR_INT_GATE  | IDT_ATTR_DPL(0))
-#endif
-#ifndef IDT_TRAP_GATE           /* DPL=0 trap gate */
-# define IDT_TRAP_GATE      (IDT_ATTR_PRESENT | IDT_ATTR_TRAP_GATE | IDT_ATTR_DPL(0))
-#endif
-#ifndef IDT_USER_GATE           /* DPL=3 interrupt gate (e.g., int 0x80) */
-# define IDT_USER_GATE      (IDT_ATTR_PRESENT | IDT_ATTR_INT_GATE  | IDT_ATTR_DPL(3))
-#endif
-#ifndef IDT_USER_TRAP_GATE      /* DPL=3 trap gate (e.g., #BP/#OF from ring3) */
-# define IDT_USER_TRAP_GATE (IDT_ATTR_PRESENT | IDT_ATTR_TRAP_GATE | IDT_ATTR_DPL(3))
-#endif
-
-/* Optional IST defaults (0..7 valid; 0 = disabled). You can override at build time. */
-#ifndef IST_NMI
-# define IST_NMI 1
-#endif
-#ifndef IST_DF
-# define IST_DF  2
-#endif
-
-/* ------------------------- Descriptor Types ------------------------ */
-
-/* x86_64 IDT entry */
-struct idt_entry {
-    uint16_t offset_low;     /* bits 0..15 of ISR address */
-    uint16_t selector;       /* code segment selector */
-    uint8_t  ist;            /* bits 0..2 = IST index, bits 3..7 = zero */
-    uint8_t  type_attr;      /* P | DPL | type */
-    uint16_t offset_mid;     /* bits 16..31 */
-    uint32_t offset_high;    /* bits 32..63 */
-    uint32_t zero;           /* reserved */
-} __attribute__((packed));
-
-struct idt_ptr {
-    uint16_t limit;
-    uint64_t base;
-} __attribute__((packed));
-
-/* --------------------------- Public API ---------------------------- */
-
+/* API */
 void idt_install(void);
 void idt_reload(void);
 
-/* Low-level setters */
-void set_idt_entry(int vec, void *isr, uint8_t type_attr);
-void idt_set_with_ist(int vec, void *isr, uint8_t type_attr, uint8_t ist_slot);
-
-/* Convenience helpers */
+/* Helpers for overriding entries */
 void idt_set_interrupt_gate(int vec, void *isr);
 void idt_set_trap_gate(int vec, void *isr);
 void idt_set_user_interrupt_gate(int vec, void *isr);
 void idt_set_user_trap_gate(int vec, void *isr);
+void idt_set_with_ist(int vec, void *isr, uint8_t type_attr, uint8_t ist_slot);
 
-/* ------------------------ ISR Stub Table --------------------------- */
-/* Assembly provides a table of 256 ISR entry points (one per vector). */
-extern void (*isr_stub_table[IDT_ENTRIES])(void);
-
-/* Named stubs if you still use them directly somewhere */
-extern void isr_timer_stub(void);
-extern void isr_syscall_stub(void);
-extern void isr_keyboard_stub(void);
-extern void isr_mouse_stub(void);
-extern void isr_page_fault_stub(void);
-extern void isr_ipi_stub(void);
-
-/* ------------------------- Sanity Checks --------------------------- */
-#if defined(__GNUC__) || defined(__clang__)
-_Static_assert((KERNEL_CS & 0x3) == 0, "KERNEL_CS must be ring 0 (DPL=0)");
-#endif
+/* Debug */
+void idt_dump_vec(int v);
 
 #ifdef __cplusplus
-} // extern "C"
+}
 #endif
