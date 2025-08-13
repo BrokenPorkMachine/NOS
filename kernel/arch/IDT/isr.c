@@ -1,18 +1,12 @@
-#include <string.h>
-#include "isr.h"
+#include "arch/IDT/isr.h"
+#ifndef kprintf
+#include <stdio.h>
+#define kprintf printf
+#endif
 
-/* Example timer handler that hands off to scheduler safely:
-   make an aligned local copy to avoid taking address of a packed member. */
-void isr_timer_handler(struct isr_context *ctx) {
-    /* local aligned copy */
-    struct isr_context local;
-    memcpy(&local, ctx, sizeof local);
+static volatile unsigned ticks;
 
-    /* scheduler can inspect the frame if it wants */
-    uint64_t *new_rsp = schedule_from_isr((const void*)&local);
-
-    /* If your scheme returns a new RSP to install, write it back: */
-    if (new_rsp) {
-        ctx->rsp = (uint64_t)new_rsp;
-    }
+void isr_timer_handler(const void *hw_frame) {
+    (void)hw_frame;
+    if (++ticks % 100 == 0) kprintf("[timer] %u ticks\n", ticks);
 }

@@ -8,7 +8,7 @@ NASM    := nasm
 CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUILD \
 	  -fno-builtin -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
 	  -I include -I boot/include -I nosm -I loader -I src/agents/regx \
-	  -no-pie -fcf-protection=none
+	  -no-pie -fcf-protection=none -I kernel
 
 ifeq ($(CONFIG_NITRO_HEAP),1)
 CFLAGS += -DCONFIG_NITRO_HEAP=1
@@ -161,7 +161,6 @@ endif
 	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/classes.c -o kernel/VM/nitroheap/classes.o
 	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/idt.c -o kernel/arch/IDT/idt.o
-	$(CC) $(CFLAGS) -c kernel/arch/APIC/lapic.c -o kernel/arch/APIC/lapic.o
 	$(CC) $(CFLAGS) -c kernel/arch/APIC/lapic_shim.c -o kernel/arch/APIC/lapic_shim.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/isr.c -o kernel/arch/IDT/isr.o
 	$(NASM) -f elf64 kernel/arch/IDT/isr_stub.asm -o kernel/arch/IDT/isr_stub.o
@@ -186,12 +185,10 @@ endif
 	    nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o \
 	    nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
 	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
-	    user/libc/libc.o \
-	    $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o,) \
+	    user/libc/libc.o $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o) \
 	    kernel/loader_vm_pmm_shims.o \
         src/agents/regx/regx_launch_adapters.o \
-	    kernel/arch/APIC/lapic.o \
-	    kernel/arch/APIC/lapic_shim.o \
+            kernel/arch/APIC/lapic_shim.o \
 		-o kernel.bin
 
 	cp kernel.bin n2.bin

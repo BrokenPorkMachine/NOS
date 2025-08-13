@@ -61,6 +61,11 @@ static inline uint32_t lapic_read(uint32_t reg) {
     return lapic[reg / 4];
 }
 
+void lapic_eoi(void) {
+    if (!lapic) return;
+    lapic_write(LAPIC_EOI, 0);
+}
+
 static inline void wait_icr_idle(void) {
     /* Wait until any previous IPI has completed (Delivery Status = 0). */
     while (lapic_read(LAPIC_ICR_LOW) & ICR_DELIV_STATUS) { }

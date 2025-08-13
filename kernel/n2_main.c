@@ -23,6 +23,7 @@
 #include "VM/heap.h"
 #include "arch/CPU/lapic.h"
 #include "arch/APIC/lapic.h"
+#include "arch/CPU/irq.h"
 #include "uaccess.h"
 #include "symbols.h"
 #include "printf.h"
@@ -54,6 +55,18 @@ static void print_mmap(const bootinfo_t *b) { (void)b; }
 static void load_module(const void *m) { (void)m; }
 static void scheduler_loop(void) { while (1) schedule(); }
 
+static void start_timer_interrupts(void) {
+    uint64_t f0 = read_rflags();
+    kprintf("[init] RFLAGS.IF before: %u\n", (unsigned)((f0 >> 9) & 1));
+
+    lapic_enable();            // enable local APIC (SVR bit 8)
+    lapic_timer_init(32);      // program LVT timer at vector 32 (matches your IDT)
+
+    sti();                     // allow interrupts globally
+
+    uint64_t f1 = read_rflags();
+    kprintf("[init] RFLAGS.IF after : %u\n", (unsigned)((f1 >> 9) & 1));
+}
 void n2_main(bootinfo_t *bootinfo) {
     if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI) return;
 
@@ -83,9 +96,7 @@ void n2_main(bootinfo_t *bootinfo) {
 
     // Install our full ISR/IRQ table before enabling interrupts
     idt_install();
-    lapic_enable();
-    lapic_timer_init(32);  // vector 32 matches your IDT
-    __asm__ __volatile__("sti");  // NOW enable interrupts
+    start_timer_interrupts();
     gdt_tss_init(_kernel_stack_top);
 
     print_acpi_info(bootinfo);
@@ -99,7 +110,6 @@ void n2_main(bootinfo_t *bootinfo) {
     kheap_parse_bootarg(bootinfo->cmdline);
     kheap_init();
 
-    __asm__ volatile("cli");
 
     vprint("[N2] Initializing USB stack...\r\n");
     usb_init();
