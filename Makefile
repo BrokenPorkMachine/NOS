@@ -1,4 +1,4 @@
-	CC      := $(CROSS_COMPILE)gcc
+CC      := $(CROSS_COMPILE)gcc
 LD      := $(CROSS_COMPILE)ld
 AS      := $(CROSS_COMPILE)as
 AR      := $(CROSS_COMPILE)ar
