@@ -189,7 +189,8 @@ endif
 	    $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o,) \
 	    kernel/loader_vm_pmm_shims.o \
 	    regx/regx_launch_adapters.o \
-	    -o kernel.bin
+	    kernel/arch/APIC/lapic.o \
+		-o kernel.bin
 
 	cp kernel.bin n2.bin
 
