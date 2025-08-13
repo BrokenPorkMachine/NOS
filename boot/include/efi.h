@@ -464,6 +464,43 @@ struct EFI_MEMORY_DESCRIPTOR {
 typedef struct EFI_MEMORY_DESCRIPTOR EFI_MEMORY_DESCRIPTOR;
 
 // ====================
+// Block I/O Protocol
+// ====================
+typedef UINT64 EFI_LBA;
+
+typedef struct {
+    UINT32  MediaId;
+    BOOLEAN RemovableMedia;
+    BOOLEAN MediaPresent;
+    BOOLEAN LogicalPartition;
+    BOOLEAN ReadOnly;
+    BOOLEAN WriteCaching;
+    UINT32  BlockSize;
+    UINT32  IoAlign;
+    EFI_LBA LastBlock;
+    EFI_LBA LowestAlignedLba;
+    EFI_LBA LogicalBlocksPerPhysicalBlock;
+    EFI_LBA OptimalTransferLengthGranularity;
+} EFI_BLOCK_IO_MEDIA;
+
+typedef struct EFI_BLOCK_IO_PROTOCOL EFI_BLOCK_IO_PROTOCOL;
+struct EFI_BLOCK_IO_PROTOCOL {
+    UINT64                        Revision;
+    EFI_BLOCK_IO_MEDIA           *Media;
+    EFI_STATUS (EFIAPI *Reset)(EFI_BLOCK_IO_PROTOCOL*, BOOLEAN);
+    EFI_STATUS (EFIAPI *ReadBlocks)(EFI_BLOCK_IO_PROTOCOL*, UINT32, EFI_LBA, UINTN, VOID*);
+    EFI_STATUS (EFIAPI *WriteBlocks)(EFI_BLOCK_IO_PROTOCOL*, UINT32, EFI_LBA, UINTN, const VOID*);
+    EFI_STATUS (EFIAPI *FlushBlocks)(EFI_BLOCK_IO_PROTOCOL*);
+};
+
+static const EFI_GUID gEfiBlockIoProtocolGuid =
+    { 0x964e5b21, 0x6459, 0x11d2, { 0x8e, 0x39, 0x0, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
+
+#define EFI_LOCATE_SEARCH_ALL_HANDLES       0
+#define EFI_LOCATE_SEARCH_BY_REGISTER_NOTIFY 1
+#define EFI_LOCATE_SEARCH_BY_PROTOCOL       2
+
+// ====================
 // NULL Definition (if not included from stddef.h)
 // ====================
 #ifndef NULL
