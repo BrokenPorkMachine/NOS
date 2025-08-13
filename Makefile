@@ -34,7 +34,8 @@ $(AGENT_OBJS): %.o : %.c
 define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
-out/agents/$(1).elf: $(if $(filter $(1),init),user/rt/entry.o) $$(AGENT_$(1)_OBJS) user/libc/libc.o
+# init uses entry.o, others use rt0_user.o
+out/agents/$(1).elf: $(if $(filter $(1),init),user/rt/entry.o,user/rt/rt0_user.o) $$(AGENT_$(1)_OBJS) user/libc/libc.o
 	@mkdir -p $$(@D)
 	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
 
@@ -102,6 +103,7 @@ libc: user/libc/libc.o
 
 # ===== kernel =====
 kernel: libc agents bins
+	# (kernel build stays the same)
 	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
 	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch_asm.o
 	$(CC) $(CFLAGS) -c kernel/Task/context_switch.c -o kernel/Task/context_switch.o
@@ -112,10 +114,8 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
 	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
 	$(CC) $(CFLAGS) -c kernel/trap.c -o kernel/trap.o
-	# New: page-mapped ELF loader + regx glue
 	$(CC) $(CFLAGS) -c loader/elf_paged_loader.c -o loader/elf_paged_loader.o
 	$(CC) $(CFLAGS) -c src/agents/regx/regx_launch_elf_paged.c -o src/agents/regx/regx_launch_elf_paged.o
-	# Optional (diagnostics) if present:
 ifneq ($(wildcard kernel/arch/ud_handler_patch.c),)
 	$(CC) $(CFLAGS) -c kernel/arch/ud_handler_patch.c -o kernel/arch/ud_handler_patch.o
 endif
@@ -143,12 +143,10 @@ endif
 	$(CC) $(CFLAGS) -c nosm/drivers/IO/sata.c     -o nosm/drivers/IO/sata.o
 	$(CC) $(CFLAGS) -c nosm/drivers/Net/e1000.c   -o nosm/drivers/Net/e1000.o
 	$(CC) $(CFLAGS) -c nosm/drivers/Net/netstack.c -o nosm/drivers/Net/netstack.o
-	# Linked-in security gate + core agents:
 	$(CC) $(CFLAGS) -c src/agents/regx/regx.c      -o src/agents/regx/regx.o
 	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs.c   -o user/agents/nosfs/nosfs.o
 	$(CC) $(CFLAGS) -c user/agents/nosfs/nosfs_server.c -o user/agents/nosfs/nosfs_server.o
 	$(CC) $(CFLAGS) -c user/agents/nosm/nosm.c     -o user/agents/nosm/nosm.o
-
 	$(CC) $(CFLAGS) -c kernel/arch/CPU/smp.c -o kernel/arch/CPU/smp.o
 	$(CC) $(CFLAGS) -c kernel/arch/APIC/lapic.c -o kernel/arch/APIC/lapic.o
 	$(NASM) -f elf64 -I kernel/arch/GDT/ kernel/arch/GDT/gdt.asm -o kernel/arch/GDT/gdt_flush.o
@@ -164,9 +162,9 @@ endif
 	$(CC) $(CFLAGS) -c kernel/VM/numa.c -o kernel/VM/numa.o
 	$(CC) $(CFLAGS) -c kernel/VM/legacy_heap.c -o kernel/VM/legacy_heap.o
 	$(CC) $(CFLAGS) -c kernel/VM/heap_select.c -o kernel/VM/heap_select.o
-	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/nitroheap.c -o kernel/VM/nitroheap/nitroheap.o
-	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/classes.c -o kernel/VM/nitroheap/classes.o
-	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
+	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/nitroheap.o -o kernel/VM/nitroheap/nitroheap.o
+	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/classes.o -o kernel/VM/nitroheap/classes.o
+	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.o -o kernel/arch/idt_guard.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/idt.c -o kernel/arch/IDT/idt.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/isr.c -o kernel/arch/IDT/isr.o
 	$(NASM) -f elf64 kernel/arch/IDT/isr_stub.asm -o kernel/arch/IDT/isr_stub.o
@@ -174,7 +172,6 @@ endif
 	$(CC) $(CFLAGS) -c kernel/agent_loader_pub.c -o kernel/agent_loader_pub.o
 	$(CC) $(CFLAGS) -c kernel/loader_vm_pmm_shims.c -o kernel/loader_vm_pmm_shims.o
 	$(CC) $(CFLAGS) -c src/agents/regx/regx_launch_adapters.c -o src/agents/regx/regx_launch_adapters.o
-
 	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o \
 	    kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
@@ -183,8 +180,7 @@ endif
 	    kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o kernel/uaccess.o \
 	    kernel/proc_launch.o kernel/trap.o kernel/symbols.o \
 	    kernel/arch/idt_guard.o kernel/arch/IDT/idt.o kernel/arch/IDT/isr.o kernel/arch/IDT/isr_stub.o \
-	    loader/elf_paged_loader.o \
-        src/agents/regx/regx_launch_elf_paged.o \
+	    loader/elf_paged_loader.o src/agents/regx/regx_launch_elf_paged.o \
 	    kernel/nosfs_pub.o \
 	    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
 	    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
@@ -192,17 +188,11 @@ endif
 	    nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
 	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
 	    user/libc/libc.o $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o) \
-	    kernel/loader_vm_pmm_shims.o \
-    src/agents/regx/regx_launch_adapters.o \
+	    kernel/loader_vm_pmm_shims.o src/agents/regx/regx_launch_adapters.o \
                 -o kernel.bin
-
 	cp kernel.bin n2.bin
-
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.o -o O2.elf
-	$(OBJCOPY) -O binary \
-		--remove-section=.note.gnu.build-id \
-		--remove-section=.note.gnu.property \
-		O2.elf O2.bin
+	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property O2.elf O2.bin
 
 # ===== boot & image =====
 boot:
