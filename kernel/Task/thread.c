@@ -5,6 +5,8 @@
 #include "../../user/rt/agent_abi.h"
 #include "../../nosm/drivers/IO/serial.h"
 #include <stdint.h>
+#include <string.h>
+#include "arch_x86_64/gdt_tss.h"
 #include "../arch/CPU/smp.h"
 
 extern int kprintf(const char *fmt, ...);

@@ -3,13 +3,13 @@
 #include "tss.h"
 #include "gdt.h"
 #include "drivers/IO/serial.h"
+#include "arch_x86_64/gdt_tss.h"
 
 static struct tss64 tss;
-static uint8_t tss_stack[4096];
 
-void tss_install(void) {
+void gdt_tss_init(void *stack_top) {
     memset(&tss, 0, sizeof(tss));
-    tss.rsp0 = (uint64_t)(tss_stack + sizeof(tss_stack));
+    tss.rsp0 = (uint64_t)stack_top;
 
     gdt_install_with_tss(&tss, sizeof(tss) - 1);
 
