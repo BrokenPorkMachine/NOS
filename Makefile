@@ -81,7 +81,7 @@ $(BIN_OBJS): %.o : %.c
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -c $< -o $@
 
 define MAKE_BIN_RULES
-out/bin/$(1).elf: user/rt/rt0_user.o bin/$(1).o user/libc/libc.o
+out/bin/$(1).elf: user/rt/rt0_user.o user/rt/rt_stubs.o bin/$(1).o user/libc/libc.o
 	@mkdir -p $$(@D)
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $$^ -o $$@
 
