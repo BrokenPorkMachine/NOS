@@ -1,6 +1,7 @@
 // Minimal freestanding stdio for the kernel
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "stdio.h"
 
 // If your kernel already has a low-level console putc, declare it here.
