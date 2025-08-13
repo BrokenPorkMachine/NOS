@@ -35,7 +35,7 @@ AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
 out/agents/$(1).elf: $$(AGENT_$(1)_OBJS) user/rt/rt0_agent.o user/libc/libc.o
 	@mkdir -p $$(@D)
-	$(CC) $(O2_CFLAGS) -nostdlib -shared -Wl,-pie $$^ -o $$@
+	$(CC) $(O2_CFLAGS) -nostdlib -shared -Wl,-pie $$^ -fPIE -o $$@
 
 out/agents/$(1).mo2: out/agents/$(1).elf
 	cp $$< $$@
