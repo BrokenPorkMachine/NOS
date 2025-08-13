@@ -150,6 +150,7 @@ void idt_install(void) {
     idt_dump_vec(6);
     idt_dump_vec(13);
     idt_dump_vec(32);
+    idt_selftest();   // <— add this
 }
 
 void idt_reload(void) {
