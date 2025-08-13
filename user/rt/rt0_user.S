@@ -2,13 +2,23 @@
 ; user/rt/rt0_user.S — NASM syntax, generic startup for NOS user programs
 ; Calls _agent_main() if present, else main(), else halts
 ; ============================================================================
+
 BITS 64
 default rel
 
-; Declare them weak so missing ones won't error at link time
 global _start
-extern _agent_main   weak
-extern main          weak
+
+extern _agent_main
+extern main
+
+section .text
+
+; Tell linker these are weak symbols (won’t fail if missing)
+section .gnu.linkonce.t._agent_main
+weak _agent_main
+
+section .gnu.linkonce.t.main
+weak main
 
 section .text
 
