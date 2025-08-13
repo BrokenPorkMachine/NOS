@@ -11,7 +11,8 @@
 - O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
 - N2 agent-based kernel running in true x86_64 long mode
 - Signed, manifest-driven **NOSM** modules with hot reload
-- Transactional **NOSFS** filesystem
+ - Transactional **NOSFS** (NitrFS) filesystem
+ - Init and login agents served from the on-disk NitrFS filesystem
 - Four-ring GDT layout (rings 0–3; user/kernel split)
 - Full paging and memory protection (NX, SMEP, SMAP)
 - Modular, timer-driven preemptive multitasking
@@ -57,7 +58,7 @@
 - Create a FAT-formatted image and copy `BOOTX64.EFI` (nboot) along with the `O2.bin` stage0 loader and `n2.bin` kernel:
 
   ```sh
-  mkfs.vfat -C disk.img 4096
+  mkfs.vfat -C disk.img 262144  # 128MB image
   mmd -i disk.img ::/EFI
   mmd -i disk.img ::/EFI/BOOT
   mcopy -i disk.img bootx64.efi ::/EFI/BOOT/BOOTX64.EFI
