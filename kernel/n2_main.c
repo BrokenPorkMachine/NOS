@@ -116,10 +116,10 @@ void n2_main(bootinfo_t *bootinfo) {
     // Guard: probe/log IDT very early (no SSE, see idt_guard.c)
     if (idt_guard_init_once) idt_guard_init_once();
 
-    // Install our full ISR/IRQ table before enabling interrupts
+    // Install our full ISR/IRQ table and GDT/TSS before enabling interrupts
     idt_install();
-    start_timer_interrupts();
     gdt_tss_init(_kernel_stack_top);
+    start_timer_interrupts();
 
     print_acpi_info(bootinfo);
     print_cpu_topology(bootinfo);
