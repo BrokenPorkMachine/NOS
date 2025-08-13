@@ -9,6 +9,7 @@
 ## Features
 
 - O2 Boot Agent UEFI bootloader (loads kernel and `.nosm` modules; no GRUB or other loaders)
+- Configurable boot menu for live boot, installation, disk utilities, and kernel/module selection
 - N2 agent-based kernel running in true x86_64 long mode
 - Signed, manifest-driven **NOSM** modules with hot reload
  - Transactional **NOSFS** (NitrFS) filesystem
@@ -62,9 +63,13 @@
   mmd -i disk.img ::/EFI
   mmd -i disk.img ::/EFI/BOOT
   mcopy -i disk.img bootx64.efi ::/EFI/BOOT/BOOTX64.EFI
-  mcopy -i disk.img O2.bin ::/
-  mcopy -i disk.img n2.bin ::/
-  ```
+ mcopy -i disk.img O2.bin ::/
+ mcopy -i disk.img n2.bin ::/
+ ```
+
+  The boot menu is driven by `menu.cfg` at the root of the image. Administrators
+  can edit this file to add or remove menu entries or to select alternate
+  kernels and modules.
 
 4. **Run in QEMU:**
 

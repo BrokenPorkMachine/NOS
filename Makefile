@@ -62,10 +62,10 @@ AGENT_$1_SRCS := $(wildcard user/agents/$1/*.c)
 AGENT_$1_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(AGENT_$1_SRCS))
 
 $(OUT_DIR)/agents/$1.elf: $(BUILD_DIR)/user/rt/rt0_user.o \
-$(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o \
-$$(AGENT_$1_OBJS)
-
-  @mkdir -p $$(@D)
+	$(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o \
+	$$(AGENT_$1_OBJS)
+  
+	@mkdir -p $$(@D)
 	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
 endef
 
@@ -135,6 +135,7 @@ disk.img: boot kernel agents bins modules
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI
 	mcopy -i disk.img O2.bin ::/
 	mcopy -i disk.img n2.bin ::/
+	mcopy -i disk.img boot/menu.cfg ::/menu.cfg
 	mmd -i disk.img ::/agents
 	mcopy -i disk.img $(OUT_DIR)/agents/*.mo2 ::/agents/
 	mmd -i disk.img ::/bin
