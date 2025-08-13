@@ -25,6 +25,13 @@ CFLAGS := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -DKERNEL_BUIL
 O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 
+# Ensure the full build runs when invoking `make` without an explicit target.
+# The agent-specific rules generated below would otherwise become the first
+# targets in the file, causing `make` to build only an individual agent by
+# default.  Setting `.DEFAULT_GOAL` guarantees the intended `all` target runs
+# instead.
+.DEFAULT_GOAL := all
+
 # ========= Source Discovery =========
 # The kernel now links against the real driver and agent implementations instead
 # of stub placeholders.  Explicitly list the required sources so the linker sees
