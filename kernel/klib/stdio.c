@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include "stdio.h"
+#include <stdint.h>
 
 // If your kernel already has a low-level console putc, declare it here.
 // Provide one of these somewhere in the kernel (serial, VGA, etc.):
