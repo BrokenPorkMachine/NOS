@@ -1,5 +1,6 @@
 #include "gdt.h"
 #include "segments.h"
+#include "../x86/sel.h"
 #include "panic.h"
 #include <stdint.h>
 #include <string.h>
@@ -47,18 +48,6 @@ static inline uint16_t rdcs(void) {
 
 static void arch_post_gdt_probe(void) {
     serial_printf("[gdt] CS=0x%04x (expect 0x0008)\n", rdcs());
-}
-
-#define TI_BIT 0x4
-
-void assert_selector_gdt(uint16_t sel, const char* what) {
-    if (sel & TI_BIT) {
-        panic("LDT selector in %s: 0x%04x", what, sel);
-    }
-    unsigned idx = SEL2IDX(sel);
-    if (idx >= GDT_SLOTS) {
-        panic("Selector out of range in %s: 0x%04x", what, sel);
-    }
 }
 
 /* ------------------------------------------------------------------ */

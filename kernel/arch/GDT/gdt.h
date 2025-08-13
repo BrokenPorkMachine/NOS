@@ -42,9 +42,6 @@ void gdt_install_with_tss(void *tss_base, uint32_t tss_limit);
 /* Copy out a raw 8-byte GDT entry for inspection/testing. */
 void gdt_get_entry(int n, struct gdt_entry *out);
 
-/* Verify a selector uses the GDT (TI=0) and references a valid index. */
-void assert_selector_gdt(uint16_t sel, const char *what);
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
