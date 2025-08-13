@@ -1,4 +1,4 @@
-		# ========= Config =========
+				# ========= Config =========
 #
 # Default to the host toolchain unless a cross compiler is explicitly
 # provided.  The previous default expected the cross prefix
@@ -51,10 +51,24 @@ KERNEL_OBJS := \
     $(patsubst %.S,$(BUILD_DIR)/%.o,$(KERNEL_ASM_S)) \
     $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(KERNEL_ASM_ASM))
 
-AGENT_DIRS := user/agents/init
+AGENT_DIRS := user/agents/init user/agents/login
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
-AGENT_SRCS := $(wildcard $(foreach d,$(AGENT_DIRS),$(d)/*.c))
-AGENT_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(AGENT_SRCS))
+
+# Generate per-agent build rules so each agent's objects are explicitly
+# listed when linking. Wildcards previously produced targets literally
+# named "*.o" which prevented all sources from being included.
+define BUILD_AGENT
+AGENT_$1_SRCS := $(wildcard user/agents/$1/*.c)
+AGENT_$1_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(AGENT_$1_SRCS))
+
+$(OUT_DIR)/agents/$1.elf: $(BUILD_DIR)/user/rt/rt0_user.o \
+        $(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o \
+        $$(AGENT_$1_OBJS)
+	@mkdir -p $$(@D)
+	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
+endef
+
+$(foreach agent,$(AGENT_NAMES),$(eval $(call BUILD_AGENT,$(agent))))
 
 BIN_SRCS := $(wildcard bin/*.c)
 BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
@@ -91,10 +105,6 @@ kernel: $(KERNEL_OBJS)
 
 agents: $(AGENT_NAMES:%=$(OUT_DIR)/agents/%.mo2)
 
-$(OUT_DIR)/agents/%.elf: $(BUILD_DIR)/user/rt/rt0_user.o $(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o $(BUILD_DIR)/user/agents/%/*.o
-	@mkdir -p $(dir $@)
-	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $^ -o $@
-
 $(OUT_DIR)/agents/%.mo2: $(OUT_DIR)/agents/%.elf
 	cp $< $@
 
@@ -117,7 +127,7 @@ $(OUT_DIR)/modules/hello.mo2: $(MODULE_OBJS) $(BUILD_DIR)/user/libc/libc.o
 image: disk.img
 
 disk.img: boot kernel agents bins modules
-	dd if=/dev/zero of=disk.img bs=1M count=64
+	dd if=/dev/zero of=disk.img bs=1M count=128
 	mkfs.vfat -F 32 disk.img
 	mmd -i disk.img ::/EFI ::/EFI/BOOT
 	mcopy -i disk.img boot/nboot.efi ::/EFI/BOOT/BOOTX64.EFI

@@ -28,6 +28,7 @@
 #include "nosfs.h"
 extern int nosfs_is_ready(void);
 extern nosfs_fs_t nosfs_root;
+extern void regx_start(void);
 
 extern int timer_ready;
 __attribute__((weak)) void idt_guard_init_once(void);
@@ -165,5 +166,6 @@ void n2_main(bootinfo_t *bootinfo) {
 
     for (uint32_t i = 0; i < bootinfo->module_count; ++i) load_module(&bootinfo->modules[i]);
 
+    regx_start();
     scheduler_loop();
 }

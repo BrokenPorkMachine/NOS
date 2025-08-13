@@ -155,6 +155,30 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->modules[0].base = n2_buf;
     bi->modules[0].size = n2_size;
     bi->module_count = 1;
+
+    // --- Load user agents from disk ---
+    const struct { const CHAR16 *path; const char *name; } agents[] = {
+        { L"\\agents\\init.mo2",  "agents/init.mo2"  },
+        { L"\\agents\\login.mo2", "agents/login.mo2" }
+    };
+    for (UINTN i = 0; i < sizeof(agents)/sizeof(agents[0]) && bi->module_count < MAX_MODULES; ++i) {
+        void *buf = NULL; UINTN sz = 0;
+        if (EFI_ERROR(load_file(SystemTable, root, agents[i].path, EfiLoaderData, &buf, &sz))) {
+            vprint_ascii(SystemTable, "[nboot] missing ");
+            vprint_ascii(SystemTable, agents[i].name);
+            vprint_ascii(SystemTable, "\r\n");
+            continue;
+        }
+        char *name_copy = NULL;
+        UINTN name_len = strlen(agents[i].name) + 1;
+        if (!EFI_ERROR(SystemTable->BootServices->AllocatePool(EfiLoaderData, name_len, (void **)&name_copy)))
+            strcpy(name_copy, agents[i].name);
+        bi->modules[bi->module_count].name = name_copy ? name_copy : agents[i].name;
+        bi->modules[bi->module_count].base = buf;
+        bi->modules[bi->module_count].size = sz;
+        bi->module_count++;
+    }
+
     vprint_ascii(SystemTable, "[nboot] Module count: ");
     vprint_dec(SystemTable, bi->module_count);
     vprint_ascii(SystemTable, "\r\n");

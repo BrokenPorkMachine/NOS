@@ -29,6 +29,7 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     // Initialise the in-memory FS and mark it ready for use
     nosfs_init(&nosfs_root);
     atomic_store(&nosfs_ready, 1);
+    kprintf("[nosfs] server ready\n");
 
     // Optional one-time debug listing (uncomment if needed)
     nosfs_debug_list_all();
