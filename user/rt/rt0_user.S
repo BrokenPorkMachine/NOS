@@ -1,6 +1,6 @@
 ; ============================================================================
-; user/rt/rt0_user.S — NASM syntax, generic startup for NOS user programs
-; Calls _agent_main() if present, else main(), else halts
+; user/rt/rt0_user.S — NASM syntax startup for NOS user programs
+; Tries _agent_main(), else main(), else halts
 ; ============================================================================
 
 BITS 64
@@ -11,16 +11,7 @@ global _start
 extern _agent_main
 extern main
 
-section .text
-
-; Tell linker these are weak symbols (won’t fail if missing)
-section .gnu.linkonce.t._agent_main
-weak _agent_main
-
-section .gnu.linkonce.t.main
-weak main
-
-section .text
+section .text align=16
 
 _start:
     and     rsp, -16        ; keep stack aligned
@@ -29,14 +20,14 @@ _start:
     mov     rax, _agent_main
     test    rax, rax
     jz      .try_main
-    call    _agent_main
+    call    rax
     jmp     .done
 
 .try_main:
     mov     rax, main
     test    rax, rax
     jz      .done
-    call    main
+    call    rax
 
 .done:
     hlt
