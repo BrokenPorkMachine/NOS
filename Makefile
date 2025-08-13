@@ -1,4 +1,3 @@
-CROSS_COMPILE ?= x86_64-linux-gnu-
 CC      := $(CROSS_COMPILE)gcc
 LD      := $(CROSS_COMPILE)ld
 AS      := $(CROSS_COMPILE)as
@@ -163,6 +162,7 @@ endif
 	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/idt.c -o kernel/arch/IDT/idt.o
 	$(CC) $(CFLAGS) -c kernel/arch/APIC/lapic.c -o kernel/arch/APIC/lapic.o
+	$(CC) $(CFLAGS) -c kernel/arch/APIC/lapic_shim.c -o kernel/arch/APIC/lapic_shim.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/isr.c -o kernel/arch/IDT/isr.o
 	$(NASM) -f elf64 kernel/arch/IDT/isr_stub.asm -o kernel/arch/IDT/isr_stub.o
 	$(CC) $(CFLAGS) -c kernel/nosfs_pub.c -o kernel/nosfs_pub.o
@@ -191,6 +191,7 @@ endif
 	    kernel/loader_vm_pmm_shims.o \
 	    regx/regx_launch_adapters.o \
 	    kernel/arch/APIC/lapic.o \
+	    kernel/arch/APIC/lapic_shim.o \
 		-o kernel.bin
 
 	cp kernel.bin n2.bin
