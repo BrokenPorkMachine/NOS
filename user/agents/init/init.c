@@ -20,7 +20,15 @@ void agent_main(void) {
     const AgentAPI *api = NOS;
     uint32_t self_tid = NOS_TID;
     (void)self_tid;
-    if (!api) return;
+    /*
+     * _start (from rt0_agent.c) declares agent_main() as noreturn.  If the
+     * kernel failed to supply the AgentAPI pointer, returning here would jump
+     * into random memory and wedge the boot sequence.  Instead, halt forever so
+     * the behaviour is defined and we can still diagnose the issue.
+     */
+    if (!api) {
+        for (;;) __asm__ __volatile__("hlt");
+    }
 
     if (api->puts) api->puts("[init] starting with dyld2\n");
     dyld2_init(api);
