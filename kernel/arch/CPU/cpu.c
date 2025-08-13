@@ -9,7 +9,19 @@ static inline void cpuid2(uint32_t leaf, uint32_t subleaf,
     __asm__ volatile("cpuid"
                      : "=a"(ra), "=b"(rb), "=c"(rc), "=d"(rd)
                      : "a"(leaf), "c"(subleaf));
-    if (a) *a = ra; if (b) *b = rb; if (c) *c = rc; if (d) *d = rd;
+
+    if (a) {
+        *a = ra;
+    }
+    if (b) {
+        *b = rb;
+    }
+    if (c) {
+        *c = rc;
+    }
+    if (d) {
+        *d = rd;
+    }
 }
 
 static inline uint32_t cpuid_max_basic(void) {
