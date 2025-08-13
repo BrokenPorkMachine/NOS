@@ -109,6 +109,7 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/Task/context_switch.c -o kernel/Task/context_switch.o
 	$(CC) $(O2_CFLAGS) -c kernel/O2.c -o kernel/O2.o
 	$(CC) $(CFLAGS) -c kernel/n2_main.c -o kernel/n2_main.o
+	$(CC) $(CFLAGS) -c kernel/api_stubs.c -o kernel/api_stubs.o
 	$(CC) $(CFLAGS) -c kernel/builtin_nosfs.c -o kernel/builtin_nosfs.o
 	$(CC) $(CFLAGS) -c kernel/agent.c -o kernel/agent.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
@@ -172,7 +173,7 @@ endif
 	$(CC) $(CFLAGS) -c kernel/agent_loader_pub.c -o kernel/agent_loader_pub.o
 	$(CC) $(CFLAGS) -c kernel/loader_vm_pmm_shims.c -o kernel/loader_vm_pmm_shims.o
 	$(CC) $(CFLAGS) -c src/agents/regx/regx_launch_adapters.c -o src/agents/regx/regx_launch_adapters.o
-	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
+	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/api_stubs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o \
 	    kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
 	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
