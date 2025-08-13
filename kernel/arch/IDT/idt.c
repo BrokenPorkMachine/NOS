@@ -70,16 +70,29 @@ static void idt_populate_all(void) {
     }
 }
 
+struct __attribute__((packed)) IdtGate {
+    uint16_t off_low;
+    uint16_t sel;
+    uint8_t  ist:3;
+    uint8_t  _z:5;
+    uint8_t  type_attr;
+    uint16_t off_mid;
+    uint32_t off_high;
+    uint32_t _z2;
+};
+static inline uint64_t gate_off(const struct IdtGate* g){
+    return (uint64_t)g->off_low
+        | ((uint64_t)g->off_mid  << 16)
+        | ((uint64_t)g->off_high << 32);
+}
 void idt_dump_vec(int v) {
-    uint64_t off = ((uint64_t)idt[v].offset_high << 32) |
-                   ((uint64_t)idt[v].offset_mid  << 16) |
-                   (uint64_t)idt[v].offset_low;
-    serial_printf("[idt] vec=%3d sel=%#06x off=%016lx attr=%02x ist=%u\n",
+    const struct IdtGate *g = (const struct IdtGate *)&idt[v];
+    serial_printf("[idt] vec=%3d sel=%#06x off=%#018llx attr=%02x ist=%u\n",
                   v,
-                  (unsigned)idt[v].selector,
-                  (unsigned long)off,
-                  (unsigned)idt[v].type_attr,
-                  (unsigned)(idt[v].ist & 7));
+                  (unsigned)g->sel,
+                  (unsigned long long)gate_off(g),
+                  (unsigned)g->type_attr,
+                  (unsigned)g->ist);
 }
 
 /* Self-test with proper masks (no -Woverflow) */

@@ -13,6 +13,8 @@
  *  - The ABI is stable C: all functions use the standard SysV calling conv.
  */
 
+/* Keep a tight ABI: no implicit padding and fixed field offsets */
+#pragma pack(push,1)
 typedef struct AgentAPI {
     /* Basic services */
     void     (*yield)(void);
@@ -33,7 +35,19 @@ typedef struct AgentAPI {
 
     /* Optional health ping to regx; returns 1 if regx responds, 0 otherwise. */
     int      (*regx_ping)(void);
+    /* add new fields only at the end AND update both kernel and agents */
 } AgentAPI;
+#pragma pack(pop)
+
+_Static_assert(sizeof(void*) == 8, "64-bit only");
+_Static_assert(sizeof(AgentAPI) == 56, "AgentAPI size mismatch");
+_Static_assert(offsetof(AgentAPI, yield)      == 0,  "ABI drift: yield");
+_Static_assert(offsetof(AgentAPI, self)       == 8,  "ABI drift: self");
+_Static_assert(offsetof(AgentAPI, printf)     == 16, "ABI drift: printf");
+_Static_assert(offsetof(AgentAPI, puts)       == 24, "ABI drift: puts");
+_Static_assert(offsetof(AgentAPI, fs_read_all)== 32, "ABI drift: fs_read_all");
+_Static_assert(offsetof(AgentAPI, regx_load)  == 40, "ABI drift: regx_load");
+_Static_assert(offsetof(AgentAPI, regx_ping)  == 48, "ABI drift: regx_ping");
 
 /* Set by the agent runtime (rt0_agent.c) from registers (RDI/RSI). */
 extern const AgentAPI *NOS;
