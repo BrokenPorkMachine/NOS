@@ -13,3 +13,7 @@ void ipc_grant(void *q, uint32_t id, uint32_t caps) { (void)q; (void)id; (void)c
 int agent_loader_run_from_path(const char *path, int prio) { (void)path; (void)prio; return -1; }
 void serial_puts(const char *s) { (void)s; }
 void arm_init_watchdog(void) {}
+int api_puts(const char *s) { (void)s; return 0; }
+int api_fs_read_all(const char *path, void *buf, size_t len, size_t *outlen) { (void)path; (void)buf; (void)len; if (outlen) *outlen = 0; return -1; }
+int api_regx_load(const char *name, const char *arg, uint32_t *out) { (void)name; (void)arg; if (out) *out = 0; return -1; }
+void api_yield(void) {}

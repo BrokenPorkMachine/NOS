@@ -26,6 +26,9 @@
 #include "uaccess.h"
 #include "symbols.h"
 #include "printf.h"
+#include "../user/agents/nosfs/nosfs.h"
+extern int nosfs_is_ready(void);
+extern nosfs_fs_t nosfs_root;
 
 extern int timer_ready;
 __attribute__((weak)) void idt_guard_init_once(void);
@@ -51,7 +54,27 @@ static void print_cpu_topology(const bootinfo_t *b) { (void)b; }
 static void print_modules(const bootinfo_t *b) { (void)b; }
 static void print_framebuffer(const bootinfo_t *b) { (void)b; }
 static void print_mmap(const bootinfo_t *b) { (void)b; }
-static void load_module(const void *m) { (void)m; }
+extern void thread_yield(void);
+
+static void load_module(const void *m)
+{
+    /* bootinfo_t provides modules with { base, size, name } */
+    const struct { void *base; uint64_t size; const char *name; } *mod = m;
+    if (!mod || !mod->base || !mod->name)
+        return;
+
+    /* Ensure the NOSFS server is ready before populating the filesystem */
+    while (!nosfs_is_ready())
+        thread_yield();
+
+    const char *name = mod->name;
+    if (name[0] == '/')
+        name++;
+
+    int h = nosfs_create(&nosfs_root, name, (uint32_t)mod->size, 0);
+    if (h >= 0)
+        (void)nosfs_write(&nosfs_root, h, 0, mod->base, (uint32_t)mod->size);
+}
 static void scheduler_loop(void) { while (1) schedule(); }
 
 static void start_timer_interrupts(void) {

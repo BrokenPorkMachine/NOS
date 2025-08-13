@@ -5,7 +5,6 @@
 #include "../../../kernel/Task/thread.h"
 #include "../../../nosm/drivers/IO/serial.h"
 #include "../../../kernel/agent_loader.h"
-#include "../../../kernel/init_bin.h"
 #include "../../../user/agents/nosfs/nosfs_server.h"
 #include "../../../user/libc/string_guard.h"
 
@@ -64,10 +63,6 @@ static void spawn_init_once(void) {
     for (;;) {
         kprintf("[regx] launching init (boot:init:regx)\n");
         int rc = agent_loader_run_from_path("/agents/init.mo2", 200);
-        if (rc < 0) {
-        kprintf("[regx] falling back to built-in init image\n");
-        rc = load_agent_auto(init_bin, init_bin_len);
-        }
         if (rc >= 0) {
             kprintf("[regx] init agent launched rc=%d\n", rc);
             break;

@@ -6,10 +6,6 @@
 // Optional boot logging from kernel
 extern int kprintf(const char *fmt, ...);
 
-// Built-in agent images generated at build time
-#include "../../kernel/init_bin.h"
-#include "../../kernel/login_bin.h"
-
 // Shared filesystem instance defined in nosfs.c
 extern nosfs_fs_t nosfs_root;
 
@@ -30,19 +26,9 @@ static void nosfs_debug_list_all(void) {
 void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     (void)self_id;
 
-    // Initialise the in-memory FS
+    // Initialise the in-memory FS and mark it ready for use
     nosfs_init(&nosfs_root);
-
-    // Preload essential agents so the registry can launch them.
-    // IMPORTANT: store WITHOUT leading slash so fs_read_all() (which strips one) will match.
-    int h = nosfs_create(&nosfs_root, "agents/init.mo2", init_bin_len, 0);
-    if (h >= 0) (void)nosfs_write(&nosfs_root, h, 0, init_bin, init_bin_len);
-
-    h = nosfs_create(&nosfs_root, "agents/login.mo2", login_bin_len, 0);
-    if (h >= 0) (void)nosfs_write(&nosfs_root, h, 0, login_bin, login_bin_len);
-
-    // Make filesystem contents visible to other threads
-      atomic_store(&nosfs_ready, 1);
+    atomic_store(&nosfs_ready, 1);
 
     // Optional one-time debug listing (uncomment if needed)
     nosfs_debug_list_all();
