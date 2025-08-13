@@ -25,7 +25,7 @@ void agent_main(void) {
     if (api->puts) api->puts("[init] starting with dyld2\n");
     dyld2_init(api);
 
-    const char *login_path = "/agents/login.mo2";
+    const char *login_path = "agents/login.mo2";
     const char *argvv[2] = { "login", 0 };
     int rc = dyld2_run_exec(login_path, 1, argvv);
     if (api->printf) api->printf("[init] login exited rc=%d\n", rc);
