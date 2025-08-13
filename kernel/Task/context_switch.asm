@@ -1,10 +1,10 @@
-global context_switch
-; void context_switch(uint64_t *old_rsp, uint64_t new_rsp);
+global context_switch_asm
+; void context_switch_asm(uint64_t *old_rsp, uint64_t new_rsp);
 ;   rdi = pointer to save old rsp (may be NULL if caller doesn't care)
 ;   rsi = new rsp value to load
 
 section .text
-context_switch:
+context_switch_asm:
     push rax
     pushfq              ; save caller's rflags
     cli                 ; disable interrupts during the switch

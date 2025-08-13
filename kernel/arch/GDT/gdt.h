@@ -20,9 +20,9 @@ struct gdt_entry {
     uint8_t  base_high;
 } __attribute__((packed));
 
-/* Total slots reserved in the table (code/data + optional TSS space). */
+/* Total slots reserved in the table (null + 4 segments + TSS pair) */
 #ifndef GDT_SLOTS
-#  define GDT_SLOTS 11
+#  define GDT_SLOTS 7
 #endif
 
 /* ----------------------------------------------------------------------
@@ -41,6 +41,9 @@ void gdt_install_with_tss(void *tss_base, uint32_t tss_limit);
 
 /* Copy out a raw 8-byte GDT entry for inspection/testing. */
 void gdt_get_entry(int n, struct gdt_entry *out);
+
+/* Verify a selector uses the GDT (TI=0) and references a valid index. */
+void assert_selector_gdt(uint16_t sel, const char *what);
 
 #ifdef __cplusplus
 } /* extern "C" */

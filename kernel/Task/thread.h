@@ -132,13 +132,14 @@ void schedule(void);
 uint64_t schedule_from_isr(uint64_t *old_rsp);
 
 /**
- * Switch stack (old_rsp, new_rsp): implemented in asm and returns to caller.
+ * Switch stack (old_rsp, new_rsp): calls a small asm stub and returns to caller.
  *
  * ABI contract (matches your context_switch.asm):
  *   - Saves caller rflags and disables IF during the switch.
  *   - Saves callee-saved regs: rbp, rbx, r12, r13, r14, r15 (in that order).
  *   - Stores the previous RSP to *old_rsp if old_rsp != NULL.
  *   - Loads new RSP, restores regs in reverse, popfq, pop rax (dummy), ret.
+ *   - Verifies all segment selectors are GDT entries both before and after.
  *
  * Thread stack at entry (top -> bottom) must be:
  *   r15, r14, r13, r12, rbx, rbp, rflags, rax_dummy, rip(thread_entry), arg
