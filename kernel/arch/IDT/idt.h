@@ -1,7 +1,6 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
-#include "arch/GDT/gdt_selectors.h"
 
 #ifndef IDT_ENTRIES
 #define IDT_ENTRIES 256
