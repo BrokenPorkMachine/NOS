@@ -30,28 +30,31 @@ extern void nosm_entry(void);                        // user/agents/nosm/nosm.c
 extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.c
 
 // ---- AgentAPI helpers ----
-static int api_fs_read_all(const char *path, void *buf, size_t max, size_t *out_len){
-    void *tmp = NULL;
-    size_t len = 0;
-    int rc = fs_read_all(path, &tmp, &len);
-    if (rc != 0 || !tmp)
-        return rc ? rc : -1;
-    if (len > max)
-        len = max;
-    memcpy(buf, tmp, len);
-    if (out_len)
-        *out_len = len;
-    return 0;
+// --- Adapters to match AgentAPI signatures exactly ---
+static void api_puts_wrap(const char *s) {
+    api_puts(s);
 }
-static int api_regx_load(const char *path, const char *args, uint32_t *out_tid){ (void)args; int rc=agent_loader_run_from_path(path,200); if(out_tid) *out_tid=0; return rc; }
-static int api_regx_ping(void){ return 1; }
-static int api_puts(const char *s){ serial_puts(s); return 0; }
-static AgentAPI k_agent_api = {
-    .puts        = api_puts,
-    .fs_read_all = api_fs_read_all,
-    .regx_load   = api_regx_load,
-    .yield       = thread_yield   // or scheduler_yield, or whatever function you actually have
+
+static int api_fs_read_all_wrap(const char *path, char *buf, size_t len, size_t *outlen) {
+    return api_fs_read_all(path, buf, len, outlen);
+}
+
+static int api_regx_load_wrap(const char *name, const void *arg, void *out) {
+    return api_regx_load(name, (const char *)arg, (uint32_t *)out);
+}
+
+static void api_yield_wrap(void) {
+    api_yield();
+}
+
+// --- Agent API table with corrected types ---
+AgentAPI k_agent_api = {
+    .puts        = api_puts_wrap,
+    .fs_read_all = api_fs_read_all_wrap,
+    .regx_load   = api_regx_load_wrap,
+    .yield       = api_yield_wrap
 };
+
 
 #ifndef STACK_SIZE
 #define STACK_SIZE 8192
