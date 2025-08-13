@@ -35,7 +35,7 @@ define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
 # init uses entry.o, others use rt0_user.o
-out/agents/$(1).elf: $(if $(filter $(1),init),user/rt/entry.o,user/rt/rt0_user.o) $$(AGENT_$(1)_OBJS) user/libc/libc.o
+out/agents/$(1).elf: user/rt/rt0_user.o user/rt/rt_stubs.o $$(AGENT_$(1)_OBJS) user/libc/libc.o
 	@mkdir -p $$(@D)
 	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
 
