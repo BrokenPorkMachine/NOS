@@ -1,5 +1,13 @@
-# ========= Config =========
-CROSS_COMPILE ?= x86_64-unknown-linux-gnu-
+		# ========= Config =========
+#
+# Default to the host toolchain unless a cross compiler is explicitly
+# provided.  The previous default expected the cross prefix
+# `x86_64-unknown-linux-gnu-` to be installed which isn't available in
+# many environments and caused the build to fail before any of the
+# project sources were compiled.  Falling back to an empty prefix allows
+# ordinary `gcc`, `ld`, etc. to be used out of the box while still
+# supporting cross compilation when `CROSS_COMPILE` is set by the user.
+CROSS_COMPILE ?=
 CC      := $(CROSS_COMPILE)gcc
 LD      := $(CROSS_COMPILE)ld
 AS      := $(CROSS_COMPILE)as
@@ -18,11 +26,22 @@ O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 
 # ========= Source Discovery =========
-KERNEL_SRCS := $(wildcard kernel/**/*.c kernel/*.c loader/*.c src/agents/regx/*.c user/agents/nosfs/*.c user/agents/nosm/*.c nosm/drivers/**/*.c)
-KERNEL_ASM  := $(wildcard kernel/**/*.S kernel/**/*.asm)
-KERNEL_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS)) $(patsubst %.S,$(BUILD_DIR)/%.o,$(KERNEL_ASM)) $(patsubst %.asm,$(BUILD_DIR)/%.o,$(KERNEL_ASM))
+# The kernel build should only include kernel and loader sources.  User agents
+# and driver modules are built separately; including them here caused duplicate
+# symbol definitions when linking against the stub implementations.
+KERNEL_SRCS := $(shell find kernel loader src/agents/regx -name '*.c') user/libc/libc.c nosm/drivers/IO/serial.c
+KERNEL_ASM_S   := $(shell find kernel -name '*.S')
+KERNEL_ASM_ASM := $(filter-out kernel/n2_entry.asm,$(shell find kernel -name '*.asm'))
+# Convert each source type to its object path without leaving the original
+# source names in the list, ensuring the linker only sees object files.  Use a
+# distinct suffix for `.asm` objects so files sharing the same stem as a C
+# source (e.g. `context_switch.c` and `context_switch.asm`) do not collide.
+KERNEL_OBJS := \
+    $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS)) \
+    $(patsubst %.S,$(BUILD_DIR)/%.o,$(KERNEL_ASM_S)) \
+    $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(KERNEL_ASM_ASM))
 
-AGENT_DIRS := user/agents/init user/agents/login
+AGENT_DIRS := user/agents/init
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
 AGENT_SRCS := $(wildcard $(foreach d,$(AGENT_DIRS),$(d)/*.c))
 AGENT_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(AGENT_SRCS))
@@ -43,7 +62,7 @@ $(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(dir $@)
 	$(NASM) -f elf64 $< -o $@
 
-$(BUILD_DIR)/%.o: %.asm
+$(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) -f elf64 $< -o $@
 
@@ -54,6 +73,7 @@ boot:
 	make -C boot
 
 kernel: $(KERNEL_OBJS)
+	@mkdir -p $(OUT_DIR)
 	$(LD) -T kernel/n2.ld -Map $(OUT_DIR)/kernel.map $(KERNEL_OBJS) -o kernel.bin
 	cp kernel.bin n2.bin
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.c -o O2.elf
@@ -112,5 +132,7 @@ run: disk.img
 
 runmac: disk.img
 	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
-	    -m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
-	    -device i8042 -serial stdio -display cocoa
+	-m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
+	-device i8042 -serial stdio -display cocoa
+
+.PHONY: boot
