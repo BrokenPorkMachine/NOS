@@ -115,8 +115,8 @@ kernel: libc agents bins
 	$(CC) $(CFLAGS) -c kernel/agent_loader.c -o kernel/agent_loader.o
 	$(CC) $(CFLAGS) -c kernel/regx.c -o kernel/regx.o
 	$(CC) $(CFLAGS) -c kernel/trap.c -o kernel/trap.o
-	$(CC) $(CFLAGS) -c loader/elf_paged_loader.c -o loader/elf_paged_loader.o
-	$(CC) $(CFLAGS) -c src/agents/regx/regx_launch_elf_paged.c -o src/agents/regx/regx_launch_elf_paged.o
+        $(CC) $(CFLAGS) -c loader/elf_paged_loader.c -o loader/elf_paged_loader.o
+        $(CC) $(CFLAGS) -c src/agents/regx/regx_launch.c -o src/agents/regx/regx_launch.o
 ifneq ($(wildcard kernel/arch/ud_handler_patch.c),)
 	$(CC) $(CFLAGS) -c kernel/arch/ud_handler_patch.c -o kernel/arch/ud_handler_patch.o
 endif
@@ -171,8 +171,7 @@ endif
 	$(NASM) -f elf64 kernel/arch/IDT/isr_stub.asm -o kernel/arch/IDT/isr_stub.o
 	$(CC) $(CFLAGS) -c kernel/nosfs_pub.c -o kernel/nosfs_pub.o
 	$(CC) $(CFLAGS) -c kernel/agent_loader_pub.c -o kernel/agent_loader_pub.o
-	$(CC) $(CFLAGS) -c kernel/loader_vm_pmm_shims.c -o kernel/loader_vm_pmm_shims.o
-	$(CC) $(CFLAGS) -c src/agents/regx/regx_launch_adapters.c -o src/agents/regx/regx_launch_adapters.o
+        $(CC) $(CFLAGS) -c kernel/loader_vm_pmm_shims.c -o kernel/loader_vm_pmm_shims.o
 	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/api_stubs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o \
 	    kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
@@ -181,7 +180,7 @@ endif
 	    kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o kernel/uaccess.o \
 	    kernel/proc_launch.o kernel/trap.o kernel/symbols.o \
 	    kernel/arch/idt_guard.o kernel/arch/IDT/idt.o kernel/arch/IDT/isr.o kernel/arch/IDT/isr_stub.o \
-	    loader/elf_paged_loader.o src/agents/regx/regx_launch_elf_paged.o \
+            loader/elf_paged_loader.o src/agents/regx/regx_launch.o \
 	    kernel/nosfs_pub.o \
 	    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
 	    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
@@ -189,7 +188,7 @@ endif
 	    nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
 	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
 	    user/libc/libc.o $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o) \
-	    kernel/loader_vm_pmm_shims.o src/agents/regx/regx_launch_adapters.o \
+            kernel/loader_vm_pmm_shims.o \
                 -o kernel.bin
 	cp kernel.bin n2.bin
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.o -o O2.elf
@@ -230,10 +229,10 @@ clean:
 	    nosm/drivers/IO/serial.o nosm/drivers/IO/usb.o nosm/drivers/IO/usbkbd.o nosm/drivers/IO/video.o nosm/drivers/IO/tty.o \
 	    nosm/drivers/IO/ps2.o nosm/drivers/IO/keyboard.o nosm/drivers/IO/mouse.o nosm/drivers/IO/pci.o nosm/drivers/IO/pic.o \
 	    nosm/drivers/IO/pit.o nosm/drivers/IO/block.o nosm/drivers/IO/sata.o nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
-	    nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2 \
-	    kernel/login_bin.h \
-        loader/elf_paged_loader.o src/agents/regx/regx_launch_elf_paged.o \
-	    kernel/arch/ud_handler_patch.o
+            nosm/drivers/example/hello/hello_nmod.o out/modules/hello.elf out/modules/hello.mo2 \
+            kernel/login_bin.h \
+        loader/elf_paged_loader.o src/agents/regx/regx_launch.o \
+            kernel/arch/ud_handler_patch.o
 	rm -rf out
 	make -C boot clean
 
