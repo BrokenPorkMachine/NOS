@@ -24,6 +24,10 @@ typedef int (*agent_gate_fn)(const char *path,
 extern void agent_loader_set_gate(agent_gate_fn gate);
 extern int  agent_loader_run_from_path(const char *path, int prio);
 
+int regx_load(const char *name, const char *arg, uint32_t *out) {
+    return _regx_load_agent(name, arg, out);
+}
+
 // --- utils ---
 static inline uint64_t rdtsc(void){
     uint32_t lo,hi; __asm__ volatile("rdtsc":"=a"(lo),"=d"(hi));
