@@ -1,4 +1,4 @@
-CC      := $(CROSS_COMPILE)gcc
+	CC      := $(CROSS_COMPILE)gcc
 LD      := $(CROSS_COMPILE)ld
 AS      := $(CROSS_COMPILE)as
 AR      := $(CROSS_COMPILE)ar
@@ -34,7 +34,7 @@ $(AGENT_OBJS): %.o : %.c
 define MAKE_AGENT_RULES
 AGENT_$(1)_OBJS := $(patsubst %.c,%.o,$(wildcard user/agents/$(1)/*.c))
 
-out/agents/$(1).elf: $(if $(filter $(1),init),user/rt/entry.o,user/rt/rt0_agent.o) $$(AGENT_$(1)_OBJS) user/libc/libc.o
+out/agents/$(1).elf: $(if $(filter $(1),init),user/rt/entry.o) $$(AGENT_$(1)_OBJS) user/libc/libc.o
 	@mkdir -p $$(@D)
 	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
 
