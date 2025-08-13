@@ -40,9 +40,11 @@ __attribute__((weak)) void idt_guard_init_once(void);
 
 static void kprint(const char *s) { serial_puts(s); }
 
-/* Default kernel stack for TSS RSP0 */
-static uint8_t kernel_stack[4096] __attribute__((aligned(16)));
-uint8_t *_kernel_stack_top = kernel_stack + sizeof(kernel_stack);
+/* Allocate a small bootstrap stack in .bss so the early kernel has
+ * reserved space that won't collide with boot modules or loader data. */
+#define BOOTSTRAP_STACK_SIZE (64 * 1024)
+static uint8_t bootstrap_stack[BOOTSTRAP_STACK_SIZE] __attribute__((aligned(16)));
+uint8_t *_kernel_stack_top = bootstrap_stack + BOOTSTRAP_STACK_SIZE;
 
 #if VERBOSE
 #define vprint(s) kprint(s)
@@ -117,10 +119,10 @@ void n2_main(bootinfo_t *bootinfo) {
     // Guard: probe/log IDT very early (no SSE, see idt_guard.c)
     if (idt_guard_init_once) idt_guard_init_once();
 
-    // Install our full ISR/IRQ table before enabling interrupts
+    // Install our full ISR/IRQ table and TSS before enabling interrupts
     idt_install();
-    start_timer_interrupts();
     gdt_tss_init(_kernel_stack_top);
+    start_timer_interrupts();
 
     print_acpi_info(bootinfo);
     print_cpu_topology(bootinfo);
