@@ -123,4 +123,4 @@ _start_stack:
     hlt
     jmp     .halt2
 
-section .note.GNU-stack noalloc
+    .section .note.GNU-stack,"",@progbits
