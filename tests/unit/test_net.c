@@ -89,6 +89,11 @@ static uint16_t htons(uint16_t x) { return (x >> 8) | (x << 8); }
 
 int main(void) {
     net_set_ip(0x0A00020F);
+    assert(net_get_ip() == 0x0A00020F);
+    uint8_t mac[6];
+    net_get_mac(mac);
+    for (int i = 0; i < 6; ++i)
+        assert(mac[i] == 0);
     uint8_t payload[3] = {1,2,3};
 
     /* Basic socket open/close and loopback send/recv */

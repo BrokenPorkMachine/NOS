@@ -34,6 +34,9 @@ void net_poll(void);
 uint32_t net_get_ip(void);
 void net_set_ip(uint32_t ip);
 
+// Retrieve the MAC address currently configured for the stack.
+void net_get_mac(uint8_t out[6]);
+
 // Convenience helpers for transmitting IPv4 packets.
 int net_send_ipv4_udp(uint32_t dst_ip, uint16_t src_port, uint16_t dst_port,
                       const void *data, size_t len);

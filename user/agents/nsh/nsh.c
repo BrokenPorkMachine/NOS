@@ -437,6 +437,7 @@ static void cmd_help(void) {
     puts_out("  update TARGET - update kernel or userland\n");
     puts_out("  cd DIR    - change directory\n");
     puts_out("  mkdir DIR - make directory\n");
+    puts_out("  pwd       - print working directory\n");
     puts_out("  help      - show this message\n");
 }
 
@@ -479,6 +480,9 @@ void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_
             cmd_cd(fs_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "mkdir") && argc > 1) {
             cmd_mkdir(fs_q, self_id, argv[1]);
+        } else if (!strcmp(argv[0], "pwd")) {
+            puts_out(cwd);
+            putc_out('\n');
         } else if (!strcmp(argv[0], "install") && argc > 1) {
             cmd_install_pkg(pkg_q, self_id, argv[1]);
         } else if (!strcmp(argv[0], "uninstall") && argc > 1) {

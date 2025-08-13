@@ -189,6 +189,12 @@ void net_set_ip(uint32_t ip) {
     ip_addr = ip;
 }
 
+void net_get_mac(uint8_t out[6]) {
+    if (!out) return;
+    for (int i = 0; i < 6; ++i)
+        out[i] = our_mac[i];
+}
+
 // ---- Socket style API ---------------------------------------------------
 
 int net_socket_open(uint16_t port, net_socket_type_t type) {
