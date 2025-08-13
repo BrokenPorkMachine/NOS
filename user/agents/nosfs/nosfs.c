@@ -1,11 +1,14 @@
 #include "nosfs.h"
 #include "../../../nosm/drivers/IO/block.h"
+#include <stdatomic.h>
 
 // Global in-memory filesystem used by both the server thread and
 // the fs_read_all() helper for the agent loader.
 nosfs_fs_t nosfs_root;
-// Simple readiness flag so fs_read_all can fail gracefully before init
-static volatile int nosfs_ready = 0;
+// Simple readiness flag shared with nosfs_server.c so fs_read_all() knows when
+// the filesystem has been initialised.  Using an atomic ensures visibility
+// across threads without needing extra locks.
+_Atomic int nosfs_ready = 0;
 
 // ---------- Quota helpers ----------
 void nosfs_set_quota(nosfs_fs_t *fs, uint32_t max_files, uint32_t max_bytes) {
@@ -125,7 +128,7 @@ void nosfs_init(nosfs_fs_t *fs) {
     pthread_mutex_init(&fs->mutex, NULL);
     nosfs_journal_init();
     undo_log.type = NOSFS_UNDO_NONE;
-    nosfs_ready = 1;
+    atomic_store(&nosfs_ready, 1);
 }
 
 void nosfs_destroy(nosfs_fs_t *fs) {
@@ -140,7 +143,7 @@ void nosfs_destroy(nosfs_fs_t *fs) {
     pthread_mutex_destroy(&fs->mutex);
     nosfs_journal_init();
     undo_log.type = NOSFS_UNDO_NONE;
-    nosfs_ready = 0;
+    atomic_store(&nosfs_ready, 0);
 }
 
 // ========== Helper: Name Valid ==========
@@ -461,7 +464,7 @@ int nosfs_journal_undo_last(nosfs_fs_t *fs) { (void)fs; return -1; }
 // Helper for the kernel agent loader: fetch entire file contents
 // into a newly allocated buffer.  Accept both "/agents/foo" and "agents/foo".
 int fs_read_all(const char *path, void **out, size_t *out_sz) {
-    if (!nosfs_ready || !path || !out || !out_sz)
+    if (!atomic_load(&nosfs_ready) || !path || !out || !out_sz)
         return -1;
 
     const char *original = path;
