@@ -32,6 +32,8 @@ extern nosfs_fs_t nosfs_root;
 extern int timer_ready;
 __attribute__((weak)) void idt_guard_init_once(void);
 
+#define LAPIC_TIMER_VECTOR 32
+
 #ifndef VERBOSE
 #define VERBOSE 1
 #endif
@@ -81,7 +83,7 @@ static void start_timer_interrupts(void) {
     kprintf("[init] RFLAGS.IF before: %u\n", (unsigned)((f0 >> 9) & 1));
 
     lapic_enable();            // enable local APIC (SVR bit 8)
-    lapic_timer_init(32);      // program LVT timer at vector 32 (matches your IDT)
+    lapic_timer_init(LAPIC_TIMER_VECTOR); // program LVT timer
 
     sti();                     // allow interrupts globally
 

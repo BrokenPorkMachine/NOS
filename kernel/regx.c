@@ -41,14 +41,6 @@ static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
 static size_t regx_count = 0;
 static uint64_t regx_next_id = 1;
 
-static inline void strnzcpy(char *dst, const char *src, size_t cap) {
-    if (!dst || cap == 0) return;
-    if (!src) { dst[0] = 0; return; }
-    size_t i = 0;
-    for (; i + 1 < cap && src[i]; ++i) dst[i] = src[i];
-    dst[i] = 0;
-}
-
 uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id) {
     CANONICAL_GUARD(m);
 
@@ -75,11 +67,11 @@ uint64_t regx_register(const regx_manifest_t *m, uint64_t parent_id) {
     e->id = regx_next_id++;
     e->parent_id = parent_id;
 
-    strnzcpy(e->manifest.name,     m->name,     sizeof(e->manifest.name));
+    strlcpy(e->manifest.name,     m->name,     sizeof(e->manifest.name));
     e->manifest.type = m->type;
-    strnzcpy(e->manifest.version,  m->version,  sizeof(e->manifest.version));
-    strnzcpy(e->manifest.abi,      m->abi,      sizeof(e->manifest.abi));
-    strnzcpy(e->manifest.capabilities, m->capabilities,
+    strlcpy(e->manifest.version,  m->version,  sizeof(e->manifest.version));
+    strlcpy(e->manifest.abi,      m->abi,      sizeof(e->manifest.abi));
+    strlcpy(e->manifest.capabilities, m->capabilities,
              sizeof(e->manifest.capabilities));
 
     kprintf("[regx] entries after=%zu\n", regx_count);
@@ -124,8 +116,7 @@ size_t regx_enumerate(const regx_selector_t *sel, regx_entry_t *out, size_t max)
 
     if (sel && sel->name_prefix[0]) {
         prefix = sel->name_prefix;
-        while (prefix_len < sizeof(sel->name_prefix) && prefix[prefix_len])
-            prefix_len++;
+        prefix_len = strnlen(prefix, sizeof(sel->name_prefix));
     }
 
     lock_acquire("registry");
