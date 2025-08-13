@@ -18,9 +18,14 @@ gdt_flush:
     push rax
     lgdt [rdi]
 
-    ; Ensure LDT is cleared
+    ; Ensure LDT is cleared and prove it's unused
     xor eax, eax
-    lldt ax
+    sldt ax            ; read current LDTR
+    test ax, ax
+    jz .no_ldt_gdt
+    xor eax, eax
+    lldt ax            ; force LDTR = 0
+.no_ldt_gdt:
 
     ; Reload data segments (long mode: DS/ES ignored for addressing but keep sane)
     mov ax, 0x10              ; GDT_SEL_KERNEL_DATA
@@ -52,9 +57,14 @@ gdt_flush_with_tr:
 
     lgdt [rdi]
 
-    ; Ensure LDT is cleared
+    ; Ensure LDT is cleared and prove it's unused
     xor eax, eax
-    lldt ax
+    sldt ax            ; read current LDTR
+    test ax, ax
+    jz .no_ldt_tr
+    xor eax, eax
+    lldt ax            ; force LDTR = 0
+.no_ldt_tr:
 
     mov ax, GDT_SEL_KERNEL_DATA
     mov ds, ax
