@@ -21,14 +21,3 @@ static inline uint32_t mmio_read32(uintptr_t addr) {
 void lapic_eoi(void) {
     mmio_write32(LAPIC_REG(LAPIC_EOI), 0);
 }
-
-void lapic_timer_init(uint8_t vector) {
-    /* Divide by 16 */
-    mmio_write32(LAPIC_REG(LAPIC_TMR_DIV), 0x3);
-
-    /* One-shot timer: write vector, unmasked */
-    mmio_write32(LAPIC_REG(LAPIC_LVT_TMR), (uint32_t)vector & 0xFF);
-
-    /* Kick it with a test count (tune later) */
-    mmio_write32(LAPIC_REG(LAPIC_TMR_INITCNT), 10000000u);
-}
