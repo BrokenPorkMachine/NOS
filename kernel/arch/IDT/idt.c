@@ -1,7 +1,6 @@
-#include "idt.h"
+#include "arch/IDT/idt.h"
 #include <string.h>
 
-/* Minimal kprintf fallback; replace with your logger */
 #ifndef kprintf
 #include <stdio.h>
 #define kprintf printf
@@ -26,9 +25,7 @@ static inline void set_idt_entry_ex(int vec, void *isr, uint8_t type_attr, uint8
     idt[vec].zero        = 0;
 }
 
-void idt_set_with_ist(int vec, void *isr, uint8_t type_attr, uint8_t ist_slot) {
-    set_idt_entry_ex(vec, isr, type_attr, ist_slot);
-}
+void idt_set_with_ist(int vec, void *isr, uint8_t type_attr, uint8_t ist_slot) { set_idt_entry_ex(vec, isr, type_attr, ist_slot); }
 void idt_set_interrupt_gate(int vec, void *isr) { set_idt_entry_ex(vec, isr, IDT_INTERRUPT_GATE, 0); }
 void idt_set_trap_gate(int vec, void *isr)      { set_idt_entry_ex(vec, isr, IDT_TRAP_GATE, 0); }
 void idt_set_user_interrupt_gate(int vec, void *isr) { set_idt_entry_ex(vec, isr, IDT_USER_GATE, 0); }
@@ -50,8 +47,6 @@ static void idt_populate_all(void) {
 #endif
                     break;
                 case 3:  /* #BP */
-                    type = IDT_USER_TRAP_GATE;
-                    break;
                 case 4:  /* #OF */
                     type = IDT_USER_TRAP_GATE;
                     break;
@@ -86,18 +81,18 @@ void idt_dump_vec(int v) {
 void idt_install(void) {
     idt_populate_all();
 
-    /* Ensure #UD specifically points to your known stub if you want */
-    idt_set_interrupt_gate(6, isr_ud_stub);
+    /* Explicitly set critical vectors you care about */
+    idt_set_interrupt_gate(6,  isr_ud_stub);     /* #UD */
+    idt_set_interrupt_gate(32, isr_timer_stub);  /* APIC timer */
 
     idtp.limit = (uint16_t)(sizeof(idt) - 1);
     idtp.base  = (uint64_t)(uintptr_t)&idt;
 
     asm volatile ("lidt %0" : : "m"(idtp) : "memory");
 
-    /* Sanity dumps for the hot ones */
-    idt_dump_vec(6);    // #UD
-    idt_dump_vec(13);   // #GP
-    idt_dump_vec(32);   // Timer (assuming 32)
+    idt_dump_vec(6);
+    idt_dump_vec(13);
+    idt_dump_vec(32);
 }
 
 void idt_reload(void) {
