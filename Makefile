@@ -26,10 +26,20 @@ O2_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fpie
 AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 
 # ========= Source Discovery =========
-# The kernel build should only include kernel and loader sources.  User agents
-# and driver modules are built separately; including them here caused duplicate
-# symbol definitions when linking against the stub implementations.
-KERNEL_SRCS := $(shell find kernel loader src/agents/regx -name '*.c') user/libc/libc.c nosm/drivers/IO/serial.c
+# The kernel now links against the real driver and agent implementations instead
+# of stub placeholders.  Explicitly list the required sources so the linker sees
+# the concrete implementations.
+KERNEL_SRCS := $(shell find kernel loader src/agents/regx -name '*.c') \
+               user/agents/nosfs/nosfs.c user/agents/nosfs/nosfs_server.c \
+               user/agents/nosm/nosm.c \
+               nosm/drivers/IO/serial.c nosm/drivers/IO/usb.c \
+               nosm/drivers/IO/usbkbd.c nosm/drivers/IO/video.c \
+               nosm/drivers/IO/tty.c nosm/drivers/IO/keyboard.c \
+               nosm/drivers/IO/mouse.c nosm/drivers/IO/ps2.c \
+               nosm/drivers/IO/block.c nosm/drivers/IO/sata.c \
+               nosm/drivers/IO/pci.c nosm/drivers/IO/pic.c \
+               nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
+               user/libc/libc.c
 KERNEL_ASM_S   := $(shell find kernel -name '*.S')
 KERNEL_ASM_ASM := $(filter-out kernel/n2_entry.asm,$(shell find kernel -name '*.asm'))
 # Convert each source type to its object path without leaving the original
