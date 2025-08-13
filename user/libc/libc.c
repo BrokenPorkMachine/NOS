@@ -257,6 +257,15 @@ char *strstr(const char *haystack, const char *needle) {
     return NULL;
 }
 
+char *strrchr(const char *s, int c) {
+    if (!__nitros_is_canonical_ptr(s)) return NULL;
+    size_t len = __nitros_safe_strnlen(s, NITROS_STR_MAX);
+    for (size_t i = len; i > 0; --i) {
+        if (s[i - 1] == (char)c) return (char *)(s + i - 1);
+    }
+    return (c == '\0') ? (char *)(s + len) : NULL;
+}
+
 // ================== MATH ===================
 int abs(int x) { return x < 0 ? -x : x; }
 long labs(long x) { return x < 0 ? -x : x; }

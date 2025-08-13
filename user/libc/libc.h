@@ -60,6 +60,7 @@ int     strncmp(const char *s1, const char *s2, size_t n);
 char   *strchr(const char *s, int c);
 char   *strcpy(char *dest, const char *src);
 char   *strcat(char *dest, const char *src);
+char   *strrchr(const char *s, int c);
 char   *strstr(const char *haystack, const char *needle);
 void   *memchr(const void *s, int c, size_t n);
 void   *memmem(const void *haystack, size_t haystacklen,
