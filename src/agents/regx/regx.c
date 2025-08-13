@@ -9,7 +9,7 @@
 #include "../../../kernel/init_bin.h"
 #include "../../../kernel/login_bin.h"
 #include "../../../user/agents/nosfs/nosfs_server.h"
-extern void serial_putc(char c);
+#include "../../../user/libc/string_guard.h"
 
 // Kernel console
 extern int kprintf(const char *fmt, ...);
@@ -32,33 +32,11 @@ static inline uint64_t rdtsc(void){
     return ((uint64_t)hi<<32)|lo;
 }
 
-static inline int is_canonical(const void *p) {
-    uintptr_t x = (uintptr_t)p;
-    return ((x >> 48) == 0) || ((x >> 48) == 0xFFFF);
-}
-
-// Bounded strlen that never scans past `max`; refuses non-canonical pointers.
-static size_t safe_strnlen(const char *s, size_t max) {
-    if (!s || !is_canonical(s)) return 0;
-    size_t n = 0;
-    while (n < max) { char c = s[n]; if (!c) break; n++; }
-    return n;
-}
-
-// Always NUL-terminates; never reads more than cap-1 bytes.
-static void strnzcpy_cap(char *dst, const char *src, size_t cap) {
-    if (!dst || cap == 0) return;
-    if (!src || !is_canonical(src)) { dst[0] = 0; return; }
-    size_t n = safe_strnlen(src, cap - 1);
-    for (size_t i = 0; i < n; ++i) dst[i] = src[i];
-    dst[n] = 0;
-}
-
 // Local bounded serial print (no implicit strlen)
 static void serial_putsn_bounded(const char *s, size_t max) {
     if (!s) return;
-    size_t n = safe_strnlen(s, max);
-    for (size_t i = 0; i < n; ++i) serial_putc(s[i]);
+    size_t n = __nitros_safe_strnlen(s, max);
+    serial_putsn(s, n);
 }
 
 static _Atomic int init_spawned = 0;
@@ -107,7 +85,7 @@ static int regx_policy_gate(const char *name,
 
     // De-dupe "init" spammy log across very short window
     static _Atomic uint64_t last_init_log = 0;
-    if (name && is_canonical(name) && strcmp(name, "init") == 0) {
+    if (name && __nitros_is_canonical_ptr(name) && strcmp(name, "init") == 0) {
         uint64_t prev = atomic_load(&last_init_log);
         if (ts - prev > 1000000ULL) {
             kprintf("[regx] allow call tid=%u pc=%p ts=%llu\n", tid, caller, ts);
@@ -116,14 +94,14 @@ static int regx_policy_gate(const char *name,
     }
 
     // Validate pointers before any string ops
-    if (!is_canonical(path) || !is_canonical(name) ||
-        (capabilities && !is_canonical(capabilities))) {
+    if (!__nitros_is_canonical_ptr(path) || !__nitros_is_canonical_ptr(name) ||
+        (capabilities && !__nitros_is_canonical_ptr(capabilities))) {
         kprintf("[regx] deny: bad pointer(s) path=%p name=%p caps=%p\n",
                 path, name, capabilities);
         return -1;
     }
 
-    size_t path_len = safe_strnlen(path, 256);
+    size_t path_len = __nitros_safe_strnlen(path, 256);
     if (path && strcmp(path, "(buffer)") != 0) {
         if (path_len < 8 || strncmp(path, "/agents/", 8) != 0) {
             kprintf("[regx] deny: path %s outside /agents/\n", path ? path : "(null)");
@@ -144,7 +122,7 @@ static int regx_policy_gate(const char *name,
     const char *allowed[] = {"fs","net","pkg","upd","tty","gui"};
     if (capabilities && capabilities[0]) {
         char caps[128];
-        strnzcpy_cap(caps, capabilities, sizeof(caps)); // bounded copy-in
+        strlcpy(caps, capabilities, sizeof(caps)); // bounded copy-in
         char *p = caps;
         while (*p){
             char *tok = p;
