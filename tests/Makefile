@@ -31,7 +31,7 @@ test_ftp: unit/test_ftp.c ../user/agents/ftp/ftp.c ../kernel/IPC/ipc.c $(LIBC_SR
 test_net: unit/test_net.c ../nosm/drivers/Net/netstack.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
-test_gdt: unit/test_gdt.c ../kernel/arch/GDT/gdt.c $(LIBC_SRC)
+test_gdt: unit/test_gdt.c ../kernel/arch/GDT/gdt.c $(filter-out gdt_stub.c,$(LIBC_SRC))
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_nosfs: unit/test_nosfs.c ../user/agents/nosfs/nosfs.c \
