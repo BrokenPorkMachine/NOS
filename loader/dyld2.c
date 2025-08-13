@@ -37,8 +37,26 @@ typedef struct Module {
 } Module;
 
 static const AgentAPI* G = 0;
+#define MAX_MODULES 64
+static Module* g_modules[MAX_MODULES];
+static size_t g_module_count;
 #define LOG(msg) do{ if(G&&G->puts) G->puts(msg);}while(0)
 #define LOGF(fmt,...) do{ if(G&&G->printf) G->printf(fmt, __VA_ARGS__);}while(0)
+
+static void register_module(Module* m){
+    if(g_module_count < MAX_MODULES){
+        g_modules[g_module_count++] = m;
+    }
+}
+
+static void unregister_module(Module* m){
+    for(size_t i=0; i<g_module_count; i++){
+        if(g_modules[i] == m){
+            g_modules[i] = g_modules[--g_module_count];
+            break;
+        }
+    }
+}
 
 static uint32_t djb2(const char* s){ uint32_t h=5381; int c; while((c=*s++)) h=((h<<5)+h)^c; return h; }
 static void exports_insert(Module* m, const char* name, void* addr){
@@ -139,8 +157,14 @@ static uintptr_t resolve_import(Module* self, uint32_t sym_idx){
     if(s->name_off>=self->str_sz) return 0; const char* name=self->str + s->name_off;
     // self first
     void* a = exports_find(self, name); if(a) return (uintptr_t)a;
-    // scan deps (TODO: maintain a global list). For now only self.
-    (void)name; return 0;
+    // scan other loaded modules
+    for(size_t i=0; i<g_module_count; i++){
+        Module* m = g_modules[i];
+        if(m==self) continue;
+        a = exports_find(m, name);
+        if(a) return (uintptr_t)a;
+    }
+    return 0;
 }
 
 static int apply_relocs(Module* m){
@@ -169,6 +193,7 @@ static Module* load_one(const char* path){
     // bss already zeroed
     collect_exports(m);
     if(apply_relocs(m)!=0){ LOG("[dyld2] reloc failed\n"); }
+    register_module(m);
     return m;
 }
 
@@ -176,7 +201,7 @@ int dyld2_init(const AgentAPI* api){ G=api; LOG("[dyld2] init\n"); return 0; }
 
 mo2_handle_t dyld2_dlopen(const char* path, int flags){ (void)flags; return (mo2_handle_t)load_one(path); }
 mo2_sym_t    dyld2_dlsym(mo2_handle_t h, const char* name){ Module* m=(Module*)h; return exports_find(m,name); }
-int          dyld2_dlclose(mo2_handle_t h){ (void)h; return 0; }
+int          dyld2_dlclose(mo2_handle_t h){ Module* m=(Module*)h; unregister_module(m); return 0; }
 
 int dyld2_run_exec(const char* path, int argc, const char** argv){
     Module* m = load_one(path); if(!m) return -1; uintptr_t entry = (uintptr_t)m->base + (uintptr_t)m->hdr.entry_rva;
