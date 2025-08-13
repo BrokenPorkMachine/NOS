@@ -15,7 +15,9 @@ static const char manifest[] =
 
 /* Entry point for the init agent.  It simply launches the login agent and
  * then yields forever. */
-void init_main(const AgentAPI *api, uint32_t self_tid) {
+void agent_main(void) {
+    const AgentAPI *api = NOS;
+    uint32_t self_tid = NOS_TID;
     (void)self_tid;
     if (!api) return;
 

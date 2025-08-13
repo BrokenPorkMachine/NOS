@@ -91,7 +91,7 @@ bins: user/rt/rt0_user.o $(BIN_ELFS) $(BIN_BINS)
 
 # ===== libc =====
 libc:
-	$(CC) $(CFLAGS) -fPIE -c user/libc/libc.c -o user/libc/libc.o
+	$(CC) $(O2_CFLAGS) -c user/libc/libc.c -o user/libc/libc.o
 
 # ===== kernel =====
 kernel: libc agents bins

@@ -1,15 +1,22 @@
-// user/rt/rt0_agent.c
-__attribute__((noreturn))
-void agent_entry(void);
-extern void init_main(void);
+#include "agent_abi.h"
+#include <stdint.h>
+
+const AgentAPI *NOS = NULL;
+uint32_t NOS_TID = 0;
+
+__attribute__((noreturn)) void agent_main(void);
 
 __attribute__((noreturn))
-void agent_entry(void) {
-    // System V ABI: 16-byte alignment before call
-    asm volatile ("andq $-16, %%rsp" ::: "rsp");
-    init_main();
-
-    // If it returns, park cleanly
-    for (;;)
-        asm volatile ("hlt");
+void _start(const AgentAPI *api, uint32_t self_tid) {
+    __asm__ __volatile__("andq $-16, %%rsp" ::: "rsp");
+    NOS = api;
+    NOS_TID = self_tid;
+    agent_main();
+    for (;;) {
+        if (NOS && NOS->yield) {
+            NOS->yield();
+        } else {
+            __asm__ __volatile__("hlt");
+        }
+    }
 }
