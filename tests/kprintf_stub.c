@@ -4,6 +4,6 @@ int kprintf(const char *fmt, ...) {
     return 0;
 }
 
-void panic(const char *fmt, ...) {
+__attribute__((weak)) void panic(const char *fmt, ...) {
     (void)fmt;
 }
