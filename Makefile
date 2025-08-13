@@ -99,6 +99,8 @@ kernel: libc agents bins
 	$(NASM) -f elf64 kernel/n2_entry.asm -o kernel/n2_entry.o
 	$(NASM) -f elf64 kernel/Task/context_switch.asm -o kernel/Task/context_switch_asm.o
 	$(CC) $(CFLAGS) -c kernel/Task/context_switch.c -o kernel/Task/context_switch.o
+	$(NASM) -f elf64 kernel/Task/switch_to_user.asm -o kernel/Task/switch_to_user.o
+	$(CC) $(CFLAGS) -c kernel/Task/user_thread.c -o kernel/Task/user_thread.o
 	$(CC) $(O2_CFLAGS) -c kernel/O2.c -o kernel/O2.o
 	$(CC) $(CFLAGS) -c kernel/n2_main.c -o kernel/n2_main.o
 	$(CC) $(CFLAGS) -c kernel/builtin_nosfs.c -o kernel/builtin_nosfs.o
@@ -169,7 +171,7 @@ endif
 	$(CC) $(CFLAGS) -c regx/regx_launch_adapters.c -o regx/regx_launch_adapters.o
 
 	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
-	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o \
+            kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o kernel/Task/user_thread.o kernel/Task/switch_to_user.o \
 	    kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
 	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
 	    kernel/VM/heap_select.o kernel/VM/legacy_heap.o \
@@ -219,8 +221,8 @@ disk.img: boot kernel agents bins modules
 
 # ===== utility =====
 clean:
-	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
-	            kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o \
+	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o kernel/Task/user_thread.o kernel/Task/switch_to_user.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
+                    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o \
 	            kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
 	            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
 	            kernel/VM/heap_select.o kernel/VM/legacy_heap.o kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o \
