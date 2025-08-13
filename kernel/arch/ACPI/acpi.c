@@ -1,7 +1,6 @@
 #include "acpi.h"
 #include "../../drivers/IO/serial.h"
 #include "../../../user/libc/libc.h"
-#include "../CPU/lapic.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -258,9 +257,9 @@ void acpi_init(bootinfo_t *bootinfo) {
                 p += len;
             }
 
-            /* Initialize LAPIC now that we know its base (identity-mapped) */
+            /* LAPIC base noted but initialization deferred to platform code */
             if (lapic_base) {
-                lapic_init(lapic_base);
+                (void)lapic_base;
             }
         }
     }

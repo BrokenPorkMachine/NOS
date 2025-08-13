@@ -50,7 +50,11 @@ align 8
 isr_stub_table:
 %assign i 0
 %rep 256
+%if i = 32
+    dq isr_timer_stub
+%else
     dq isr_ud_stub
+%endif
 %assign i i+1
 %endrep
 

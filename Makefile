@@ -143,7 +143,7 @@ endif
 	$(CC) $(CFLAGS) -c user/agents/nosm/nosm.c     -o user/agents/nosm/nosm.o
 
 	$(CC) $(CFLAGS) -c kernel/arch/CPU/smp.c -o kernel/arch/CPU/smp.o
-	$(CC) $(CFLAGS) -c kernel/arch/CPU/lapic.c -o kernel/arch/CPU/lapic.o
+	$(CC) $(CFLAGS) -c kernel/arch/APIC/lapic.c -o kernel/arch/APIC/lapic.o
 	$(NASM) -f elf64 -I kernel/arch/GDT/ kernel/arch/GDT/gdt.asm -o kernel/arch/GDT/gdt_flush.o
 	$(CC) $(CFLAGS) -c kernel/arch/GDT/gdt.c -o kernel/arch/GDT/gdt.o
 	$(CC) $(CFLAGS) -c kernel/arch/GDT/tss.c -o kernel/arch/GDT/tss.o
@@ -161,7 +161,6 @@ endif
 	$(CC) $(CFLAGS) -c kernel/VM/nitroheap/classes.c -o kernel/VM/nitroheap/classes.o
 	$(CC) $(CFLAGS) -c kernel/arch/idt_guard.c -o kernel/arch/idt_guard.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/idt.c -o kernel/arch/IDT/idt.o
-	$(CC) $(CFLAGS) -c kernel/arch/APIC/lapic_shim.c -o kernel/arch/APIC/lapic_shim.o
 	$(CC) $(CFLAGS) -c kernel/arch/IDT/isr.c -o kernel/arch/IDT/isr.o
 	$(NASM) -f elf64 kernel/arch/IDT/isr_stub.asm -o kernel/arch/IDT/isr_stub.o
 	$(CC) $(CFLAGS) -c kernel/nosfs_pub.c -o kernel/nosfs_pub.o
@@ -171,7 +170,7 @@ endif
 
 	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o \
-            kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
+            kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
 	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
 	    kernel/VM/heap_select.o kernel/VM/legacy_heap.o \
 	    kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o kernel/uaccess.o \
@@ -187,9 +186,8 @@ endif
 	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
 	    user/libc/libc.o $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o) \
 	    kernel/loader_vm_pmm_shims.o \
-        src/agents/regx/regx_launch_adapters.o \
-            kernel/arch/APIC/lapic_shim.o \
-		-o kernel.bin
+    src/agents/regx/regx_launch_adapters.o \
+                -o kernel.bin
 
 	cp kernel.bin n2.bin
 
@@ -221,7 +219,7 @@ disk.img: boot kernel agents bins modules
 # ===== utility =====
 clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
-                    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o \
+                    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/APIC/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o \
 	            kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
 	            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
 	            kernel/VM/heap_select.o kernel/VM/legacy_heap.o kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o \

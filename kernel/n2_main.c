@@ -21,7 +21,6 @@
 #include "VM/numa.h"
 #include "VM/pmm_buddy.h"
 #include "VM/heap.h"
-#include "arch/CPU/lapic.h"
 #include "arch/APIC/lapic.h"
 #include "arch/CPU/irq.h"
 #include "uaccess.h"
@@ -130,17 +129,15 @@ void n2_main(bootinfo_t *bootinfo) {
     threads_init();
     vprint("[N2] Launching core service threads\r\n");
 
-    lapic_timer_setup_periodic(32, 1000000, 0x3);
     timer_ready = 1;
 
-    uint64_t rflags, cr0, cr3, cr4; uint32_t lapic_tmr;
+    uint64_t rflags, cr0, cr3, cr4;
     __asm__ volatile("pushfq; pop %0" : "=r"(rflags));
     __asm__ volatile("mov %%cr0,%0" : "=r"(cr0));
     __asm__ volatile("mov %%cr3,%0" : "=r"(cr3));
     __asm__ volatile("mov %%cr4,%0" : "=r"(cr4));
-    lapic_tmr = lapic_timer_current();
-    serial_printf("[N2] RFLAGS.IF=%lu CR0=%lx CR3=%lx CR4=%lx LAPIC_TMR=%u\n",
-                  (rflags >> 9) & 1, cr0, cr3, cr4, lapic_tmr);
+    serial_printf("[N2] RFLAGS.IF=%lu CR0=%lx CR3=%lx CR4=%lx\n",
+                  (rflags >> 9) & 1, cr0, cr3, cr4);
     serial_printf("[N2] runqueue len cpu0=%d\n", thread_runqueue_length(0));
 
     for (uint32_t i = 0; i < bootinfo->module_count; ++i) load_module(&bootinfo->modules[i]);

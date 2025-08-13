@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <stdatomic.h>
 #include "../../../kernel/Task/thread.h"
-#include "../../../kernel/arch/CPU/lapic.h"
 #include "../../../nosm/drivers/IO/serial.h"
 #include "../../../kernel/agent_loader.h"
 #include "../../../kernel/init_bin.h"

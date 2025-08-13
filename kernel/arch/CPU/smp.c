@@ -1,5 +1,5 @@
 #include "smp.h"
-#include "lapic.h"
+#include "../APIC/lapic.h"
 #include "../../../nosm/drivers/IO/serial.h"
 #include <string.h>
 #include <stdint.h>
