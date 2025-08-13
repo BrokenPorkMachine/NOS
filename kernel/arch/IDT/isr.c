@@ -1,5 +1,5 @@
 #include "isr.h"
-#include "../../drivers/IO/serial.h"
+#include "../../../nosm/drivers/IO/serial.h"
 #include "../../VM/paging_adv.h"
 #include "../CPU/lapic.h"
 #include "../CPU/smp.h"
@@ -65,7 +65,7 @@ static void vga_write_line2(const char *s, uint8_t attr) {
 
 /* Dump register state for debugging faults */
 static void dump_context(struct isr_context *ctx) {
-    serial_printf("CPU=%u APIC=%u  VEC=%lu\n", smp_cpu_id(), lapic_id(), ctx->int_no);
+    serial_printf("CPU=%u APIC=%u  VEC=%lu\n", smp_cpu_id(), lapic_get_id(), ctx->int_no);
 
     serial_printf("RAX=%016lx RBX=%016lx RCX=%016lx RDX=%016lx\n",
                   ctx->rax, ctx->rbx, ctx->rcx, ctx->rdx);
@@ -137,22 +137,14 @@ void isr_timer_handler(struct isr_context *ctx) {
     apic_eoi_if_needed(32); /* PIT/APIC timer typically at vector 32 */
 }
 
-void isr_page_fault_handler(struct isr_context *ctx) __attribute__((noreturn));
 void isr_page_fault_handler(struct isr_context *ctx) {
     serial_puts("[FAULT] Page Fault (#PF)\n");
     dump_context(ctx);
     dump_pf_bits(ctx->error_code);
 
-    /* Let the VM layer try to handle it; if it returns, it fixed it. */
-    if (paging_handle_fault(ctx->error_code, ctx->cr2, smp_cpu_id()) == 0) {
-        /* Successfully handled: just return to resume faulting context */
-        return;
-    }
-
-    /* Not recoverable: panic */
-    backtrace_rbp(ctx->rbp, 16);
-    __asm__ volatile ("sti");
-    for (;;) __asm__ volatile ("hlt");
+    /* Let the VM layer try to handle it; implementation halts if unrecoverable */
+    paging_handle_fault(ctx->error_code, ctx->cr2, smp_cpu_id());
+    return;
 }
 
 void isr_ud_handler(struct isr_context *ctx) {

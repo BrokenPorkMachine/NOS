@@ -51,7 +51,6 @@
 #endif
 
 /* Stubs provided by your ISR/IRQ assembly table */
-extern void *isr_stub_table[IDT_ENTRIES];
 extern void isr_ud_stub(void);
 
 /* IDT and descriptor */
@@ -75,7 +74,7 @@ static inline void set_idt_entry_ex(int vec, void *isr, uint8_t type_attr, uint8
     idt[vec].zero        = 0;
 }
 
-static inline void set_idt_entry(int vec, void *isr, uint8_t type_attr) {
+void set_idt_entry(int vec, void *isr, uint8_t type_attr) {
     set_idt_entry_ex(vec, isr, type_attr, 0);
 }
 

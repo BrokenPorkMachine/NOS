@@ -102,14 +102,14 @@ extern isr_ud_handler
     mov %1, [rdx + 24]             ; provisional: this is RFLAGS, but we only need CS RPL
     xor %1, %1                     ; clear output
     test bl, 3
-    jz .no_cpl_change%+
+    jz %%no_cpl_change
     ; CPL change -> SS,RSP are present => ERROR is 24 + 16 = 40 bytes from RIP
     mov %1, [rdx + 40]
-    jmp .got_err%+
-.no_cpl_change%+:
+    jmp %%got_err
+%%no_cpl_change:
     ; No CPL change -> ERROR is 24 bytes from RIP
     mov %1, [rdx + 24]
-.got_err%+:
+%%got_err:
 %endmacro
 
 ; --- Default handler generator for vectors w/o CPU error code ---
@@ -223,14 +223,13 @@ ISR_HASERR 17, isr_default_handler       ; #AC
 ISR_NOERR  32, isr_timer_handler
 ISR_NOERR  33, isr_keyboard_handler
 ISR_NOERR  44, isr_mouse_handler
-ISR_NOERR  0x80, isr_syscall_handler     ; int 0x80 compat
-ISR_NOERR  0xF0, isr_ipi_handler         ; IPI
+ISR_NOERR  128, isr_default_handler     ; int 0x80 compat
+ISR_NOERR  240, isr_ipi_handler         ; IPI
 
 ; Generate defaults for the rest
 %assign i 0
 %rep 256
-%if i != 6 && i != 8 && i != 10 && i != 11 && i != 12 && i != 13 && i != 14 && i != 17 && \
-    i != 32 && i != 33 && i != 44 && i != 0x80 && i != 0xF0
+%if i != 6 && i != 8 && i != 10 && i != 11 && i != 12 && i != 13 && i != 14 && i != 17 && i != 32 && i != 33 && i != 44 && i != 0x80 && i != 0xF0
     ISR_NOERR i, isr_default_handler
 %endif
 %assign i i+1
