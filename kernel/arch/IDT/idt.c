@@ -1,6 +1,6 @@
 #include "idt.h"
 #include <string.h>
-
+#include "../GDT/gdt_selectors.h"
 #ifndef kprintf
 #include <stdio.h>
 #define kprintf printf
