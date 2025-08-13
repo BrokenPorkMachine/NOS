@@ -179,12 +179,10 @@ endif
 	    nosm/drivers/Net/e1000.o nosm/drivers/Net/netstack.o \
 	    src/agents/regx/regx.o user/agents/nosfs/nosfs.o user/agents/nosfs/nosfs_server.o user/agents/nosm/nosm.o \
 	    user/libc/libc.o \
-	    $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o,) \
-		# link (near the other kernel objects)
-	    kernel/loader_vm_pmm_shims.o \
-    	regx/regx_launch_adapters.o \
-	
-	    -o kernel.bin
+            $(if $(wildcard kernel/arch/ud_handler_patch.o),kernel/arch/ud_handler_patch.o,) \
+            kernel/loader_vm_pmm_shims.o \
+            regx/regx_launch_adapters.o \
+            -o kernel.bin
 
 	cp kernel.bin n2.bin
 
