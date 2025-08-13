@@ -3,7 +3,7 @@
 // ============================================================================
 #include "dyld2.h"
 #include "mo2_format.h"
-#include "../libc/libc.h"
+#include "../user/libc/libc.h"
 #include <stdint.h>
 
 typedef struct ExportKV { const char* name; void* addr; struct ExportKV* next; } ExportKV;
@@ -200,7 +200,7 @@ static Module* load_one(const char* path){
 int dyld2_init(const AgentAPI* api){ G=api; LOG("[dyld2] init\n"); return 0; }
 
 mo2_handle_t dyld2_dlopen(const char* path, int flags){ (void)flags; return (mo2_handle_t)load_one(path); }
-mo2_sym_t    dyld2_dlsym(mo2_handle_t h, const char* name){ Module* m=(Module*)h; return exports_find(m,name); }
+mo2_sym_handle_t dyld2_dlsym(mo2_handle_t h, const char* name){ Module* m=(Module*)h; return exports_find(m,name); }
 int          dyld2_dlclose(mo2_handle_t h){ Module* m=(Module*)h; unregister_module(m); return 0; }
 
 int dyld2_run_exec(const char* path, int argc, const char** argv){

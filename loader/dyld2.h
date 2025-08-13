@@ -3,15 +3,15 @@
 // ============================================================================
 #ifndef DYLD2_H
 #define DYLD2_H
-#include "../rt/agent_abi.h"
+#include "../user/rt/agent_abi.h"
 #include <stddef.h>
 
 typedef void* mo2_handle_t;
-typedef void* mo2_sym_t;
+typedef void* mo2_sym_handle_t;
 
 int          dyld2_init(const AgentAPI* api);
 mo2_handle_t dyld2_dlopen(const char* path, int flags); // flags: 1=EAGER, 2=NODELETE
-mo2_sym_t    dyld2_dlsym(mo2_handle_t h, const char* name);
+mo2_sym_handle_t dyld2_dlsym(mo2_handle_t h, const char* name);
 int          dyld2_dlclose(mo2_handle_t h);
 
 /* optional: start an executable image (transfer control) */
