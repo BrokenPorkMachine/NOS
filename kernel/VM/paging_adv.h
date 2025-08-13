@@ -30,6 +30,11 @@ uint64_t paging_virt_to_phys_adv(uint64_t virt);
 
 void paging_handle_fault(uint64_t err, uint64_t addr, int cpu_id);
 
+/* Debug helper: retrieve mapping info for a virtual address.
+ * Returns 1 if mapped and fills phys and flags (raw PTE/PDE).
+ * Returns 0 if unmapped. */
+int paging_lookup_adv(uint64_t virt, uint64_t *phys, uint64_t *flags);
+
 static inline void paging_flush_tlb(uint64_t virt) {
     asm volatile("invlpg (%0)" :: "r"(virt) : "memory");
 }

@@ -1,6 +1,8 @@
 #include "idt.h"
 #include <stdint.h>
 #include <string.h>
+#include "../../../nosm/drivers/IO/serial.h"
+#include "../../VM/paging_adv.h"
 
 /*
  * Robust IDT setup:
@@ -127,6 +129,16 @@ static void idt_populate_all(void) {
     }
 }
 
+static void dump_idt_gate(int vec, const char *name) {
+    struct idt_entry *e = &idt[vec];
+    uint64_t off = ((uint64_t)e->offset_high << 32) |
+                   ((uint64_t)e->offset_mid << 16) |
+                   e->offset_low;
+    serial_printf("[idt] vec=%d %s sel=%#04x off=%016lx low=%04x mid=%04x high=%08x attr=%02x ist=%u expected=%p\n",
+                  vec, name, e->selector, off, e->offset_low, e->offset_mid,
+                  e->offset_high, e->type_attr, e->ist, isr_stub_table[vec]);
+}
+
 /* Public API: install IDT with sane defaults */
 void idt_install(void) {
     idt_populate_all();
@@ -138,6 +150,20 @@ void idt_install(void) {
 
     /* Load IDT. 'memory' clobber ensures table is written before lidt */
     asm volatile ("lidt %0" : : "m"(idtp) : "memory");
+
+    /* Dump key gates to verify 64-bit offsets */
+    dump_idt_gate(6, "#UD");
+    dump_idt_gate(13, "#GP");
+    dump_idt_gate(32, "timer");
+
+    /* Sanity-check mapping around 0xB0000 */
+    uint64_t phys, flags;
+    if (paging_lookup_adv(0x00000000000B0000ULL, &phys, &flags)) {
+        serial_printf("[map] 0xB0000 -> phys=%016lx flags=%016lx NX=%d\n",
+                      phys, flags, (int)((flags >> 63) & 1));
+    } else {
+        serial_puts("[map] 0xB0000 unmapped\n");
+    }
 }
 
 /* Optional helpers if you want to override individual vectors at runtime */

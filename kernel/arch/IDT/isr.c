@@ -4,6 +4,7 @@
 #include "../CPU/lapic.h"
 #include "../CPU/smp.h"
 #include "../x86/sel.h"
+#include "../../Task/thread.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -184,12 +185,20 @@ void isr_page_fault_handler(struct isr_context *ctx) {
 }
 
 void isr_ud_handler(struct isr_context *ctx) {
-    serial_printf("[#UD] rip=%016lx cs=%04lx rfl=%016lx\n",
-                  ctx->rip, ctx->cs, ctx->rflags);
-    const uint8_t *p = (const uint8_t *)ctx->rip;
-    serial_printf("Bytes: ");
-    for (int i = 0; i < 16; ++i) serial_printf("%02x ", p[i]);
+    uint32_t tid = thread_self();
+    serial_printf("[#UD] tid=%u rip=%016lx cs=%04lx rfl=%016lx\n",
+                  tid, ctx->rip, ctx->cs, ctx->rflags);
+    dump_context(ctx);
+    backtrace_rbp(ctx->rbp, 16);
+
+    /* Dump 32 bytes before and after RIP */
+    const uint8_t *p = (const uint8_t *)(ctx->rip - 32);
+    serial_printf("Code around RIP: ");
+    for (int i = 0; i < 64; ++i) {
+        serial_printf("%02x ", p[i]);
+    }
     serial_puts("\n");
+
     for (;;) __asm__ volatile("hlt");
 }
 
