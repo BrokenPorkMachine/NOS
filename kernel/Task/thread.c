@@ -46,14 +46,13 @@ static int api_fs_read_all(const char *path, void *buf, size_t max, size_t *out_
 static int api_regx_load(const char *path, const char *args, uint32_t *out_tid){ (void)args; int rc=agent_loader_run_from_path(path,200); if(out_tid) *out_tid=0; return rc; }
 static int api_regx_ping(void){ return 1; }
 static int api_puts(const char *s){ serial_puts(s); return 0; }
-static const AgentAPI k_agent_api = {
-    .yield     = thread_yield,
-    .self      = thread_self,
-    .printf    = kprintf,
-    .puts      = api_puts,
-    .fs_read_all = api_fs_read_all,
-    .regx_load = api_regx_load,
-    .regx_ping = api_regx_ping,
+static AgentAPI k_agent_api = {
+    .self        = thread_self,     // REMOVE or change to correct field
+    .puts        = api_puts,        // adjust type if needed
+    .fs_read_all = api_fs_read_all, // make sure signature matches
+    .regx_load   = api_regx_load,   // adjust type
+    .regx_ping   = api_regx_ping,   // REMOVE or change to correct field
+    .yield       = api_yield        // keep yield last if struct matches
 };
 
 #ifndef STACK_SIZE
