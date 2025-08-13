@@ -1,35 +1,23 @@
 #pragma once
-#include "context.h"
+#include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* Trap frame layout as pushed by your ASM stubs (adjust if yours differs).
+   Keep packed for exact layout. */
+struct __attribute__((packed)) isr_context {
+    /* If you push regs in ASM, list them here in order. For the minimal stubs above,
+       we didn't push general regs for #UD; timer pushes rax, rcx, rdx before call. */
+    /* ... your saved regs if any ... */
 
-/*
- * All handlers receive a pointer to the CPU/context frame the stubs built.
- * Stubs preserve all GPRs and pass RDI = (struct isr_context *).
- *
- * Fatal handlers (default, #GP when unhandled) do not return.
- * Others may fix up state and return to the interrupted context.
- */
+    /* iret frame (CPU-pushed on interrupt/exception entry) */
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
+};
 
-/* ----- Fatal / generic ----- */
-void isr_default_handler(struct isr_context *ctx) __attribute__((noreturn));
-void isr_gpf_handler(struct isr_context *ctx) __attribute__((noreturn));
-void isr_ud_handler(struct isr_context *ctx);
+/* Your C-level ISR handlers, if you have them */
+void isr_timer_handler(struct isr_context *ctx);
 
-/* ----- Exceptions / syscalls / IRQs ----- */
-void isr_page_fault_handler(struct isr_context *ctx);   /* may return if handled */
-void isr_syscall_handler(struct isr_context *ctx);      /* int 0x80 compat */
-
-void isr_timer_handler(struct isr_context *ctx);        /* IRQ0 or APIC timer */
-void isr_keyboard_handler(struct isr_context *ctx);     /* IRQ1 (if used) */
-void isr_mouse_handler(struct isr_context *ctx);        /* IRQ12 (if used) */
-void isr_ipi_handler(struct isr_context *ctx);          /* IPI vector */
-
-/* Optional: if you map a spurious APIC vector, you can hook this */
-void isr_spurious_handler(struct isr_context *ctx);
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
+/* Provided by your scheduler */
+uint64_t *schedule_from_isr(const void *frame);
