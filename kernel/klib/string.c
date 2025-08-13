@@ -1,4 +1,13 @@
 // Minimal freestanding string/memory for the kernel
+//
+// The full user-space libc (user/libc/libc.c) already provides robust
+// implementations of these routines along with additional helpers like
+// `strnlen`, `strlcpy`, and `snprintf`.  When linking the kernel we pull
+// in that libc, which results in multiple-definition errors if this file
+// also defines the same symbols.  Since the libc versions are more
+// complete, this legacy implementation is now disabled to avoid clashes
+// during linkage while keeping the source around for reference.
+#if 0
 #include <stddef.h>
 #include "string.h"
 
@@ -81,3 +90,4 @@ char *strrchr(const char *s, int c) {
     for (; *s; ++s) if (*s == ch) last = s;
     return (char*)( (ch == 0) ? s : last );
 }
+#endif
