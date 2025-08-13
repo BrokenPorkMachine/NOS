@@ -3,9 +3,15 @@ global _start
 
 ; Kernel entry symbol implemented in C
 extern n2_main
+; Top of the bootstrap stack provided by n2_main.c
+extern _kernel_stack_top
 
 _start:
+    cli
     cld
+    ; Set up a known-good stack before calling C code
+    mov rsp, [_kernel_stack_top]
+
     ; Enable SSE/FXSR before any C code runs
     mov rax, cr0
     and eax, 0xFFFFFFFB  ; clear EM

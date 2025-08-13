@@ -41,8 +41,7 @@ __attribute__((weak)) void idt_guard_init_once(void);
 static void kprint(const char *s) { serial_puts(s); }
 
 /* Default kernel stack for TSS RSP0 */
-static uint8_t kernel_stack[4096] __attribute__((aligned(16)));
-uint8_t *_kernel_stack_top = kernel_stack + sizeof(kernel_stack);
+uint8_t *_kernel_stack_top = (uint8_t *)0x1FF000;
 
 #if VERBOSE
 #define vprint(s) kprint(s)
