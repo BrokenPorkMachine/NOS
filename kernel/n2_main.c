@@ -22,6 +22,7 @@
 #include "VM/pmm_buddy.h"
 #include "VM/heap.h"
 #include "arch/CPU/lapic.h"
+#include "arch/APIC/lapic.h"
 #include "uaccess.h"
 #include "symbols.h"
 #include "printf.h"
