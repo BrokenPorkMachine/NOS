@@ -1,156 +1,124 @@
-/* ============================================================================
- * user/rt/rt0_user.S  -- minimal userland CRT0 for NOS agents
- *
- * Exposes:
- *   - _start        : loader passes RDI=api, RSI=tid (SysV x86-64)
- *   - _start_stack  : loader pushed args on stack: [ret][api][tid]
- *
- * Defines the globals:
- *   - NOS     : const AgentAPI* (set from api)
- *   - NOS_TID : uint32_t        (set from tid)
- *
- * Behavior:
- *   1) Normalize stack (16B alignment).
- *   2) Save api/tid into NOS/NOS_TID.
- *   3) Run .init_array constructors if present.
- *   4) Call init_main(api, tid)  // change to agent_main if you prefer
- *   5) Run .fini_array (best-effort) if we ever return.
- *   6) Park with HLT loop.
- * ========================================================================== */
+; ============================================================================
+; user/rt/rt0_user.asm  -- NASM x86-64 CRT0 for NOS agents
+; Exposes:
+;   _start        ; loader passes RDI=api, RSI=tid  (SysV registers)
+;   _start_stack  ; loader pushed [ret][api][tid]   (stack ABI)
+; Defines globals (match agent_abi.h):
+;   global NOS:    dq 0
+;   global NOS_TID:dd 0 (plus padding)
+; Calls:
+;   extern init_main   ; void init_main(const AgentAPI*, uint32_t)
+; Also runs .init_array/.fini_array if present.
+; ============================================================================
 
-    .text
-    .intel_syntax noprefix
+BITS 64
+default rel
 
-/* --------------------------------------------------------------------------
- * Externs we call or reference
- * -------------------------------------------------------------------------- */
-    .extern init_main                /* C signature: void init_main(const void*, unsigned int) */
+extern init_main
+; These usually come from the linker script, even if empty.
+extern __init_array_start
+extern __init_array_end
+extern __fini_array_start
+extern __fini_array_end
 
-/* Optional arrays are weak so file links even if none exist */
-    .weak   __init_array_start
-    .weak   __init_array_end
-    .weak   __fini_array_start
-    .weak   __fini_array_end
+section .data align=8
+global NOS
+NOS:        dq 0
 
-/* --------------------------------------------------------------------------
- * Globals we DEFINE here (storage for agent_abi.h externs)
- *   const AgentAPI *NOS;
- *   uint32_t        NOS_TID;
- * -------------------------------------------------------------------------- */
-    .data
-    .globl  NOS
-    .align  8
-NOS:
-    .quad   0
+global NOS_TID
+NOS_TID:    dd 0
+            dd 0                ; pad to 8 bytes (keeps alignment nice)
 
-    .globl  NOS_TID
-    .align  4
-NOS_TID:
-    .long   0
-    .long   0            /* pad to 8 bytes (keeps RIP-relative loads happy) */
+section .text align=16
 
-/* --------------------------------------------------------------------------
- * Helpers: run .init_array and .fini_array
- * -------------------------------------------------------------------------- */
-    .text
-    .align  16
+; ----------------------------------------------------------------------------
+; Helpers: run .init_array
+; ----------------------------------------------------------------------------
 run_init_array:
-    /* if (__init_array_start && __init_array_end) for (p=start; p<end; ++p) (*p)(); */
-    lea     rdi, __init_array_start[rip]
-    lea     rsi, __init_array_end[rip]
+    lea     rdi, [__init_array_start]
+    lea     rsi, [__init_array_end]
     cmp     rdi, rsi
-    jae     .Linit_done
-.Linit_loop:
+    jae     .done
+.loop:
     cmp     rdi, rsi
-    jae     .Linit_done
+    jae     .done
     mov     rax, [rdi]
     add     rdi, 8
     test    rax, rax
-    je      .Linit_loop
+    jz      .loop
     call    rax
-    jmp     .Linit_loop
-.Linit_done:
+    jmp     .loop
+.done:
     ret
 
+; Helpers: run .fini_array in reverse
 run_fini_array:
-    /* Run in reverse order: for (p=end; p>start;) (*--p)(); */
-    lea     rdi, __fini_array_start[rip]
-    lea     rsi, __fini_array_end[rip]
+    lea     rdi, [__fini_array_start]
+    lea     rsi, [__fini_array_end]
     cmp     rdi, rsi
-    jae     .Lfini_done
-.Lfini_loop:
+    jae     .done
+.loop:
     cmp     rdi, rsi
-    jae     .Lfini_done
+    jae     .done
     sub     rsi, 8
     mov     rax, [rsi]
     test    rax, rax
-    je      .Lfini_loop
+    jz      .loop
     call    rax
-    jmp     .Lfini_loop
-.Lfini_done:
+    jmp     .loop
+.done:
     ret
 
-/* --------------------------------------------------------------------------
- * Entry (register ABI): _start(RDI=api, RSI=tid)
- * -------------------------------------------------------------------------- */
-    .globl  _start
-    .type   _start, @function
+; ----------------------------------------------------------------------------
+; _start: register ABI (RDI = api, RSI = tid)
+; ----------------------------------------------------------------------------
+global _start
 _start:
-    /* Keep SysV 16-byte alignment prior to a call */
+    ; Keep SysV 16-byte alignment before any call
     and     rsp, -16
 
-    /* Save API/TID into globals */
-    lea     rax, NOS[rip]
-    mov     [rax], rdi            /* NOS = api */
-    lea     rax, NOS_TID[rip]
-    mov     [rax], esi            /* NOS_TID = tid (lower 32 bits) */
+    ; Save API/TID into globals
+    mov     [rel NOS], rdi          ; NOS = api
+    mov     [rel NOS_TID], esi      ; NOS_TID = (uint32)tid
 
-    /* Run constructors if present */
+    ; Run constructors (if any)
     call    run_init_array
 
-    /* Call user's C entry */
-    mov     rdi, [NOS[rip]]       /* rdi = api */
-    mov     esi, dword ptr [NOS_TID[rip]]  /* rsi = tid (zero-extended) */
+    ; Call user's C entry: init_main(api, tid)
+    mov     rdi, [rel NOS]
+    mov     esi, dword [rel NOS_TID]
     call    init_main
 
-    /* If it ever returns, run destructors then park */
+    ; If it returns, run destructors then park
     call    run_fini_array
-
-.Lpark:
+.halt:
     hlt
-    jmp     .Lpark
-    .size   _start, . - _start
+    jmp     .halt
 
-/* --------------------------------------------------------------------------
- * Alternate entry (stack ABI): _start_stack()
- *   Stack layout on entry (top -> bottom):
- *      [retaddr] [api (8 bytes)] [tid (8 bytes)]
- * -------------------------------------------------------------------------- */
-    .globl  _start_stack
-    .type   _start_stack, @function
+; ----------------------------------------------------------------------------
+; _start_stack: loader pushed args on stack: [ret][api][tid]
+; ----------------------------------------------------------------------------
+global _start_stack
 _start_stack:
-    /* Move args from stack into registers, then tail into _start path */
-    mov     rdi, [rsp + 8]        /* api */
-    mov     rsi, [rsp + 16]       /* tid (use low 32 bits) */
+    ; Move args from stack into registers
+    mov     rdi, [rsp + 8]          ; api
+    mov     rsi, [rsp + 16]         ; tid (use low 32 bits)
     and     rsp, -16
 
-    /* Save API/TID into globals */
-    lea     rax, NOS[rip]
-    mov     [rax], rdi
-    lea     rax, NOS_TID[rip]
-    mov     [rax], esi
+    ; Save API/TID into globals
+    mov     [rel NOS], rdi
+    mov     [rel NOS_TID], esi
 
-    /* Run constructors if present */
+    ; Run constructors
     call    run_init_array
 
-    /* Call user's C entry */
-    mov     rdi, [NOS[rip]]
-    mov     esi, dword ptr [NOS_TID[rip]]
+    ; Call user's C entry
+    mov     rdi, [rel NOS]
+    mov     esi, dword [rel NOS_TID]
     call    init_main
 
-    /* Run destructors then park */
+    ; Run destructors then park
     call    run_fini_array
-.Lpark2:
+.halt2:
     hlt
-    jmp     .Lpark2
-    .size   _start_stack, . - _start_stack
+    jmp     .halt2
