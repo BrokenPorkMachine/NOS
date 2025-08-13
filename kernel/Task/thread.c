@@ -28,6 +28,10 @@ extern int fs_read_all(const char *path, void **out, size_t *out_sz);
 extern void regx_main(void);                         // src/agents/regx/regx.c
 extern void nosm_entry(void);                        // user/agents/nosm/nosm.c
 extern void nosfs_server(ipc_queue_t*, uint32_t);    // user/agents/nosfs/nosfs.c
+int  api_puts(const char *s);
+int  api_fs_read_all(const char *path, void *buf, size_t len, size_t *outlen);
+int  api_regx_load(const char *name, const char *arg, uint32_t *out);
+void api_yield(void);
 
 // ---- AgentAPI helpers ----
 // --- Adapters to match AgentAPI signatures exactly ---
