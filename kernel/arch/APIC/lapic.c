@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "arch/APIC/lapic.h"
+#include "lapic.h"
 
 #define LAPIC_BASE        0xFEE00000ULL
 #define LAPIC_REG(off)    ((uintptr_t)(LAPIC_BASE + (off)))
