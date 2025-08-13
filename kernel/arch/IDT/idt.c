@@ -96,7 +96,9 @@ void idt_dump_vec(int v) {
 }
 
 /* Check a few vectors: selector, type, and nonzero offsets */
-static int check_vec(int v, uint8_t expect_gate_mask) {
+/* Replace your existing check_vec() and idt_selftest() with these */
+
+static int check_vec(int v, uint16_t allow_mask) {
     uint64_t off = ((uint64_t)idt[v].offset_high << 32) |
                    ((uint64_t)idt[v].offset_mid  << 16) |
                    (uint64_t)idt[v].offset_low;
@@ -110,11 +112,15 @@ static int check_vec(int v, uint8_t expect_gate_mask) {
         kprintf("[idt][FAIL] vec=%d not present (attr=%#x)\n", v, idt[v].type_attr);
         return -1;
     }
-    if (((idt[v].type_attr & 0x0F) & expect_gate_mask) == 0) {
-        kprintf("[idt][WARN] vec=%d gate type=%#x unexpected\n",
-                v, idt[v].type_attr & 0x0F);
+
+    /* gate type is low nibble: 0xE = interrupt, 0xF = trap */
+    uint8_t gtype = idt[v].type_attr & 0x0F;
+    if (((uint16_t)(1u << gtype) & allow_mask) == 0) {
+        kprintf("[idt][WARN] vec=%d unexpected gate type=%#x\n", v, gtype);
+        /* not a hard fail; return 0 if you want to allow */
     }
-    if (off < 0x10000) { /* extremely unlikely for your stubs */
+
+    if (off < 0x10000) {
         kprintf("[idt][FAIL] vec=%d offset suspicious: %016llx\n",
                 v, (unsigned long long)off);
         return -1;
@@ -123,16 +129,17 @@ static int check_vec(int v, uint8_t expect_gate_mask) {
 }
 
 void idt_selftest(void) {
-    int ok = 0;
-    ok += check_vec(6,  (1<<0xE)|(1<<0xF));  /* #UD: int or trap gate */
-    ok += check_vec(13, (1<<0xE)|(1<<0xF));  /* #GP */
-    ok += check_vec(32, (1<<0xE));           /* timer: interrupt gate */
+    /* Build masks with 1u<<type (types are <= 0xF), so use 16-bit container */
+    const uint16_t ALLOW_INT  = (uint16_t)(1u << IDT_ATTR_INT_GATE);   /* 1<<0xE */
+    const uint16_t ALLOW_TRAP = (uint16_t)(1u << IDT_ATTR_TRAP_GATE);  /* 1<<0xF */
 
-    if (ok == 0) {
-        kprintf("[idt] selftest: OK\n");
-    } else {
-        kprintf("[idt] selftest: FAILED (%d)\n", ok);
-    }
+    int ok = 0;
+    ok += check_vec(6,  (uint16_t)(ALLOW_INT | ALLOW_TRAP)); /* #UD may be int or trap */
+    ok += check_vec(13, (uint16_t)(ALLOW_INT | ALLOW_TRAP)); /* #GP may be int or trap */
+    ok += check_vec(32, (uint16_t)(ALLOW_INT));              /* timer must be interrupt */
+
+    if (ok == 0) kprintf("[idt] selftest: OK\n");
+    else         kprintf("[idt] selftest: FAILED (%d)\n", ok);
 }
 
 void idt_install(void) {
