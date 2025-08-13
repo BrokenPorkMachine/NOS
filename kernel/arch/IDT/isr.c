@@ -129,12 +129,17 @@ void isr_gpf_handler(struct isr_context *ctx) {
     __asm__ volatile("mov %%es,%0" : "=r"(es));
     __asm__ volatile("mov %%fs,%0" : "=r"(fs));
     __asm__ volatile("mov %%gs,%0" : "=r"(gs));
-    serial_printf("LDTR=%04x CS=%04x SS=%04x DS=%04x ES=%04x FS=%04x GS=%04x\n",
-                  ldtr, cs, ss, ds, es, fs, gs);
+  serial_printf("LDTR=%04x CS=%04x SS=%04x DS=%04x ES=%04x FS=%04x GS=%04x\n",
+                ldtr, cs, ss, ds, es, fs, gs);
 
-    uint64_t *sp = (uint64_t *)(uintptr_t)ctx->rsp;
-    serial_printf("Stack5: %016lx %016lx %016lx %016lx %016lx\n",
-                  sp[0], sp[1], sp[2], sp[3], sp[4]);
+  const uint8_t *rip_bytes = (const uint8_t *)(uintptr_t)ctx->rip;
+  serial_printf("Bytes at RIP: ");
+  for (int i = 0; i < 16; ++i) serial_printf("%02x ", rip_bytes[i]);
+  serial_puts("\n");
+
+  uint64_t *sp = (uint64_t *)(uintptr_t)ctx->rsp;
+  serial_printf("Stack5: %016lx %016lx %016lx %016lx %016lx\n",
+                sp[0], sp[1], sp[2], sp[3], sp[4]);
 
     backtrace_rbp(ctx->rbp, 16);
 

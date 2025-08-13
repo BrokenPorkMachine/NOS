@@ -10,6 +10,13 @@ extern assert_selector_gdt
 
 section .text
 enter_user_mode:
+    ; Scrub segment registers to known-good kernel data selector
+    mov  ax, GDT_SEL_KERNEL_DATA
+    mov  ds, ax
+    mov  es, ax
+    mov  fs, ax
+    mov  gs, ax
+
     ; Stash args in callee-saved regs
     mov  rbx, rdi     ; rbx = user RIP
     mov  r12, rsi     ; r12 = user RSP (should be canonical & 16B aligned)
