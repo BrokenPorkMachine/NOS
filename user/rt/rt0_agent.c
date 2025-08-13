@@ -8,7 +8,7 @@ __attribute__((noreturn)) void agent_main(void);
 
 __attribute__((noreturn))
 void _start(const AgentAPI *api, uint32_t self_tid) {
-    __asm__ __volatile__("andq $-16, %%rsp" ::: "rsp");
+    __asm__ __volatile__("andq $-16, %%rsp" ::: "memory");
     NOS = api;
     NOS_TID = self_tid;
     agent_main();
