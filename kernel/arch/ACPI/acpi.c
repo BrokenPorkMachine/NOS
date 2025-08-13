@@ -1,8 +1,12 @@
 #include "acpi.h"
-#include "../../drivers/IO/serial.h"
+#include "../../../nosm/drivers/IO/serial.h"
 #include "../../../user/libc/libc.h"
 #include <stddef.h>
 #include <stdint.h>
+
+#ifndef BOOTINFO_MAX_CPUS
+#define BOOTINFO_MAX_CPUS 256
+#endif
 
 /* ---------------- ACPI core structs ---------------- */
 
@@ -167,13 +171,13 @@ void acpi_init(bootinfo_t *bootinfo) {
 
         if (!addr) continue;
 
-        struct sdt_header *hdr = (struct sdt_header*)(uintptr_t)addr;
-        if (!sdt_valid(hdr)) {
-            serial_puts("[acpi] table checksum/len fail: ");
-            print_sig(hdr ? hdr->signature : "????");
-            serial_puts("\n");
-            continue;
-        }
+            struct sdt_header *hdr = (struct sdt_header*)(uintptr_t)addr;
+            if (!sdt_valid(hdr)) {
+                serial_puts("[acpi] table checksum/len fail: ");
+                print_sig(hdr ? hdr->signature : "????");
+                serial_puts("\n");
+                continue;
+            }
 
         serial_puts("[acpi] table ");
         print_sig(hdr->signature);
@@ -217,9 +221,9 @@ void acpi_init(bootinfo_t *bootinfo) {
                             const struct madt_lapic *lap = (const struct madt_lapic*)p;
                             if (lap->flags & 1u) {
                                 if (cpu_count < BOOTINFO_MAX_CPUS) {
-                                    bootinfo->cpus[cpu_count].processor_id = lap->processor_id;
-                                    bootinfo->cpus[cpu_count].apic_id      = lap->apic_id;
-                                    bootinfo->cpus[cpu_count].flags        = lap->flags;
+                                    bootinfo->cpus[cpu_count].acpi_id = lap->processor_id;
+                                    bootinfo->cpus[cpu_count].apic_id = lap->apic_id;
+                                    bootinfo->cpus[cpu_count].online  = (lap->flags & 1u) ? 1 : 0;
                                     cpu_count++;
                                 }
                             }
@@ -239,11 +243,10 @@ void acpi_init(bootinfo_t *bootinfo) {
                             const struct madt_x2apic *x2 = (const struct madt_x2apic*)p;
                             if (x2->flags & 1u) {
                                 if (cpu_count < BOOTINFO_MAX_CPUS) {
-                                    /* In x2APIC, APIC IDs are 32-bit; store low 8 if your bootinfo uses 8-bit IDs,
-                                       otherwise extend bootinfo to 32-bit IDs. */
-                                    bootinfo->cpus[cpu_count].processor_id = (uint8_t)x2->acpi_uid;
-                                    bootinfo->cpus[cpu_count].apic_id      = (uint8_t)(x2->x2apic_id & 0xFF);
-                                    bootinfo->cpus[cpu_count].flags        = x2->flags;
+                                    /* In x2APIC, APIC IDs are 32-bit; bootinfo stores 32-bit APIC IDs */
+                                    bootinfo->cpus[cpu_count].acpi_id = x2->acpi_uid;
+                                    bootinfo->cpus[cpu_count].apic_id = x2->x2apic_id;
+                                    bootinfo->cpus[cpu_count].online  = (x2->flags & 1u) ? 1 : 0;
                                     cpu_count++;
                                 }
                             }

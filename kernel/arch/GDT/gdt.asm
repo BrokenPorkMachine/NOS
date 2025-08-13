@@ -2,7 +2,9 @@
 ; rdi = pointer to gdt_ptr { uint16_t limit; uint64_t base; }
 ; Optional: gdt_flush_with_tr also loads TR from 'si' (16-bit selector)
 
-%include "segments.inc"
+; Use repository-root path so NASM can locate the segment definitions when
+; invoked from the top-level build directory.
+%include "kernel/arch/GDT/segments.inc"
 
 global gdt_flush
 global gdt_flush_with_tr
