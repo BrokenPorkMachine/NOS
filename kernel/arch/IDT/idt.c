@@ -95,6 +95,46 @@ void idt_dump_vec(int v) {
             v, idt[v].selector, (unsigned long long)off, idt[v].type_attr, idt[v].ist & 7);
 }
 
+/* Check a few vectors: selector, type, and nonzero offsets */
+static int check_vec(int v, uint8_t expect_gate_mask) {
+    uint64_t off = ((uint64_t)idt[v].offset_high << 32) |
+                   ((uint64_t)idt[v].offset_mid  << 16) |
+                   (uint64_t)idt[v].offset_low;
+
+    if (idt[v].selector != KERNEL_CS) {
+        kprintf("[idt][FAIL] vec=%d selector=%#x expected=%#x\n",
+                v, idt[v].selector, KERNEL_CS);
+        return -1;
+    }
+    if ((idt[v].type_attr & 0x80) == 0) {
+        kprintf("[idt][FAIL] vec=%d not present (attr=%#x)\n", v, idt[v].type_attr);
+        return -1;
+    }
+    if (((idt[v].type_attr & 0x0F) & expect_gate_mask) == 0) {
+        kprintf("[idt][WARN] vec=%d gate type=%#x unexpected\n",
+                v, idt[v].type_attr & 0x0F);
+    }
+    if (off < 0x10000) { /* extremely unlikely for your stubs */
+        kprintf("[idt][FAIL] vec=%d offset suspicious: %016llx\n",
+                v, (unsigned long long)off);
+        return -1;
+    }
+    return 0;
+}
+
+void idt_selftest(void) {
+    int ok = 0;
+    ok += check_vec(6,  (1<<0xE)|(1<<0xF));  /* #UD: int or trap gate */
+    ok += check_vec(13, (1<<0xE)|(1<<0xF));  /* #GP */
+    ok += check_vec(32, (1<<0xE));           /* timer: interrupt gate */
+
+    if (ok == 0) {
+        kprintf("[idt] selftest: OK\n");
+    } else {
+        kprintf("[idt] selftest: FAILED (%d)\n", ok);
+    }
+}
+
 void idt_install(void) {
     idt_populate_all();
 
