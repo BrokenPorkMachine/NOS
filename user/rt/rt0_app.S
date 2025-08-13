@@ -9,4 +9,4 @@ _start:
     call    main
     hlt
     jmp     .
-section .note.GNU-stack noalloc
+    .section .note.GNU-stack,"",@progbits
