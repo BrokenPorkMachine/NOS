@@ -3,7 +3,7 @@ import json
 import os
 from typing import Dict
 
-import openai
+from openai import OpenAI
 
 
 def load_config(path: str) -> Dict:
@@ -13,38 +13,42 @@ def load_config(path: str) -> Dict:
 
 
 def run_conversation(topic: str, options: Dict) -> None:
-    """Run a conversation between two Codex instances."""
-    model_a = options.get("model_a", "code-davinci-002")
-    model_b = options.get("model_b", "code-davinci-002")
+    """Run a conversation between two GPT models."""
+    model_a = options.get("model_a", "gpt-4.1")
+    model_b = options.get("model_b", "gpt-4.1-mini")
     temperature = options.get("temperature", 0.5)
     max_tokens = options.get("max_tokens", 150)
     turns = options.get("turns", 4)
 
     conversation = ""
-    last_speaker = "B"  # Let Codex A speak first.
+    last_speaker = "B"  # Let model A speak first.
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     for _ in range(turns):
-        speaker = "Codex A" if last_speaker == "B" else "Codex B"
-        model = model_a if speaker == "Codex A" else model_b
-        prompt = (
-            f"The following is a conversation between Codex A and Codex B about {topic}.\n\n"
-            f"{conversation}{speaker}:"
-        )
-        completion = openai.Completion.create(
-            engine=model,
-            prompt=prompt,
+        speaker = "Agent A" if last_speaker == "B" else "Agent B"
+        model = model_a if speaker == "Agent A" else model_b
+        messages = [
+            {
+                "role": "system",
+                "content": f"The following is a conversation between Agent A and Agent B about {topic}.",
+            },
+            {"role": "user", "content": f"{conversation}{speaker}:"},
+        ]
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        reply = completion["choices"][0]["text"].strip()
+        reply = completion.choices[0].message.content.strip()
         print(f"{speaker}: {reply}")
         conversation += f"{speaker}: {reply}\n"
-        last_speaker = "A" if speaker == "Codex A" else "B"
+        last_speaker = "A" if speaker == "Agent A" else "B"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run a conversation between two Codex instances"
+        description="Run a conversation between two GPT models",
     )
     parser.add_argument(
         "config",
@@ -54,8 +58,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-    if not openai.api_key:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
         raise EnvironmentError("OPENAI_API_KEY environment variable is not set")
 
     config = load_config(args.config)
@@ -66,3 +70,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -1,10 +1,10 @@
 {
-  "topic": "future of modular operating systems",
+  "topic": "securing and optimizing the NitrOS boot sequence",
   "options": {
-    "model_a": "code-davinci-002",
-    "model_b": "code-cushman-001",
+    "model_a": "gpt-4.1",
+    "model_b": "gpt-4.1-mini",
     "temperature": 0.5,
-    "max_tokens": 120,
+    "max_tokens": 200,
     "turns": 6
   }
 }
