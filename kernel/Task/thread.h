@@ -68,6 +68,7 @@ uint32_t thread_self(void);
  * Initialize threading system and create initial threads.
  */
 void threads_init(void);
+void regx_start(void);
 
 /**
  * Create a new kernel thread with default (mid-level) priority.

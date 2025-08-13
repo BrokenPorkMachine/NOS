@@ -425,22 +425,16 @@ void threads_init(void){
     // Bring up NOSFS before other core agents so init.mo2 can be served.
     thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 230);
 
-    // Then bring up security gate and other helpers
-    thread_t *t_regx  = thread_create_with_priority(regx_thread_wrapper, 220);
+    // Then bring up other helpers (security gate started later once FS populated)
     thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, 210);
 
     if(!t_nosfs) kprintf("[boot] failed to spawn nosfs\n");
-    if(!t_regx){ kprintf("[boot] failed to spawn regx\n"); for(;;)__asm__ volatile("hlt"); }
     if(!t_nosm)  kprintf("[boot] failed to spawn nosm\n");
 
     // Capabilities: ensure clients that need the FS queue have access
     if (t_nosfs){
         ipc_grant(&fs_queue,   t_nosfs->id, IPC_CAP_SEND | IPC_CAP_RECV);
         ipc_grant(&regx_queue, t_nosfs->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    }
-    if (t_regx){
-        ipc_grant(&regx_queue, t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
-        ipc_grant(&fs_queue,   t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);   // regx needs FS to load /agents/init.mo2
     }
     if (t_nosm){
         ipc_grant(&nosm_queue, t_nosm->id, IPC_CAP_SEND | IPC_CAP_RECV);
@@ -449,4 +443,11 @@ void threads_init(void){
     }
 
     if (timer_ready) thread_yield();
+}
+
+void regx_start(void){
+    thread_t *t_regx = thread_create_with_priority(regx_thread_wrapper, 220);
+    if(!t_regx){ kprintf("[boot] failed to spawn regx\n"); for(;;)__asm__ volatile("hlt"); }
+    ipc_grant(&regx_queue, t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
+    ipc_grant(&fs_queue,   t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);   // regx needs FS to load /agents/init.mo2
 }
