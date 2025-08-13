@@ -7,7 +7,6 @@
 #include "../../../nosm/drivers/IO/serial.h"
 #include "../../../kernel/agent_loader.h"
 #include "../../../kernel/init_bin.h"
-#include "../../../kernel/login_bin.h"
 #include "../../../user/agents/nosfs/nosfs_server.h"
 #include "../../../user/libc/string_guard.h"
 
