@@ -1,7 +1,7 @@
 // kernel/n2_main.c — trimmed to what you posted + safe early guard
 #include <stdint.h>
 #include <stddef.h>
-#include <string.h>
+#include "libc.h"
 #include <stdio.h>
 #include "../boot/include/bootinfo.h"
 #include "agent.h"
