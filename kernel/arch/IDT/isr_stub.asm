@@ -1,44 +1,50 @@
-/* isr_stubs.S */
-.intel_syntax noprefix
-.global isr_stub_table
-.global isr_ud_stub
-.global isr_timer_stub
+; kernel/arch/IDT/isr_stub.asm
+; Minimal 64-bit ISR stubs for NASM
 
-/* You should provide these from your APIC/PIC driver if using the EOI path */
-.extern lapic_eoi
+BITS 64
+default rel
 
-/* For simplicity, we build two hand-written stubs and a table pointing to them.
-   In a full kernel, you'd macro-generate one per vector. */
+global isr_stub_table
+global isr_ud_stub
+global isr_timer_stub
 
-.section .text
+extern lapic_eoi    ; provided by your LAPIC driver
 
-/* #UD (vector 6) — no error code */
+section .text
+
+; ---------------------------
+; #UD (vector 6) — no errcode
+; ---------------------------
 isr_ud_stub:
-    /* TODO: log registers or call into your #UD handler if you have one.
-       For now, just hang to make it obvious. */
-.ud_hang:
     cli
+.ud_hang:
     hlt
     jmp .ud_hang
 
-/* APIC Timer (let’s assume vector 32) — no error code */
+; ---------------------------------
+; APIC Timer (assume vector 32/0x20)
+; No errcode
+; ---------------------------------
 isr_timer_stub:
-    /* Acknowledge LAPIC EOI (MMIO write), if you have a function; otherwise inline */
     push rax
     push rcx
     push rdx
-    /* lapic_eoi(); */
     call lapic_eoi
     pop rdx
     pop rcx
     pop rax
     iretq
 
-/* Stub table: point all entries to a safe default; override key ones in C if desired */
-.section .rodata
-.align 8
+section .rodata
+align 8
+
+; ---------------------------------
+; Stub table: 256 entries
+; default all to isr_ud_stub; C overrides the ones you use
+; ---------------------------------
 isr_stub_table:
-    /* 0..255 */
-    .rept 256
-        .quad isr_ud_stub
-    .endr
+%assign i 0
+%rep 256
+    dq isr_ud_stub
+%assign i i+1
+%endrep
