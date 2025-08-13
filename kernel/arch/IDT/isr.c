@@ -116,6 +116,26 @@ void isr_gpf_handler(struct isr_context *ctx) {
     /* #GP is a fault, not an IRQ; no EOI */
     serial_puts("\n[FAULT] General Protection Fault (#GP)\n");
     dump_context(ctx);
+
+    uint64_t err = ctx->error_code;
+    serial_printf("ERR: idx=%lu TI=%lu EXT=%lu\n",
+                  (err >> 3) & 0x1FFF, (err >> 2) & 1, err & 1);
+
+    uint16_t ldtr, cs, ss, ds, es, fs, gs;
+    __asm__ volatile("sldt %0" : "=r"(ldtr));
+    __asm__ volatile("mov %%cs,%0" : "=r"(cs));
+    __asm__ volatile("mov %%ss,%0" : "=r"(ss));
+    __asm__ volatile("mov %%ds,%0" : "=r"(ds));
+    __asm__ volatile("mov %%es,%0" : "=r"(es));
+    __asm__ volatile("mov %%fs,%0" : "=r"(fs));
+    __asm__ volatile("mov %%gs,%0" : "=r"(gs));
+    serial_printf("LDTR=%04x CS=%04x SS=%04x DS=%04x ES=%04x FS=%04x GS=%04x\n",
+                  ldtr, cs, ss, ds, es, fs, gs);
+
+    uint64_t *sp = (uint64_t *)(uintptr_t)ctx->rsp;
+    serial_printf("Stack5: %016lx %016lx %016lx %016lx %016lx\n",
+                  sp[0], sp[1], sp[2], sp[3], sp[4]);
+
     backtrace_rbp(ctx->rbp, 16);
 
     __asm__ volatile ("sti");
