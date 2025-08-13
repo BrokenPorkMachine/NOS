@@ -30,7 +30,7 @@ gdt_flush:
     lea rax, [rel .after]
     push qword 0x08           ; GDT_SEL_KERNEL_CODE
     push rax
-    lretq
+    retfq
 .after:
     pop rax
     ret
@@ -63,7 +63,7 @@ gdt_flush_with_tr:
     lea rax, [rel .after_flush_cs_tr]
     push qword GDT_SEL_KERNEL_CODE
     push rax
-    lretq
+    retfq
 
 .after_flush_cs_tr:
     pop rcx
