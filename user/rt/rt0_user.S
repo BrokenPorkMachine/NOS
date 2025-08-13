@@ -122,3 +122,5 @@ _start_stack:
 .halt2:
     hlt
     jmp     .halt2
+
+section .note.GNU-stack noalloc
