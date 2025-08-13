@@ -3,6 +3,8 @@
 #include "../../VM/paging_adv.h"
 #include "../CPU/lapic.h"
 #include "../CPU/smp.h"
+#include "../x86/sel.h"
+#include "../../Task/thread.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -69,21 +71,27 @@ static void dump_context(struct isr_context *ctx) {
 
     serial_printf("RAX=%016lx RBX=%016lx RCX=%016lx RDX=%016lx\n",
                   ctx->rax, ctx->rbx, ctx->rcx, ctx->rdx);
+    uint64_t rsp_val = isr_from_user(ctx) ? ctx->rsp : 0;
     serial_printf("RSI=%016lx RDI=%016lx RBP=%016lx RSP=%016lx\n",
-                  ctx->rsi, ctx->rdi, ctx->rbp, ctx->rsp);
+                  ctx->rsi, ctx->rdi, ctx->rbp, rsp_val);
     serial_printf("R8 =%016lx R9 =%016lx R10=%016lx R11=%016lx\n",
                   ctx->r8, ctx->r9, ctx->r10, ctx->r11);
     serial_printf("R12=%016lx R13=%016lx R14=%016lx R15=%016lx\n",
                   ctx->r12, ctx->r13, ctx->r14, ctx->r15);
-    serial_printf("RIP=%016lx CS=%04lx RFLAGS=%016lx SS=%04lx\n",
-                  ctx->rip, ctx->cs, ctx->rflags, ctx->ss);
+    if (isr_from_user(ctx))
+        serial_printf("RIP=%016lx CS=%04lx RFLAGS=%016lx SS=%04lx\n",
+                      ctx->rip, ctx->cs, ctx->rflags, ctx->ss);
+    else
+        serial_printf("RIP=%016lx CS=%04lx RFLAGS=%016lx SS=----\n",
+                      ctx->rip, ctx->cs, ctx->rflags);
     serial_printf("ERR=%016lx CR2=%016lx\n", ctx->error_code, ctx->cr2);
 
-    /* Show a few stack qwords (current RSP) */
-    uint64_t *sp = (uint64_t *)(uintptr_t)(ctx->rsp);
-    serial_printf("Stack[0..3]: ");
-    for (int i = 0; i < 4; ++i) serial_printf("%016lx ", sp[i]);
-    serial_puts("\n");
+    if (isr_from_user(ctx)) {
+        uint64_t *sp = (uint64_t *)(uintptr_t)(ctx->rsp);
+        serial_printf("Stack[0..3]: ");
+        for (int i = 0; i < 4; ++i) serial_printf("%016lx ", sp[i]);
+        serial_puts("\n");
+    }
 }
 
 /* ---- Handlers --------------------------------------------------- */
@@ -155,10 +163,14 @@ void isr_timer_handler(struct isr_context *ctx) {
     volatile uint16_t *vga = (uint16_t *)(uintptr_t)0xB8000 + 80 * 0; /* first row */
     vga[0] = ((uint16_t)('0' + (ticks % 10))) | ((uint16_t)0x2F << 8);
 
-    /* Preemptive scheduling: switch to the next runnable thread if needed. */
-    ctx->rsp = schedule_from_isr((uint64_t *)ctx->rsp);
+    /* Validate selectors before attempting a return */
+    assert_gdt_selector(sel16(ctx->cs), "timer cs");
+    if (isr_from_user(ctx))
+        assert_gdt_selector(sel16(ctx->ss), "timer ss");
 
-    (void)ctx;
+    /* Preemptive scheduling: switch to the next runnable thread if needed. */
+    ctx->rsp = schedule_from_isr((uint64_t *)ctx);
+
     apic_eoi_if_needed(32); /* PIT/APIC timer typically at vector 32 */
 }
 
@@ -173,12 +185,20 @@ void isr_page_fault_handler(struct isr_context *ctx) {
 }
 
 void isr_ud_handler(struct isr_context *ctx) {
-    serial_printf("[#UD] rip=%016lx cs=%04lx rfl=%016lx\n",
-                  ctx->rip, ctx->cs, ctx->rflags);
-    const uint8_t *p = (const uint8_t *)ctx->rip;
-    serial_printf("Bytes: ");
-    for (int i = 0; i < 16; ++i) serial_printf("%02x ", p[i]);
+    uint32_t tid = thread_self();
+    serial_printf("[#UD] tid=%u rip=%016lx cs=%04lx rfl=%016lx\n",
+                  tid, ctx->rip, ctx->cs, ctx->rflags);
+    dump_context(ctx);
+    backtrace_rbp(ctx->rbp, 16);
+
+    /* Dump 32 bytes before and after RIP */
+    const uint8_t *p = (const uint8_t *)(ctx->rip - 32);
+    serial_printf("Code around RIP: ");
+    for (int i = 0; i < 64; ++i) {
+        serial_printf("%02x ", p[i]);
+    }
     serial_puts("\n");
+
     for (;;) __asm__ volatile("hlt");
 }
 

@@ -233,7 +233,9 @@ uint64_t schedule_from_isr(uint64_t *old_rsp){
     prev->rsp=(uint64_t)old_rsp; if(prev->state==THREAD_RUNNING) prev->state=THREAD_READY;
     thread_t *next=pick_next(cpu);
     if(!next){ current_cpu[cpu]=prev; prev->state=THREAD_RUNNING; return (uint64_t)old_rsp; }
-    next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next; return next->rsp;
+    next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next;
+    kprintf("[sched_isr] switch to tid=%d func=%p rsp=%p\n", next->id, (void*)next->func, (void*)next->rsp);
+    return next->rsp;
 }
 
 __attribute__((noreturn)) void thread_exit(void){
@@ -247,7 +249,7 @@ __attribute__((noreturn)) void thread_exit(void){
 __attribute__((noreturn,used)) static void thread_start(void (*f)(void)){
     void (* volatile entry)(const AgentAPI*, uint32_t) = (void(*)(const AgentAPI*, uint32_t))f;
     uint32_t tid = thread_self();
-    kprintf("[thread] id=%u first timeslice\n", tid);
+    kprintf("[thread] id=%u first timeslice entry=%p\n", tid, (void*)entry);
     entry(&k_agent_api, tid);
     thread_exit();
 }

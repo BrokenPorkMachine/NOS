@@ -1,7 +1,7 @@
 %include "../arch/GDT/segments.inc"
 
 global enter_user_mode
-extern assert_selector_gdt
+extern assert_gdt_selector
 
 ; void enter_user_mode(void *entry, void *user_stack)
 ;   rdi = user RIP
@@ -24,10 +24,10 @@ enter_user_mode:
     ; Assert selectors use GDT (TI=0)
     mov  di, GDT_SEL_USER_DATA_R3
     lea  rsi, [rel .str_ss]
-    call assert_selector_gdt
+    call assert_gdt_selector
     mov  di, GDT_SEL_USER_CODE_R3
     lea  rsi, [rel .str_cs]
-    call assert_selector_gdt
+    call assert_gdt_selector
 
     ; Build iretq frame: SS,RSP,RFLAGS,CS,RIP
     push GDT_SEL_USER_DATA_R3   ; SS (RPL=3)

@@ -116,4 +116,37 @@ uint64_t paging_virt_to_phys_adv(uint64_t virt) {
     return phys;
 }
 
+/* Lookup mapping for virt: returns 1 if mapped and provides phys+flags. */
+int paging_lookup_adv(uint64_t virt, uint64_t *phys, uint64_t *flags) {
+    int ret = 0;
+    PAGING_LOCK();
+    uint64_t pml4_i = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_i = (virt >> 30) & 0x1FF;
+    uint64_t pd_i   = (virt >> 21) & 0x1FF;
+    uint64_t pt_i   = (virt >> 12) & 0x1FF;
+
+    if (!(pml4[pml4_i] & PAGE_PRESENT)) goto out;
+    uint64_t *pdpt_t = (uint64_t *)(pml4[pml4_i] & ~0xFFFULL);
+    if (!(pdpt_t[pdpt_i] & PAGE_PRESENT)) goto out;
+    uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
+    if (!(pd_t[pd_i] & PAGE_PRESENT)) goto out;
+
+    if (pd_t[pd_i] & PAGE_SIZE_2MB) {
+        if (phys) *phys = (pd_t[pd_i] & ~0x1FFFFFULL) | (virt & 0x1FFFFFULL);
+        if (flags) *flags = pd_t[pd_i];
+        ret = 1;
+        goto out;
+    }
+
+    uint64_t *pt_t = (uint64_t *)(pd_t[pd_i] & ~0xFFFULL);
+    if (!(pt_t[pt_i] & PAGE_PRESENT)) goto out;
+    if (phys) *phys = (pt_t[pt_i] & ~0xFFFULL) | (virt & 0xFFFULL);
+    if (flags) *flags = pt_t[pt_i];
+    ret = 1;
+
+out:
+    PAGING_UNLOCK();
+    return ret;
+}
+
 

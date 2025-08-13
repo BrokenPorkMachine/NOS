@@ -148,6 +148,7 @@ endif
 	$(NASM) -f elf64 -I kernel/arch/GDT/ kernel/arch/GDT/gdt.asm -o kernel/arch/GDT/gdt_flush.o
 	$(CC) $(CFLAGS) -c kernel/arch/GDT/gdt.c -o kernel/arch/GDT/gdt.o
 	$(CC) $(CFLAGS) -c kernel/arch/GDT/tss.c -o kernel/arch/GDT/tss.o
+	$(CC) $(CFLAGS) -c kernel/arch/x86/sel.c -o kernel/arch/x86/sel.o
 	$(CC) $(CFLAGS) -c kernel/macho2.c -o kernel/macho2.o
 	$(CC) $(CFLAGS) -c kernel/printf.c -o kernel/printf.o
 	$(CC) $(CFLAGS) -c kernel/nosm.c -o kernel/nosm.o
@@ -170,7 +171,7 @@ endif
 
 	$(LD) -T kernel/n2.ld -Map kernel.map kernel/n2_entry.o kernel/n2_main.o kernel/builtin_nosfs.o \
 	    kernel/agent.o kernel/agent_loader.o kernel/agent_loader_pub.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o \
-	    kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
+            kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o kernel/macho2.o kernel/printf.o kernel/nosm.o \
 	    kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
 	    kernel/VM/heap_select.o kernel/VM/legacy_heap.o \
 	    kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o kernel/uaccess.o \
@@ -220,7 +221,7 @@ disk.img: boot kernel agents bins modules
 # ===== utility =====
 clean:
 	rm -f kernel/n2_entry.o kernel/Task/context_switch.o kernel/Task/context_switch_asm.o kernel/n2_main.o kernel/builtin_nosfs.o kernel/agent.o \
-	            kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o \
+                    kernel/nosm.o kernel/agent_loader.o kernel/regx.o kernel/IPC/ipc.o kernel/Task/thread.o kernel/stubs.o kernel/arch/CPU/smp.o kernel/arch/CPU/lapic.o kernel/arch/GDT/gdt.o kernel/arch/GDT/tss.o kernel/arch/GDT/gdt_flush.o kernel/arch/x86/sel.o \
 	            kernel/macho2.o kernel/printf.o kernel.bin n2.bin O2.elf O2.bin user/libc/libc.o disk.img \
 	            kernel/VM/pmm_buddy.o kernel/VM/paging_adv.o kernel/VM/cow.o kernel/VM/numa.o \
 	            kernel/VM/heap_select.o kernel/VM/legacy_heap.o kernel/VM/nitroheap/nitroheap.o kernel/VM/nitroheap/classes.o \
