@@ -10,4 +10,4 @@ _start:
     hlt
     jmp     .Lpark
     .size _start, .-_start
-section .note.GNU-stack noalloc
+    .section .note.GNU-stack,"",@progbits
