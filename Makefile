@@ -29,7 +29,7 @@ AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 # The kernel now links against the real driver and agent implementations instead
 # of stub placeholders.  Explicitly list the required sources so the linker sees
 # the concrete implementations.
-KERNEL_SRCS := $(shell find kernel loader src/agents/regx -name '*.c') \
+KERNEL_SRCS := $(filter-out kernel/O2.c,$(shell find kernel loader src/agents/regx -name '*.c')) \
                user/agents/nosfs/nosfs.c user/agents/nosfs/nosfs_server.c \
                user/agents/nosm/nosm.c \
                nosm/drivers/IO/serial.c nosm/drivers/IO/usb.c \
@@ -41,7 +41,7 @@ KERNEL_SRCS := $(shell find kernel loader src/agents/regx -name '*.c') \
                nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
                user/libc/libc.c
 KERNEL_ASM_S   := $(shell find kernel -name '*.S')
-KERNEL_ASM_ASM := $(filter-out kernel/n2_entry.asm,$(shell find kernel -name '*.asm'))
+KERNEL_ASM_ASM := $(shell find kernel -name '*.asm')
 # Convert each source type to its object path without leaving the original
 # source names in the list, ensuring the linker only sees object files.  Use a
 # distinct suffix for `.asm` objects so files sharing the same stem as a C
