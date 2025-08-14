@@ -1,6 +1,6 @@
 #include "arch/IDT/isr.h"
 #ifndef kprintf
-#include <stdio.h>
+#include "../../klib/stdio.h"
 #define kprintf printf
 #endif
 
