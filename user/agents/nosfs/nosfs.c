@@ -128,7 +128,6 @@ void nosfs_init(nosfs_fs_t *fs) {
     pthread_mutex_init(&fs->mutex, NULL);
     nosfs_journal_init();
     undo_log.type = NOSFS_UNDO_NONE;
-    atomic_store(&nosfs_ready, 1);
 }
 
 void nosfs_destroy(nosfs_fs_t *fs) {

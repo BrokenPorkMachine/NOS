@@ -36,10 +36,8 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     // boot can continue even if device loading is slow.  If the kernel already
     // staged modules into an existing instance (e.g. before this server
     // thread started) avoid re-initialising to preserve those files.
-    if (!nosfs_is_ready()) {
+    if (!nosfs_is_ready())
         nosfs_init(&nosfs_root);
-        atomic_store(&nosfs_ready, 1);
-    }
     kprintf("[nosfs] server ready\n");
 
     /* If the kernel staged boot modules into the filesystem before this server
@@ -52,6 +50,8 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     } else {
         kprintf("[nosfs] formatting new filesystem\n");
     }
+
+    atomic_store(&nosfs_ready, 1);
 
     // Optional one-time debug listing (uncomment if needed)
     nosfs_debug_list_all();

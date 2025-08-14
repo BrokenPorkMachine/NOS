@@ -107,12 +107,6 @@ static void load_module(const void *m)
     if (!mod || !mod->base || !mod->name)
         return;
 
-    /* Wait a bit for NOSFS to come up; skip if it never does. */
-    for (int i = 0; i < 1000 && !nosfs_is_ready(); ++i)
-        thread_yield();
-    if (!nosfs_is_ready())
-        return;
-
     const char *name = mod->name;
     if (name[0] == '/')
         name++;
