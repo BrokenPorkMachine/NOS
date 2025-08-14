@@ -21,8 +21,8 @@ test_pmm: unit/test_pmm.c ../kernel/VM/pmm.c ../kernel/VM/pmm_buddy.c ../kernel/
 test_login: unit/test_login.c ../user/agents/login/login.c $(LIBC_SRC) ../kernel/IPC/ipc.c ../kernel/agent.c
 	$(CC) $(CFLAGS) -DLOGIN_UNIT_TEST $^ -o $@
 
-test_login_keyboard: unit/test_login_keyboard.c ../user/agents/login/login.c \
-../nosm/drivers/IO/tty.c $(LIBC_SRC) ../kernel/IPC/ipc.c ../kernel/agent.c
+test_login_keyboard: unit/test_login_keyboard.c ../user/agents/login/login.c $(LIBC_SRC) \
+        ../kernel/IPC/ipc.c ../kernel/agent.c
 	$(CC) $(CFLAGS) -DLOGIN_UNIT_TEST $^ -o $@
 
 test_ftp: unit/test_ftp.c ../user/agents/ftp/ftp.c ../kernel/IPC/ipc.c $(LIBC_SRC)
