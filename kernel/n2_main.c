@@ -20,6 +20,7 @@
 #include "arch_x86_64/gdt_tss.h"
 #include "VM/numa.h"
 #include "VM/pmm_buddy.h"
+#include "VM/pmm.h"
 #include "VM/vmm.h"
 #include "VM/heap.h"
 #include "VM/paging_adv.h"
