@@ -2,6 +2,21 @@
 #include <stdio.h>
 #include <hal.h>
 
+static uint64_t last_id;
+static int last_status;
+
+static void reg_cb(uint64_t id, int status, void *ctx) {
+    (void)ctx;
+    last_id = id;
+    last_status = status;
+}
+
+static void unreg_cb(uint64_t id, int status, void *ctx) {
+    (void)ctx;
+    last_id = id;
+    last_status = status;
+}
+
 int main(void) {
     hal_init();
 
@@ -13,7 +28,9 @@ int main(void) {
         .capabilities = "serial"
     };
 
-    uint64_t id = hal_register(&dev, 0);
+    hal_register_async(&dev, 0, reg_cb, NULL);
+    assert(last_status == 0);
+    uint64_t id = last_id;
     assert(id != 0);
 
     const regx_entry_t *e = hal_query(id);
@@ -28,7 +45,9 @@ int main(void) {
     assert(n == 1);
     assert(out[0].id == id);
 
-    assert(hal_unregister(id) == 0);
+    hal_unregister_async(id, unreg_cb, NULL);
+    assert(last_status == 0);
+
     hal_shutdown();
     return 0;
 }

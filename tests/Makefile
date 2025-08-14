@@ -51,7 +51,7 @@ test_nitroheap: unit/test_nitroheap.c ../kernel/VM/nitroheap/nitroheap.c \
 ../kernel/VM/nitroheap/classes.c buddy_stub.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
-test_hal: unit/test_hal.c ../kernel/hal.c ../kernel/regx.c $(LIBC_SRC)
+test_hal: unit/test_hal.c ../kernel/hal.c ../kernel/hal_async.c ../kernel/regx.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:

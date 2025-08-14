@@ -21,6 +21,18 @@ thread_t *thread_current(void) { return &dummy_thread; }
 void thread_block(thread_t *t) { (void)t; }
 void thread_unblock(thread_t *t) { (void)t; }
 
+thread_t *thread_create(void (*func)(void)) {
+    if (func) func();
+    return &dummy_thread;
+}
+
+thread_t *thread_create_with_priority(void (*func)(void), int priority) {
+    (void)priority;
+    return thread_create(func);
+}
+
+void thread_join(thread_t *t) { (void)t; }
+
 /* New scheduler entry points */
 void scheduler_enqueue(thread_t *t) { (void)t; }
 void scheduler_pick_and_run(void) {}
