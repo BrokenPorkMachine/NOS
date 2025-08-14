@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
-#include <stdlib.h>
+#include "klib/stdlib.h"
 
 extern size_t thread_struct_size;
 
