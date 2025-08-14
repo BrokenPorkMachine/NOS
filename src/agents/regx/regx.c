@@ -66,9 +66,19 @@ static void spawn_init_once(void) {
     if (!atomic_compare_exchange_strong(&init_spawned, &expected, 1))
         return;
 
-    // Wait until the filesystem server has preloaded core agents.
-    while (!nosfs_is_ready())
+    /*
+     * Wait for the filesystem server to report readiness so it can
+     * supply core agents like init.mo2.  However, avoid an indefinite
+     * stall if NOSFS fails to come up (e.g. missing device driver).
+     * After a bounded number of yields fall back to launching init
+     * directly; the init and login agents are also bundled as boot
+     * modules so boot can continue in a degraded mode.
+     */
+    for (int i = 0; i < 1000 && !nosfs_is_ready(); ++i)
         thread_yield();
+
+    if (!nosfs_is_ready())
+        kprintf("[regx] NOSFS not ready, launching init anyway\n");
 
     for (;;) {
         kprintf("[regx] launching init (boot:init:regx)\n");
