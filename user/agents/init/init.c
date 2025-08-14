@@ -35,7 +35,7 @@ void init_main(const AgentAPI *api, uint32_t self_tid)
 
     dyld2_init(api);
 
-    const char *login_path = "/agents/login.mo2";
+    const char *login_path = "agents/login.mo2";
     if (api->puts)
         api->puts("[init] launching login\n");
     kprintf("[init] launching login\n");
