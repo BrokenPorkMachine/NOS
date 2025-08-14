@@ -3,6 +3,7 @@
 #include "../../libc/libc.h"
 #include "../../../nosm/drivers/IO/video.h"
 #include "../../../nosm/drivers/IO/keyboard.h"
+#include "../../../nosm/drivers/IO/tty.h"
 
 #define MAX_WINDOWS 8
 
@@ -13,6 +14,7 @@ typedef struct {
 } win_t;
 
 void window_server(ipc_queue_t *q, uint32_t self_id) {
+    tty_enable_framebuffer(1);
     win_t wins[MAX_WINDOWS];
     memset(wins, 0, sizeof(wins));
     uint32_t next_id = 1;
