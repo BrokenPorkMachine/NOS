@@ -328,7 +328,9 @@ void n2_main(bootinfo_t *bootinfo) {
     for (int i = 0; i < 1000 && !n2_agent_get("login"); ++i)
         thread_yield();
     if (!n2_agent_get("login")) {
-        int tid = agent_loader_run_from_path("init.mo2", MAX_PRIORITY);
+        int tid = agent_loader_run_from_path("agents/init.mo2", MAX_PRIORITY);
+        if (tid < 0)
+            tid = agent_loader_run_from_path("init.mo2", MAX_PRIORITY);
         serial_printf("[N2] fallback init launch tid=%d\n", tid);
     }
 
