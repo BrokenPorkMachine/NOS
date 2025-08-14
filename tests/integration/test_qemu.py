@@ -10,10 +10,14 @@ def run_qemu():
         result = subprocess.run(
             [
                 "qemu-system-x86_64",
+                "-cpu",
+                "max",
                 "-bios",
                 "/usr/share/ovmf/OVMF.fd",
                 "-drive",
                 "file=disk.img,format=raw",
+                "-drive",
+                "file=fs.img,format=raw",
                 "-m",
                 "512M",
                 "-netdev",
