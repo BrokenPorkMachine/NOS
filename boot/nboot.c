@@ -118,18 +118,8 @@ static UINTN show_menu(EFI_SYSTEM_TABLE *st, menu_entry_t *entries, UINTN count)
         vprint_dec(st, i+1); vprint_ascii(st, ": ");
         vprint_ascii(st, entries[i].title); vprint_ascii(st, "\r\n");
     }
-    typedef EFI_STATUS (EFIAPI *EFI_WAIT_FOR_EVENT)(UINTN, EFI_EVENT*, UINTN*);
-    EFI_WAIT_FOR_EVENT WaitForEvent = (EFI_WAIT_FOR_EVENT)st->BootServices->WaitForEvent;
-    st->ConIn->Reset(st->ConIn, FALSE);
-    EFI_INPUT_KEY key;
-    while (1) {
-        UINTN idx = 0;
-        WaitForEvent(1, &st->ConIn->WaitForKey, &idx);
-        if (!EFI_ERROR(st->ConIn->ReadKeyStroke(st->ConIn, &key))) {
-            if (key.UnicodeChar >= L'1' && key.UnicodeChar < L'1' + count)
-                return key.UnicodeChar - L'1';
-        }
-    }
+    // Auto-select the first entry to enable unattended boot
+    return 0;
 }
 
 // --- EFI File read helper ---
@@ -199,9 +189,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     if (!menu_count) {
         strcpy(menu[0].title, "Live Boot NitrOS");
         strcpy(menu[0].kernel, "n2.bin");
-        menu[0].module_count = 2;
-        strcpy(menu[0].modules[0], "agents/init.mo2");
-        strcpy(menu[0].modules[1], "agents/login.mo2");
+        menu[0].module_count = 3;
+        strcpy(menu[0].modules[0], "agents/nosfs.mo2");
+        strcpy(menu[0].modules[1], "agents/init.mo2");
+        strcpy(menu[0].modules[2], "agents/login.mo2");
         menu_count = 1;
     }
     UINTN choice = show_menu(SystemTable, menu, menu_count);
@@ -250,24 +241,22 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     bi->modules[0].size = n2_size;
     bi->module_count = 1;
 
-    // --- Load user agents from disk ---
-    const struct { const CHAR16 *path; const char *name; } agents[] = {
-        { L"\\agents\\init.mo2",  "agents/init.mo2"  },
-        { L"\\agents\\login.mo2", "agents/login.mo2" }
-    };
-    for (UINTN i = 0; i < sizeof(agents)/sizeof(agents[0]) && bi->module_count < MAX_MODULES; ++i) {
+    // --- Load user agents from disk based on menu entry ---
+    for (UINTN i = 0; i < menu[choice].module_count && bi->module_count < MAX_MODULES; ++i) {
+        CHAR16 mod_path[128];
+        ascii_to_ucs2_path(menu[choice].modules[i], mod_path);
         void *buf = NULL; UINTN sz = 0;
-        if (EFI_ERROR(load_file(SystemTable, root, agents[i].path, EfiLoaderData, &buf, &sz))) {
+        if (EFI_ERROR(load_file(SystemTable, root, mod_path, EfiLoaderData, &buf, &sz))) {
             vprint_ascii(SystemTable, "[nboot] missing ");
-            vprint_ascii(SystemTable, agents[i].name);
+            vprint_ascii(SystemTable, menu[choice].modules[i]);
             vprint_ascii(SystemTable, "\r\n");
             continue;
         }
         char *name_copy = NULL;
-        UINTN name_len = strlen(agents[i].name) + 1;
+        UINTN name_len = strlen(menu[choice].modules[i]) + 1;
         if (!EFI_ERROR(SystemTable->BootServices->AllocatePool(EfiLoaderData, name_len, (void **)&name_copy)))
-            strcpy(name_copy, agents[i].name);
-        bi->modules[bi->module_count].name = name_copy ? name_copy : agents[i].name;
+            strcpy(name_copy, menu[choice].modules[i]);
+        bi->modules[bi->module_count].name = name_copy ? name_copy : menu[choice].modules[i];
         bi->modules[bi->module_count].base = buf;
         bi->modules[bi->module_count].size = sz;
         bi->module_count++;

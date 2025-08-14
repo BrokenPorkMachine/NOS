@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
-#include "klib/stdlib.h"
+#include "libc.h"
 #include "VM/paging_adv.h"
 
 extern size_t thread_struct_size;
@@ -19,7 +19,8 @@ void *alloc_stack(size_t size, int user_mode) {
     paging_unmap_adv(aligned + (pages + 1) * PAGE_SIZE);
     uint8_t *base = (uint8_t *)aligned + PAGE_SIZE;
     if (user_mode) {
-        uintptr_t rnd = (uintptr_t)(rand() & (PAGE_SIZE - 1));
+        // Placeholder for stack randomization; rand() not available in freestanding build
+        uintptr_t rnd = 0;
         base += rnd;
     }
     return base + pages * PAGE_SIZE;

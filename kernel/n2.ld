@@ -3,7 +3,7 @@ ENTRY(_start)
 
 SECTIONS
 {
-    KERNEL_BASE_VIRT = 0xFFFF800000000000;
+    KERNEL_BASE_VIRT = 0x0;
     KERNEL_BASE_PHYS = 0x00100000;
 
     /* Link in the high-half (VMA), but load at physical (LMA) */
