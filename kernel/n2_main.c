@@ -10,6 +10,7 @@
 #include "drivers/IO/ps2.h"
 #include "drivers/IO/block.h"
 #include "drivers/IO/sata.h"
+#include "drivers/IO/i2c.h"
 #include "drivers/Net/netstack.h"
 #include "drivers/IO/usb.h"
 #include "drivers/IO/usbkbd.h"
@@ -229,6 +230,16 @@ void n2_main(bootinfo_t *bootinfo) {
         hal_descriptor_t d = {
             .type = REGX_TYPE_BUS,
             .name = "ps2",
+            .version = "1.0",
+            .abi = "hw",
+        };
+        hal_register(&d, 0);
+    }
+    i2c_init();
+    {
+        hal_descriptor_t d = {
+            .type = REGX_TYPE_BUS,
+            .name = "i2c",
             .version = "1.0",
             .abi = "hw",
         };

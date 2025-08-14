@@ -4,9 +4,11 @@ default rel
 global isr_stub_table
 global isr_ud_stub
 global isr_timer_stub
+global isr_i2c_stub
 
 extern lapic_eoi
 extern isr_timer_handler   ; void isr_timer_handler(const void *hw_frame)
+extern isr_i2c_handler     ; void isr_i2c_handler(const void *hw_frame)
 
 section .text
 
@@ -45,13 +47,43 @@ isr_timer_stub:
     pop rax
     iretq
 
+isr_i2c_stub:
+    push rax
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    push r11
+
+    lea  rdi, [rsp + 9*8]
+    call isr_i2c_handler
+
+    call lapic_eoi
+
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rax
+    iretq
+
 section .rodata
 align 8
 isr_stub_table:
+%define I2C_VEC 42
 %assign i 0
 %rep 256
 %if i = 32
     dq isr_timer_stub
+%elif i = I2C_VEC
+    dq isr_i2c_stub
 %else
     dq isr_ud_stub
 %endif
