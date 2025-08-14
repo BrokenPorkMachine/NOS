@@ -7,7 +7,7 @@ CFLAGS=-Wall -Wextra -std=gnu11 \
 
 LIBC_SRC=../user/libc/libc.c thread_stub.c smp_stub.c gdt_stub.c kprintf_stub.c vmm_stub.c ../kernel/uaccess.c
 
-UNIT_TESTS=test_ipc test_pmm test_login test_ftp test_login_keyboard test_net test_gdt test_nosm test_nosfs test_regx test_thread test_nitroheap test_hal test_macho2
+UNIT_TESTS=test_ipc test_pmm test_login test_ftp test_login_keyboard test_net test_gdt test_nosm test_nosfs test_regx test_thread test_nitroheap test_hal test_macho2 test_regx_load
 
 all: $(UNIT_TESTS)
 	for t in $(UNIT_TESTS); do ./$$t; done
@@ -42,6 +42,9 @@ test_nosm: unit/test_nosm.c ../kernel/IPC/ipc.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_regx: unit/test_regx.c ../kernel/regx.c $(LIBC_SRC)
+	$(CC) $(CFLAGS) $^ -o $@
+
+test_regx_load: unit/test_regx_load.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_thread: unit/test_thread.c ../kernel/Task/thread.c thread_test_stubs.c $(filter-out thread_stub.c,$(LIBC_SRC))
