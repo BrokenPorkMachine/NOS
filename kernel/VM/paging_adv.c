@@ -10,6 +10,9 @@ static volatile int page_lock = 0;
 #define PAGING_LOCK()   while(__sync_lock_test_and_set(&page_lock,1)){}
 #define PAGING_UNLOCK() __sync_lock_release(&page_lock)
 
+// Static page tables (identity map first 4GB as in legacy paging)
+// Export the top-level PML4 so the VMM can share kernel mappings with
+// per-task page tables.
 // Static kernel page tables (identity map first 4GB as in legacy paging)
 static uint64_t __attribute__((aligned(PAGE_SIZE))) kernel_pml4[512];
 static uint64_t __attribute__((aligned(PAGE_SIZE), unused)) pdpt[512];
@@ -64,7 +67,8 @@ void paging_map_adv(uint64_t virt, uint64_t phys, uint64_t flags, uint32_t order
 out:
     // failed allocation, nothing mapped
 done:
-    PAGING_UNLOCK();
+    
+  _UNLOCK();
 }
 
 void paging_unmap_adv(uint64_t virt) {
@@ -100,9 +104,10 @@ uint64_t paging_virt_to_phys_adv(uint64_t virt) {
     uint64_t pd_i   = (virt >> 21) & 0x1FF;
     uint64_t pt_i   = (virt >> 12) & 0x1FF;
 
-    if (!(current_pml4[pml4_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
+  
+  if (!(current_pml4[pml4_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
     uint64_t *pdpt_t = (uint64_t *)(current_pml4[pml4_i] & ~0xFFFULL);
-    if (!(pdpt_t[pdpt_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
+  if (!(pdpt_t[pdpt_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
     uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
     if (!(pd_t[pd_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
 

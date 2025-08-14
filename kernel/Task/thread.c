@@ -10,6 +10,7 @@
 #include "arch_x86_64/gdt_tss.h"
 #include "../arch/CPU/smp.h"
 #include <kernel/api.h>
+#include "VM/vmm.h"
 #include "../VM/paging_adv.h"
 
 extern int kprintf(const char *fmt, ...);
@@ -146,6 +147,7 @@ void threads_early_init(void){
     memset(&main_thread,0,sizeof(main_thread));
     main_thread.magic=THREAD_MAGIC; main_thread.id=0; main_thread.state=THREAD_RUNNING; main_thread.started=1;
     main_thread.priority=MIN_PRIORITY; main_thread.next=&main_thread;
+    main_thread.pml4 = paging_kernel_pml4;
     uint64_t rsp; __asm__ volatile("mov %%rsp,%0":"=r"(rsp));
     main_thread.rsp=rsp;
     main_thread.pml4=paging_kernel_pml4();
@@ -243,8 +245,10 @@ void schedule(void){
     }
 
     next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next;
+    vmm_switch(next->pml4);
     if(prev->pml4!=next->pml4)
-        paging_switch(next->pml4);
+
+      paging_switch(next->pml4);
     context_switch(&prev->rsp,next->rsp);
     if(prev->state==THREAD_EXITED) add_to_zombie_list(prev);
     thread_reap();
@@ -256,6 +260,7 @@ uint64_t schedule_from_isr(uint64_t *old_rsp){
     thread_t *next=pick_next(cpu);
     if(!next){ current_cpu[cpu]=prev; prev->state=THREAD_RUNNING; return (uint64_t)old_rsp; }
     next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next;
+    vmm_switch(next->pml4);
     if(prev->pml4!=next->pml4)
         paging_switch(next->pml4);
     kprintf("[sched_isr] switch to tid=%d func=%p rsp=%p\n", next->id, (void*)next->func, (void*)next->rsp);
@@ -346,6 +351,11 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
     t->started=0;
     t->priority=priority;
     t->next=NULL;
+    t->pml4=vmm_create_pml4();
+    if(!t->pml4){
+        t->magic=0;
+        return NULL;
+    }
 
     kprintf("[thread] spawn id=%d entry=%p stack=%p-%p prio=%d\n",
             t->id, func, t->stack, t->stack+STACK_SIZE, priority);
