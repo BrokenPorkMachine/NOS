@@ -37,6 +37,69 @@ static void lock_release(const char *name) {
     __sync_lock_release(&regx_lock.locked);
 }
 
+// ---- Public hooks you likely already have ----
+// extern void regx_lock(void);
+// extern void regx_unlock(void);
+// extern void klog(const char *fmt, ...);
+// extern bool regx_has_key(const char *module_name, const char *key);
+// extern void regx_add_key(const char *module_name, const char *key, bool value);
+// extern void regx_create_entry_storage(const char *module_name); // your existing low-level entry creator
+
+// ---- Minimal-boot setting: only check app.launch in early boot ----
+static bool g_regx_minimal_boot_verification = true;
+
+// Always give app.launch to these system modules
+static void regx_force_core_launch_permission(const char *module_name) {
+    static const char *core_modules[] = { "NOSM", "NOSFS", "INIT", NULL };
+
+    for (const char **m = core_modules; *m; ++m) {
+        if (strcmp(module_name, *m) == 0) {
+            // Ensure we don't double-spam logs if called multiple times
+            if (!regx_has_key(module_name, "app.launch")) {
+                klog("[regx] Forcing app.launch permission for core module: %s", module_name);
+                regx_add_key(module_name, "app.launch", true);
+            }
+            break;
+        }
+    }
+}
+
+// Create a registry entry and inject defaults for core modules
+void regx_create_entry(const char *module_name) {
+    regx_lock();
+    regx_create_entry_storage(module_name);
+    regx_force_core_launch_permission(module_name);
+    regx_unlock();
+}
+
+// Verification used by the launcher. In minimal boot, only app.launch matters.
+bool regx_verify(const char *module_name) {
+    if (g_regx_minimal_boot_verification) {
+        bool ok = regx_has_key(module_name, "app.launch");
+        if (!ok) {
+            klog("[regx] DENY: %s missing app.launch", module_name);
+        }
+        return ok;
+    }
+
+    // If you have a fuller policy for later, you can put it here.
+    // return full_regx_policy_verify(module_name);
+    return regx_has_key(module_name, "app.launch");
+}
+
+// Print proof to the log that app.launch exists for a module.
+// If you have a key-iterator, call it here to dump more keys.
+// This is intentionally tiny and safe for very early boot.
+void regx_log_launch_key_status(const char *module_name) {
+    bool present = regx_has_key(module_name, "app.launch");
+    klog("[regx] %s.app.launch=%d", module_name, present ? 1 : 0);
+}
+
+// Optional: call this later (post-boot) if you want to restore full policy
+void regx_disable_minimal_boot_verification(void) {
+    g_regx_minimal_boot_verification = false;
+}
+
 static regx_entry_t regx_registry[REGX_MAX_ENTRIES];
 static size_t regx_count = 0;
 static uint64_t regx_next_id = 1;
