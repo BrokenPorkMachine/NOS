@@ -3,6 +3,7 @@
 #include "../../../include/nosm_ipc.h"
 #include "../../../nosm/drivers/IO/serial.h"
 #include <stdint.h>
+#include "regx_key.h"
 
 /* --- Minimal SHA-256 + HMAC implementation (public domain) ---------------- */
 
@@ -229,6 +230,10 @@ static int extract_manifest(const void *blob, uint32_t len, char *out, uint32_t 
 
 void nosm_server(ipc_queue_t *q, uint32_t self_id) {
     (void)self_id;
+    if (regx_verify_launch_key(REGX_LAUNCH_KEY) != 0) {
+        serial_puts("[nosm] invalid launch key\n");
+        return;
+    }
     serial_puts("[nosm] security agent online\n");
     for (;;) {
         ipc_message_t m = {0};
