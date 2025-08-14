@@ -162,7 +162,7 @@ static void net_init_thread(void) {
 
 static void start_timer_interrupts(void) {
     uint64_t f0 = read_rflags();
-    kprintf("[init] RFLAGS.IF before: %u\n", (unsigned)((f0 >> 9) & 1));
+    kprintf("[n2] RFLAGS.IF before: %u\n", (unsigned)((f0 >> 9) & 1));
 
     lapic_enable();            // enable local APIC (SVR bit 8)
     lapic_timer_init(LAPIC_TIMER_VECTOR); // program LVT timer
@@ -170,7 +170,7 @@ static void start_timer_interrupts(void) {
     sti();                     // allow interrupts globally
 
     uint64_t f1 = read_rflags();
-    kprintf("[init] RFLAGS.IF after : %u\n", (unsigned)((f1 >> 9) & 1));
+    kprintf("[n2] RFLAGS.IF after : %u\n", (unsigned)((f1 >> 9) & 1));
 }
 void n2_main(bootinfo_t *bootinfo) {
     if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI) return;
@@ -276,11 +276,9 @@ void n2_main(bootinfo_t *bootinfo) {
 
     timer_ready = 1;
 
-    /* Allow the NOSFS server to run and mark itself ready before loading
-       modules that depend on it.  The scheduler hasn't run yet, so manually
-       schedule until the filesystem reports readiness. */
-    while (!nosfs_is_ready())
-        schedule();
+    /* Avoid stalling boot if the NOSFS server fails to report readiness. */
+    if (!nosfs_is_ready())
+        vprint("[N2] NOSFS not ready, continuing boot\r\n");
 
     uint64_t rflags, cr0, cr3, cr4;
     __asm__ volatile("pushfq; pop %0" : "=r"(rflags));
