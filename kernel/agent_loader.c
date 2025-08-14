@@ -115,14 +115,27 @@ static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
         }
 
         if (rela_off && rela_sz) {
-            const Elf64_Rela *rela = (const Elf64_Rela*)((const uint8_t*)img + (rela_off - base_adj));
+            const Elf64_Rela *rela =
+                (const Elf64_Rela *)((const uint8_t *)img + (rela_off - base_adj));
             size_t count = rela_sz / rela_ent;
             for (size_t r = 0; r < count; ++r) {
                 uint32_t type = ELF64_R_TYPE(rela[r].r_info);
-                if (type == R_X86_64_RELATIVE) {
-                    uint64_t *where = (uint64_t*)(load_base + (rela[r].r_offset - base_adj));
+                uint64_t *where =
+                    (uint64_t *)(load_base + (rela[r].r_offset - base_adj));
+
+                switch (type) {
+                case R_X86_64_RELATIVE:
                     *where = (uint64_t)(load_base + rela[r].r_addend);
                     applied++;
+                    break;
+                case R_X86_64_64:
+                    if (ELF64_R_SYM(rela[r].r_info) == 0) {
+                        *where = (uint64_t)(load_base + rela[r].r_addend);
+                        applied++;
+                    }
+                    break;
+                default:
+                    break;
                 }
             }
         }
@@ -195,9 +208,9 @@ static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int p
                       dst, dst + msz);
     }
 
-    // RELATIVE relocations (no-op for current agents)
+    // Apply necessary relocations for position-independent agents
     size_t applied = apply_relocations_rela(load_base, lo, eh, img, sz);
-    serial_printf("[loader] relocations: applied %zu R_X86_64_RELATIVE\n", applied);
+    serial_printf("[loader] relocations: applied %zu\n", applied);
 
     // Compute runtime entry
     uintptr_t runtime_entry = 0;
