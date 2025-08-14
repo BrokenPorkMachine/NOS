@@ -323,10 +323,27 @@ void n2_main(bootinfo_t *bootinfo) {
     regx_start();
 
     /* Allow the registry a moment to spawn init/login.  If they never
-       register, fall back to launching init directly so the login prompt
-       still becomes available. */
+       register, attempt to launch a login agent directly from any boot
+       modules we still have in memory.  This lets the system reach a shell
+       even if the filesystem was not pre-populated with login.mo2. */
     for (int i = 0; i < 1000 && !n2_agent_get("login"); ++i)
         thread_yield();
+
+    if (!n2_agent_get("login")) {
+        for (uint32_t i = 0; i < bootinfo->module_count; ++i) {
+            const char *m = bootinfo->modules[i].name;
+            if (!m) continue;
+            if (!strcmp(m, "login.mo2") || !strcmp(m, "agents/login.mo2")) {
+                load_agent(bootinfo->modules[i].base,
+                           bootinfo->modules[i].size,
+                           m, MAX_PRIORITY);
+                break;
+            }
+        }
+    }
+
+    /* If login still isn't available, fall back to launching init from the
+       filesystem so the user at least gets a prompt. */
     if (!n2_agent_get("login")) {
         int tid = agent_loader_run_from_path("agents/init.mo2", MAX_PRIORITY);
         if (tid < 0)
