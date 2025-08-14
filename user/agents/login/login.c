@@ -1,5 +1,7 @@
 #include "login.h"
 
+extern int kprintf(const char *fmt, ...);
+
 /* Minimal manifest so the loader can discover the entry point when the
  * agent is packaged as a Mach-O2 binary. */
 __attribute__((used, section("\"__O2INFO,__manifest\"")))
@@ -73,9 +75,10 @@ static void read_line(char *buf, size_t sz, int echo_asterisk) {
 void login_server(void *fs_q, uint32_t self_id) {
     (void)fs_q;
     (void)self_id;
-
-    tty_init();
+    /* TTY initialization is expected to be done by the caller.
+     * Clear any existing output before starting. */
     tty_clear();
+    kprintf("[login] server starting\n");
     put_str("[login] server starting\n");
 
     char user[32];

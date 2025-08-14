@@ -16,7 +16,7 @@ The simplest approach is to print serial output directly to your terminal:
 ```sh
 qemu-system-x86_64 -drive format=raw,file=disk.img \
   -bios /usr/share/OVMF/OVMF_CODE.fd \
-  -device i8042 \
+  -device i8042 -device qemu-xhci -device usb-kbd \
   -serial stdio -display none -vnc :0
 ```
 
@@ -24,8 +24,9 @@ All boot messages will appear in the terminal window. You can also log to a
 file instead by using `-serial file:boot.log`.
 
 The `-device i8042` option explicitly creates a PS/2 keyboard controller so
-that input works once the login server starts. The example above hides the
-graphical window while exposing a VNC display on port 5900 for keyboard input.
+that input works once the login server starts, while `-device qemu-xhci -device
+usb-kbd` adds a USB keyboard. The example above hides the graphical window
+while exposing a VNC display on port 5900 for keyboard input.
 If you prefer a local window replace `-display none -vnc :0` with `-display sdl`.
 
 Note: Omitting both the graphical window and a VNC display disables the PS/2

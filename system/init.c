@@ -5,16 +5,24 @@
 #include "../libc/libc.h"
 #include "../loader/dyld2.h"
 
+extern int kprintf(const char *fmt, ...);
+
 void init_main(const AgentAPI *api, uint32_t self_tid)
 {
-    (void)self_tid; if(!api) return; if(api->puts) api->puts("[init] starting with dyld2\n");
+    (void)self_tid;
+    if(!api) return;
+    if(api->puts) api->puts("[init] starting with dyld2\n");
+    kprintf("[init] starting with dyld2\n");
     dyld2_init(api);
 
-    // Option A: load dyld2-managed executables explicitly
-    const char* login_path = "/agents/login.mo2"; // dynamic or static
-    const char* argvv[2] = { "login", 0 };
-    int rc = dyld2_run_exec(login_path, 1, argvv);
-    if(api->printf) api->printf("[init] login exited rc=%d\n", rc);
+    const char* login_path = "/agents/login.mo2";
+    if(api->puts) api->puts("[init] launching login\n");
+    kprintf("[init] launching login\n");
+    int tid = -1;
+    if (api->regx_load)
+        tid = api->regx_load(login_path, NULL, NULL);
+    if(api->printf) api->printf("[init] login launched tid=%d\n", tid);
+    kprintf("[init] login launched tid=%d\n", tid);
 
     if(api->puts) api->puts("[init] idle loop\n");
     for(;;){ if(api->yield) api->yield(); for(volatile int i=0;i<200000;i++) __asm__ __volatile__("pause"); }

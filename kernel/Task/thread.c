@@ -11,6 +11,7 @@
 #include "../arch/CPU/smp.h"
 #include <kernel/api.h>
 #include "VM/vmm.h"
+#include "../VM/paging_adv.h"
 
 extern int kprintf(const char *fmt, ...);
 
@@ -149,6 +150,7 @@ void threads_early_init(void){
     main_thread.pml4 = paging_kernel_pml4;
     uint64_t rsp; __asm__ volatile("mov %%rsp,%0":"=r"(rsp));
     main_thread.rsp=rsp;
+    main_thread.pml4=paging_kernel_pml4();
     current_cpu[0]=tail_cpu[0]=&main_thread;
 }
 
@@ -156,9 +158,24 @@ thread_t *thread_current(void){ return current_cpu[smp_cpu_index()]; }
 uint32_t  thread_self(void){ thread_t *t=thread_current(); return t? t->id:0; }
 
 static void add_to_zombie_list(thread_t *t){ uint64_t rf=irq_save_disable(); t->next=zombie_list; zombie_list=t; irq_restore(rf); }
+/*
+ * Reclaim zombie threads and return their descriptors to the pool.
+ * Stacks are wiped to prevent stale data from influencing future tasks
+ * or leaking sensitive information between threads.
+ */
 static void thread_reap(void){
-    uint64_t rf=irq_save_disable(); thread_t *list=zombie_list; zombie_list=NULL; irq_restore(rf);
-    for(thread_t *t=list;t;){ thread_t *n=t->next; memset(t,0,sizeof(thread_t)); t=n; }
+    uint64_t rf=irq_save_disable();
+    thread_t *list = zombie_list;
+    zombie_list = NULL;
+    irq_restore(rf);
+
+    for (thread_t *t = list; t; ) {
+        thread_t *n = t->next;
+        if (t->stack)
+            memset(t->stack, 0, STACK_SIZE);
+        memset(t, 0, sizeof(thread_t));
+        t = n;
+    }
 }
 
 static thread_t *pick_next(int cpu){
@@ -229,6 +246,9 @@ void schedule(void){
 
     next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next;
     vmm_switch(next->pml4);
+    if(prev->pml4!=next->pml4)
+
+      paging_switch(next->pml4);
     context_switch(&prev->rsp,next->rsp);
     if(prev->state==THREAD_EXITED) add_to_zombie_list(prev);
     thread_reap();
@@ -241,6 +261,8 @@ uint64_t schedule_from_isr(uint64_t *old_rsp){
     if(!next){ current_cpu[cpu]=prev; prev->state=THREAD_RUNNING; return (uint64_t)old_rsp; }
     next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next;
     vmm_switch(next->pml4);
+    if(prev->pml4!=next->pml4)
+        paging_switch(next->pml4);
     kprintf("[sched_isr] switch to tid=%d func=%p rsp=%p\n", next->id, (void*)next->func, (void*)next->rsp);
     return next->rsp;
 }
@@ -321,6 +343,9 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
 
     t->rsp=(uint64_t)sp;
     t->func=func;
+    t->pml4=paging_new_context();
+    if(!t->pml4)
+        t->pml4=paging_kernel_pml4();
     t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
     t->state=THREAD_READY;
     t->started=0;
@@ -432,13 +457,21 @@ void threads_init(void){
     __agent_loader_spawn_fn = loader_spawn_bridge;
 
     // Bring up NOSFS before other core agents so init.mo2 can be served.
-    thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 230);
+    thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, MAX_PRIORITY);
 
     // Then bring up other helpers (security gate started later once FS populated)
-    thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, 210);
+    thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, MAX_PRIORITY);
 
-    if(!t_nosfs) kprintf("[boot] failed to spawn nosfs\n");
-    if(!t_nosm)  kprintf("[boot] failed to spawn nosm\n");
+    if(t_nosfs) {
+        kprintf("[boot] launched nosfs tid=%u prio=%d\n", t_nosfs->id, t_nosfs->priority);
+    } else {
+        kprintf("[boot] failed to spawn nosfs\n");
+    }
+    if(t_nosm) {
+        kprintf("[boot] launched nosm tid=%u prio=%d\n", t_nosm->id, t_nosm->priority);
+    } else {
+        kprintf("[boot] failed to spawn nosm\n");
+    }
 
     // Capabilities: ensure clients that need the FS queue have access
     if (t_nosfs){

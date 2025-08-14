@@ -37,9 +37,10 @@ void paging_handle_fault(uint64_t err, uint64_t addr, int cpu_id);
  * Returns 0 if unmapped. */
 int paging_lookup_adv(uint64_t virt, uint64_t *phys, uint64_t *flags);
 
-static inline void paging_flush_tlb(uint64_t virt) {
-    asm volatile("invlpg (%0)" :: "r"(virt) : "memory");
-}
+/* Context management */
+uint64_t *paging_new_context(void);
+void paging_switch(uint64_t *new_pml4);
+uint64_t *paging_kernel_pml4(void);
 
 #ifdef __cplusplus
 }

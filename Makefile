@@ -15,6 +15,12 @@ AR      := $(CROSS_COMPILE)ar
 OBJCOPY := $(CROSS_COMPILE)objcopy
 NASM    := nasm
 
+# Many toolchains (e.g. LLVM's lld) attempt relocation relaxation by
+# default.  The weak references used by the kernel loader can trigger
+# "failed to convert GOTPCREL" errors unless relaxation is disabled, so
+# bake the flag into a central variable for all link steps.
+LDFLAGS := --no-relax
+
 BUILD_DIR := build
 OUT_DIR   := out
 
@@ -37,16 +43,17 @@ AGENT_CFLAGS := $(filter-out -no-pie,$(CFLAGS)) -fPIE
 # of stub placeholders.  Explicitly list the required sources so the linker sees
 # the concrete implementations.
 KERNEL_SRCS := $(filter-out kernel/O2.c,$(shell find kernel loader src/agents/regx -name '*.c')) \
-	       user/agents/nosfs/nosfs.c user/agents/nosfs/nosfs_server.c \
+	user/agents/nosfs/nosfs.c user/agents/nosfs/nosfs_server.c \
 	       user/agents/nosm/nosm.c \
 	       nosm/drivers/IO/serial.c nosm/drivers/IO/usb.c \
 	       nosm/drivers/IO/usbkbd.c nosm/drivers/IO/video.c \
 	       nosm/drivers/IO/tty.c nosm/drivers/IO/keyboard.c \
-	       nosm/drivers/IO/mouse.c nosm/drivers/IO/ps2.c \
-	       nosm/drivers/IO/block.c nosm/drivers/IO/sata.c \
-	       nosm/drivers/IO/pci.c nosm/drivers/IO/pic.c \
-	       nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
-	       user/libc/libc.c
+               nosm/drivers/IO/mouse.c nosm/drivers/IO/ps2.c \
+               nosm/drivers/IO/block.c nosm/drivers/IO/sata.c \
+               nosm/drivers/IO/pci.c nosm/drivers/IO/pic.c \
+               nosm/drivers/IO/i2c.c nosm/drivers/IO/virtio.c \
+               nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
+               user/libc/libc.c
 KERNEL_ASM_S   := $(shell find kernel -name '*.S')
 KERNEL_ASM_ASM := $(shell find kernel -name '*.asm')
 # Convert each source type to its object path without leaving the original
@@ -58,7 +65,7 @@ KERNEL_OBJS := \
     $(patsubst %.S,$(BUILD_DIR)/%.o,$(KERNEL_ASM_S)) \
     $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(KERNEL_ASM_ASM))
 
-AGENT_DIRS := user/agents/init user/agents/login
+AGENT_DIRS := user/agents/init user/agents/login user/agents/nosfs
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
 
 # Generate per-agent build rules so each agent's objects are explicitly
@@ -73,10 +80,10 @@ $(OUT_DIR)/agents/$1.elf: $(BUILD_DIR)/user/rt/rt0_user.o \
 	$$(AGENT_$1_OBJS)
   
 	@mkdir -p $$(@D)
-	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,-pie -Wl,-e,_start $$^ -o $$@
+	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,$(LDFLAGS) -Wl,-pie -Wl,-e,_start $$^ -o $$@
 endef
 
-$(foreach agent,$(AGENT_NAMES),$(eval $(call BUILD_AGENT,$(agent))))
+AGENT_RULES := $(foreach agent,$(AGENT_NAMES),$(eval $(call BUILD_AGENT,$(agent))))
 
 BIN_SRCS := $(wildcard bin/*.c)
 BIN_NAMES := $(basename $(notdir $(BIN_SRCS)))
@@ -106,9 +113,9 @@ boot:
 
 kernel: $(KERNEL_OBJS)
 	@mkdir -p $(OUT_DIR)
-	$(LD) -T kernel/n2.ld -Map $(OUT_DIR)/kernel.map $(KERNEL_OBJS) -o kernel.bin
+	$(LD) $(LDFLAGS) -T kernel/n2.ld -Map $(OUT_DIR)/kernel.map $(KERNEL_OBJS) -o kernel.bin
 	cp kernel.bin n2.bin
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.c -fPIE -o O2.elf 
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -Wl,$(LDFLAGS) kernel/O2.c -fPIE -o O2.elf
 	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property O2.elf O2.bin
 
 agents: $(AGENT_NAMES:%=$(OUT_DIR)/agents/%.mo2)
@@ -120,7 +127,7 @@ bins: $(BIN_NAMES:%=$(OUT_DIR)/bin/%.bin)
 
 $(OUT_DIR)/bin/%.elf: $(BUILD_DIR)/user/rt/rt0_user.o $(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o $(BUILD_DIR)/bin/%.o
 	@mkdir -p $(dir $@)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $@
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -Wl,$(LDFLAGS) $^ -o $@
 
 $(OUT_DIR)/bin/%.bin: $(OUT_DIR)/bin/%.elf
 	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property $< $@
@@ -129,9 +136,9 @@ modules: $(OUT_DIR)/modules/hello.mo2
 
 $(OUT_DIR)/modules/hello.mo2: $(MODULE_OBJS) $(BUILD_DIR)/user/libc/libc.o
 	@mkdir -p $(dir $@)
-	$(CC) $(O2_CFLAGS) -static -nostdlib -pie $^ -o $(OUT_DIR)/modules/hello.elf
+	$(CC) $(O2_CFLAGS) -static -nostdlib -pie -Wl,$(LDFLAGS) $^ -o $(OUT_DIR)/modules/hello.elf
 	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id \
-	    --remove-section=.note.gnu.property $(OUT_DIR)/modules/hello.elf $@
+            --remove-section=.note.gnu.property $(OUT_DIR)/modules/hello.elf $@
 
 image: disk.img fs.img
 
@@ -162,12 +169,12 @@ run: disk.img fs.img
 	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
 	    -drive file=fs.img,format=raw \
 	    -m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
-	    -device i8042 -serial stdio -display sdl
+            -device i8042 -device qemu-xhci -device usb-kbd -serial stdio -display sdl
 
 runmac: disk.img fs.img
 	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
 	-drive file=fs.img,format=raw \
-	-m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
-	-device i8042 -serial stdio -display cocoa
+        -m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
+        -device i8042 -device qemu-xhci -device usb-kbd -serial stdio -display cocoa
 
 .PHONY: boot

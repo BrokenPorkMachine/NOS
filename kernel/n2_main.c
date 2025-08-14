@@ -10,6 +10,7 @@
 #include "drivers/IO/ps2.h"
 #include "drivers/IO/block.h"
 #include "drivers/IO/sata.h"
+#include "drivers/IO/i2c.h"
 #include "drivers/Net/netstack.h"
 #include "drivers/IO/usb.h"
 #include "drivers/IO/usbkbd.h"
@@ -21,6 +22,7 @@
 #include "VM/pmm_buddy.h"
 #include "VM/vmm.h"
 #include "VM/heap.h"
+#include "VM/paging_adv.h"
 #include "arch/APIC/lapic.h"
 #include "arch/CPU/irq.h"
 #include "uaccess.h"
@@ -52,12 +54,49 @@ extern uint8_t _kernel_stack_top[];
 #define vprint(s) (void)0
 #endif
 
+/* Enable NX, SMEP and SMAP so that user mappings cannot execute or
+   access privileged memory. */
+static void enable_cpu_protections(void) {
+    uint64_t cr4;
+    __asm__ volatile("mov %%cr4,%0" : "=r"(cr4));
+    cr4 |= (1ULL<<20) | (1ULL<<21); /* SMEP | SMAP */
+    __asm__ volatile("mov %0,%%cr4" :: "r"(cr4));
+
+    uint32_t lo, hi;
+    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(0xC0000080));
+    uint64_t efer = ((uint64_t)hi << 32) | lo;
+    efer |= (1ULL << 11); /* NXE */
+    __asm__ volatile("wrmsr" :: "c"(0xC0000080), "a"((uint32_t)efer), "d"((uint32_t)(efer >> 32)));
+}
+
 static void print_acpi_info(const bootinfo_t *b) { (void)b; }
 static void print_cpu_topology(const bootinfo_t *b) { (void)b; }
 static void print_modules(const bootinfo_t *b) { (void)b; }
 static void print_framebuffer(const bootinfo_t *b) { (void)b; }
 static void print_mmap(const bootinfo_t *b) { (void)b; }
 extern void thread_yield(void);
+
+static void setup_high_half_vm(const bootinfo_t *b) {
+    uint64_t phys = b->kernel_load_base;
+    uint64_t size = b->kernel_load_size;
+    for (uint64_t off = 0; off < size; off += 0x200000ULL) {
+        paging_map_adv(KERNEL_BASE + off, phys + off,
+                       PAGE_PRESENT | PAGE_WRITABLE, 9,
+                       current_cpu_node());
+    }
+
+    uint64_t va = NOSM_BASE;
+    for (uint32_t i = 0; i < b->module_count; ++i) {
+        uint64_t mphys = (uint64_t)b->modules[i].base;
+        uint64_t msize = (b->modules[i].size + 0x1FFFFFULL) & ~0x1FFFFFULL;
+        for (uint64_t off = 0; off < msize; off += 0x200000ULL) {
+            paging_map_adv(va + off, mphys + off,
+                           PAGE_PRESENT | PAGE_WRITABLE, 9,
+                           current_cpu_node());
+        }
+        va += msize;
+    }
+}
 
 static void load_module(const void *m)
 {
@@ -80,6 +119,46 @@ static void load_module(const void *m)
 }
 static void scheduler_loop(void) { while (1) schedule(); }
 
+/* Asynchronous hardware setup helpers */
+static void storage_init_thread(void) {
+    block_init();
+    hal_descriptor_t d_block = {
+        .type = REGX_TYPE_DRIVER,
+        .name = "block",
+        .version = "1.0",
+        .abi = "hw",
+    };
+    hal_register(&d_block, 0);
+
+    sata_init();
+    hal_descriptor_t d_sata = {
+        .type = REGX_TYPE_BUS,
+        .name = "sata",
+        .version = "1.0",
+        .abi = "hw",
+    };
+    hal_register(&d_sata, 0);
+}
+
+static void net_poll_thread(void) {
+    for (;;) {
+        net_poll();
+        thread_yield();
+    }
+}
+
+static void net_init_thread(void) {
+    net_init();
+    hal_descriptor_t d_net = {
+        .type = REGX_TYPE_DRIVER,
+        .name = "net",
+        .version = "1.0",
+        .abi = "hw",
+    };
+    hal_register(&d_net, 0);
+    thread_create(net_poll_thread);
+}
+
 static void start_timer_interrupts(void) {
     uint64_t f0 = read_rflags();
     kprintf("[init] RFLAGS.IF before: %u\n", (unsigned)((f0 >> 9) & 1));
@@ -100,6 +179,7 @@ void n2_main(bootinfo_t *bootinfo) {
 
     threads_early_init();
     serial_init();
+    enable_cpu_protections();
     vprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
     vprint("[N2] Booted by: ");
     const char *bl = bootinfo->bootloader_name;
@@ -133,8 +213,11 @@ void n2_main(bootinfo_t *bootinfo) {
     numa_init(bootinfo);
     buddy_init(bootinfo);
     vmm_init();
+    pmm_init(bootinfo);
     kheap_parse_bootarg(bootinfo->cmdline);
     kheap_init();
+
+    setup_high_half_vm(bootinfo);
 
     hal_init();
 
@@ -165,39 +248,23 @@ void n2_main(bootinfo_t *bootinfo) {
         };
         hal_register(&d, 0);
     }
-
-    block_init();
-    {
-        hal_descriptor_t d = {
-            .type = REGX_TYPE_DRIVER,
-            .name = "block",
-            .version = "1.0",
-            .abi = "hw",
-        };
-        hal_register(&d, 0);
-    }
-
-    sata_init();
+    i2c_init();
     {
         hal_descriptor_t d = {
             .type = REGX_TYPE_BUS,
-            .name = "sata",
+            .name = "i2c",
             .version = "1.0",
             .abi = "hw",
         };
         hal_register(&d, 0);
     }
 
-    net_init();
-    {
-        hal_descriptor_t d = {
-            .type = REGX_TYPE_DRIVER,
-            .name = "net",
-            .version = "1.0",
-            .abi = "hw",
-        };
-        hal_register(&d, 0);
-    }
+    /* Launch storage and network init in parallel to shorten boot time */
+    thread_t *t_storage = thread_create(storage_init_thread);
+    thread_t *t_net     = thread_create(net_init_thread);
+    thread_join(t_storage);
+    thread_join(t_net);
+
     vprint("[N2] Starting Agent Registry\r\n");
 
     n2_agent_registry_reset();
@@ -207,6 +274,12 @@ void n2_main(bootinfo_t *bootinfo) {
     vprint("[N2] Launching core service threads\r\n");
 
     timer_ready = 1;
+
+    /* Allow the NOSFS server to run and mark itself ready before loading
+       modules that depend on it.  The scheduler hasn't run yet, so manually
+       schedule until the filesystem reports readiness. */
+    while (!nosfs_is_ready())
+        schedule();
 
     uint64_t rflags, cr0, cr3, cr4;
     __asm__ volatile("pushfq; pop %0" : "=r"(rflags));

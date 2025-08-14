@@ -27,7 +27,11 @@ int serial_read(void) {
 }
 void serial_puts(const char *s) { (void)s; }
 
-int keyboard_getchar(void) { return -1; }
+void tty_init(void) {}
+void tty_clear(void) {}
+void tty_enable_framebuffer(int enable) { (void)enable; }
+void tty_write(const char *s) { (void)s; }
+int tty_getchar(void) { return serial_read(); }
 
 /* Minimal framebuffer info so tty uses video path without touching VGA memory */
 static bootinfo_framebuffer_t fb = {
@@ -55,7 +59,9 @@ void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_
 }
 
 int main(void) {
+    tty_use_vga(0);
     tty_init();
+    tty_enable_framebuffer(1);
     ipc_queue_t q; (void)q;
     login_server(&q, 0);
     assert(current_session.active);

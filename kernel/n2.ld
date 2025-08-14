@@ -3,29 +3,42 @@ ENTRY(_start)
 
 SECTIONS
 {
-    . = 0x100000;  /* Start at 1MB */
+    KERNEL_BASE_VIRT = 0x0;
+    KERNEL_BASE_PHYS = 0x00100000;
+
+    /* Link in the high-half (VMA), but load at physical (LMA) */
+    . = KERNEL_BASE_VIRT + KERNEL_BASE_PHYS;
 
     /* Text section */
-    .text ALIGN(4K) : AT(ADDR(.text)) {
+    __text_start = .;
+    .text ALIGN(4K) : AT(ADDR(.text) - KERNEL_BASE_VIRT) {
         *(.text*)
     }
+    __text_end = .;
 
     /* Read-only data */
-    .rodata ALIGN(4K) : AT(ADDR(.rodata)) {
+    __rodata_start = .;
+    .rodata ALIGN(4K) : AT(ADDR(.rodata) - KERNEL_BASE_VIRT) {
         *(.rodata*)
     }
+    __rodata_end = .;
 
     /* Data section */
-    .data ALIGN(4K) : AT(ADDR(.data)) {
+    __data_start = .;
+    .data ALIGN(4K) : AT(ADDR(.data) - KERNEL_BASE_VIRT) {
         *(.data*)
         *(.got*)
-        *(.got.plt)
+        *(.got.plt*)
     }
+    __data_end = .;
 
     /* BSS section (no file space taken) */
-    .bss ALIGN(4K) (NOLOAD) : {
+    __bss_start = .;
+    .bss ALIGN(4K) (NOLOAD) : AT(ADDR(.bss) - KERNEL_BASE_VIRT) {
         *(.bss*)
         *(COMMON)
     }
+    __bss_end = .;
+
     _end = .;
 }

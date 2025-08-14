@@ -56,6 +56,13 @@ This document outlines a proposed secure and optimized memory mapping and manage
    - Refactored MMIO helpers with explicit memory barriers
    - Shared memory creation now enforces page alignment and exposes rights checks
 
+## Virtual Address Layout
+
+- `0x0000000000000000` – `0x00007FFFFFFFFFFF`: per-task user space with randomized bases, guarded stacks and dedicated heap/IPC zones
+- `0xFFFF800000000000` – `0xFFFF8FFFFFFFFFFF`: kernel text and static data mapped via 2 MiB pages
+- `0xFFFF900000000000` – `0xFFFF9FFFFFFFFFFF`: NOSM modules, kept read-only to other tasks
+- `0xFFFFC00000000000` – `0xFFFFFFFFFFFFFFFF`: MMIO and device apertures isolated from regular memory
+
 ## Boot Sequence Overview
 
 1. Bootloader collects the UEFI memory map and populates `bootinfo_t`

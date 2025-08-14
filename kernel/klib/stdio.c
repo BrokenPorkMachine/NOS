@@ -66,34 +66,70 @@ int vprintf(const char *fmt, va_list ap) {
         ++fmt;
         if (!*fmt) break;
 
+        /* Skip optional flag and width specifiers ("%04x", "%8u", etc.).
+           The tiny kernel printf doesn't implement padding but must still
+           consume these characters so that the correct argument is read. */
+        if (*fmt == '0') {
+            ++fmt;
+        }
+        while (*fmt >= '0' && *fmt <= '9') {
+            ++fmt;
+        }
+
+        /* Handle length modifiers. We only care whether the argument is
+           "long" sized. Treat both %lx and %zu as 64-bit. */
+        int long_flag = 0;
+        if (*fmt == 'l') {
+            long_flag = 1;
+            ++fmt;
+            if (*fmt == 'l') ++fmt;  // allow "ll"
+        } else if (*fmt == 'z') {
+            long_flag = 1;
+            ++fmt;
+        }
+
+        if (!*fmt) break;
+
         switch (*fmt) {
-            case '%': putchar('%'); ++out; break;
-            case 'c': { int c = va_arg(ap, int); putchar(c); ++out; } break;
+            case '%':
+                putchar('%');
+                ++out;
+                break;
+            case 'c': {
+                int c = va_arg(ap, int);
+                putchar(c);
+                ++out;
+            } break;
             case 's': {
                 const char *s = va_arg(ap, const char*);
                 if (!s) s = "(null)";
                 while (*s) { putchar(*s++); ++out; }
             } break;
-            case 'd': case 'i': {
-                long long v = va_arg(ap, long long);
+            case 'd':
+            case 'i': {
+                long long v = long_flag ? va_arg(ap, long long)
+                                        : va_arg(ap, int);
                 k_puts_dec(v);
-                // not tracking exact count for speed (optional)
             } break;
             case 'u': {
-                unsigned long long v = va_arg(ap, unsigned long long);
+                unsigned long long v = long_flag ? va_arg(ap, unsigned long long)
+                                                  : va_arg(ap, unsigned int);
                 k_puts_udec(v);
             } break;
             case 'x': {
-                unsigned long long v = va_arg(ap, unsigned long long);
+                unsigned long long v = long_flag ? va_arg(ap, unsigned long long)
+                                                  : va_arg(ap, unsigned int);
                 k_puts_hex(v, 0);
             } break;
             case 'p': {
-                unsigned long long v = (unsigned long long)(uintptr_t)va_arg(ap, void*);
+                unsigned long long v =
+                    (unsigned long long)(uintptr_t)va_arg(ap, void*);
                 k_puts_hex(v, 1);
             } break;
             default:
-                // Unknown specifier, print literally to avoid surprises
-                putchar('%'); putchar(*fmt);
+                /* Unknown specifier, print literally to avoid surprises */
+                putchar('%');
+                putchar(*fmt);
                 out += 2;
                 break;
         }
