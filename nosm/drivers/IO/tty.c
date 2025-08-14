@@ -12,6 +12,7 @@
 static int row = 0, col = 0;
 static const bootinfo_framebuffer_t *fb_info = NULL;
 static uint32_t fb_cols = 0, fb_rows = 0;
+static int use_fb = 0;
 
 static void draw_char_fb(char c, int r, int cpos) {
     if (!fb_info) return;
@@ -29,16 +30,33 @@ static void draw_char_fb(char c, int r, int cpos) {
 }
 
 void tty_init(void) {
-    fb_info = video_get_info();
-    if (fb_info) {
-        fb_cols = fb_info->width / 8;
-        fb_rows = fb_info->height / 16;
-    }
+    use_fb = 0;
+    fb_info = NULL;
+    fb_cols = 0;
+    fb_rows = 0;
     tty_clear();
 }
 
+void tty_enable_framebuffer(int enable) {
+    if (enable) {
+        const bootinfo_framebuffer_t *info = video_get_info();
+        if (info) {
+            fb_info = info;
+            fb_cols = fb_info->width / 8;
+            fb_rows = fb_info->height / 16;
+            use_fb = 1;
+            tty_clear();
+        }
+    } else {
+        use_fb = 0;
+        fb_info = NULL;
+        fb_cols = fb_rows = 0;
+        tty_clear();
+    }
+}
+
 void tty_clear(void) {
-    if (fb_info) {
+    if (use_fb && fb_info) {
         video_clear(0);
     } else {
         volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF;
@@ -51,7 +69,7 @@ void tty_clear(void) {
 
 void tty_putc(char c) {
     serial_write(c);
-    if (fb_info) {
+    if (use_fb && fb_info) {
         if (c == '\n') {
             col = 0;
             if (++row >= (int)fb_rows)
