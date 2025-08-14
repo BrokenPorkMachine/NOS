@@ -6,6 +6,10 @@
 #define USER_TOP   0x00007FFFFFFFFFFFULL
 #define HIGH_MASK  0xFFFF000000000000ULL
 
+#define KERNEL_BASE 0xFFFF800000000000ULL
+#define NOSM_BASE   0xFFFF900000000000ULL
+#define MMIO_BASE   0xFFFFC00000000000ULL
+
 static inline bool is_canonical_u64(uint64_t x) {
     uint64_t top = x >> 48;
     return (top == 0x0000ULL) || (top == 0xFFFFULL);
