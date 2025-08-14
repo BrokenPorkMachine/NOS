@@ -31,6 +31,7 @@ static const char manifest[] =
 "  \"type\":\"nmod\",\n"
 "  \"version\":\"1.0\",\n"
 "  \"capabilities\":[\"IOPORT\"],\n"
+"  \"system\":false,\n"
 "  \"signature\":\"TEST_ONLY_ACCEPTED\"\n"
 "}\n";
 

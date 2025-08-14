@@ -154,6 +154,8 @@ Snapshot 42 created.
 ## Security & Extensibility
 
 - **Signed Everything** – bootloader, kernel, modules, and filesystem metadata.
+- **Separate trust chains** – privileged system agents are validated against a
+  system key while userland agents rely on a distinct user key.
 - **Hot Reload** – modules can be swapped live via `nosmctl`.
 - **Manifest‑based Capabilities** – fine‑grained privileges and sandboxing.
 - **Language Agnostic** – modules may be authored in C, Rust, or WebAssembly.
