@@ -151,13 +151,17 @@ static void hmac_sha256(const uint8_t *key, size_t keylen,
 
 /* ------------------------------------------------------------------------- */
 
-static const uint8_t cfg_key[] = {
-    'n','o','s','m','_','c','f','g','_','k','e','y'
+static const uint8_t system_key[] = {
+    'n','o','s','m','_','s','y','s','_','k','e','y'
+};
+static const uint8_t user_key[] = {
+    'n','o','s','m','_','u','s','r','_','k','e','y'
 };
 
 /* Very simple trust policy:
  * - Read __O2INFO manifest (JSON) from the blob
- * - Check "type":"nmod" and a "signature" == HMAC_SHA256(manifest,cfg_key) (stubbed)
+ * - Check "type":"nmod"
+ * - Verify HMAC_SHA256(manifest,key) where key is based on "system":true
  * - Translate "capabilities":[...] -> bitmap
  */
 
@@ -200,8 +204,11 @@ static int verify_signature(const char *manifest) {
     if (prefix + suffix >= sizeof(buf)) return -1;
     memcpy(buf, manifest, prefix);
     memcpy(buf + prefix, after, suffix + 1); /* include NUL */
+    int is_system = strstr(manifest, "\"system\":true") != NULL;
+    const uint8_t *key = is_system ? system_key : user_key;
+    size_t keylen = is_system ? sizeof(system_key) : sizeof(user_key);
     uint8_t digest[32];
-    hmac_sha256(cfg_key, sizeof(cfg_key), (const uint8_t*)buf, strlen(buf), digest);
+    hmac_sha256(key, keylen, (const uint8_t*)buf, strlen(buf), digest);
     return memcmp(digest, expected, 32) == 0 ? 0 : -1;
 }
 

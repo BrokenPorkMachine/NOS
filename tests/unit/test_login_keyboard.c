@@ -32,6 +32,7 @@ void tty_clear(void) {}
 void tty_enable_framebuffer(int enable) { (void)enable; }
 void tty_write(const char *s) { (void)s; }
 int tty_getchar(void) { return serial_read(); }
+void tty_use_vga(int enable) { (void)enable; }
 
 /* Minimal framebuffer info so tty uses video path without touching VGA memory */
 static bootinfo_framebuffer_t fb = {

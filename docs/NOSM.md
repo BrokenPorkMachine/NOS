@@ -9,6 +9,8 @@ conform to the N2 ABI.
 
 - **Signed and versioned** – manifests include cryptographic signatures and
   semantic versions so the kernel can verify integrity.
+- **Dual trust chains** – core system modules are signed with a system key,
+  while userland modules use a separate user key.
 - **Hot-loadable** – modules may be loaded, upgraded or unloaded at runtime
   without rebooting the system.
 - **Capability scoped** – manifests declare the capabilities and privileges
