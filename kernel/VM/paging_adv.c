@@ -162,8 +162,10 @@ uint64_t *paging_new_context(void) {
     uint64_t *pml4 = alloc_table(current_cpu_node());
     if (!pml4)
         return NULL;
-    // Copy kernel space (upper half) mappings so the task can access the kernel.
-    memcpy(pml4 + 256, kernel_pml4 + 256, 256 * sizeof(uint64_t));
+    /* The kernel is currently identity-mapped in the lower half of the
+       address space.  Copy the entire bootstrap PML4 so new contexts
+       retain mappings for kernel code, data, and stacks. */
+    memcpy(pml4, kernel_pml4, 512 * sizeof(uint64_t));
     return pml4;
 }
 

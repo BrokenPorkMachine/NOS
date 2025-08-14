@@ -108,7 +108,7 @@ static void load_module(const void *m)
         return;
 
     /* Wait a bit for NOSFS to come up; skip if it never does. */
-    for (int i = 0; i < 100 && !nosfs_is_ready(); ++i)
+    for (int i = 0; i < 1000 && !nosfs_is_ready(); ++i)
         thread_yield();
     if (!nosfs_is_ready())
         return;
@@ -116,6 +116,8 @@ static void load_module(const void *m)
     const char *name = mod->name;
     if (name[0] == '/')
         name++;
+    if (!strncmp(name, "agents/", 7))
+        name += 7;
 
     int h = nosfs_create(&nosfs_root, name, (uint32_t)mod->size, 0);
     if (h >= 0)
@@ -321,7 +323,7 @@ void n2_main(bootinfo_t *bootinfo) {
     for (int i = 0; i < 1000 && !n2_agent_get("login"); ++i)
         thread_yield();
     if (!n2_agent_get("login")) {
-        int tid = agent_loader_run_from_path("/agents/init.mo2", MAX_PRIORITY);
+        int tid = agent_loader_run_from_path("init.mo2", MAX_PRIORITY);
         serial_printf("[N2] fallback init launch tid=%d\n", tid);
     }
 

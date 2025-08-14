@@ -55,8 +55,11 @@ uint64_t *vmm_create_pml4(void) {
     uint64_t *new_pml4 = alloc_table(node);
     if (!new_pml4) return NULL;
     uint64_t *kernel_pml4 = paging_kernel_pml4();
-    for (int i = 256; i < 512; ++i)
-        new_pml4[i] = kernel_pml4[i];
+    /* Copy the full kernel PML4 so new threads inherit both lower and
+       higher-half mappings.  The kernel currently runs in the lower
+       half, so omitting those entries leaves new contexts without code
+       or stack mappings, leading to early triple faults. */
+    memcpy(new_pml4, kernel_pml4, 512 * sizeof(uint64_t));
     return new_pml4;
 }
 

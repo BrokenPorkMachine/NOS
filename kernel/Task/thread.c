@@ -245,10 +245,9 @@ void schedule(void){
     }
 
     next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next;
-    vmm_switch(next->pml4);
-    if(prev->pml4!=next->pml4)
-
-      paging_switch(next->pml4);
+    /* With all threads sharing a single address space, avoid CR3
+       switches which were pointing at incomplete page tables and
+       triggering triple faults. */
     context_switch(&prev->rsp,next->rsp);
     if(prev->state==THREAD_EXITED) add_to_zombie_list(prev);
     thread_reap();
@@ -260,9 +259,6 @@ uint64_t schedule_from_isr(uint64_t *old_rsp){
     thread_t *next=pick_next(cpu);
     if(!next){ current_cpu[cpu]=prev; prev->state=THREAD_RUNNING; return (uint64_t)old_rsp; }
     next->state=THREAD_RUNNING; next->started=1; current_cpu[cpu]=next;
-    vmm_switch(next->pml4);
-    if(prev->pml4!=next->pml4)
-        paging_switch(next->pml4);
     kprintf("[sched_isr] switch to tid=%d func=%p rsp=%p\n", next->id, (void*)next->func, (void*)next->rsp);
     return next->rsp;
 }
@@ -343,21 +339,16 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
 
     t->rsp=(uint64_t)sp;
     t->func=func;
-    t->pml4=paging_new_context();
-    if(!t->pml4)
-        t->pml4=paging_kernel_pml4();
+    /* Until per-task address spaces are fully supported, run all threads
+       on the kernel's bootstrap page table.  Using fresh, partially
+       populated PML4s left new threads without valid mappings, causing
+       early page faults and watchdog resets before init could launch. */
+    t->pml4 = paging_kernel_pml4();
     t->id=__atomic_fetch_add(&next_id,1,__ATOMIC_RELAXED);
     t->state=THREAD_READY;
     t->started=0;
     t->priority=priority;
     t->next=NULL;
-    uint64_t *new_pml4 = vmm_create_pml4();
-    if (new_pml4)
-        t->pml4 = new_pml4;
-    if (!t->pml4) {
-        t->magic = 0;
-        return NULL;
-    }
 
     kprintf("[thread] spawn id=%d entry=%p stack=%p-%p prio=%d\n",
             t->id, func, t->stack, t->stack+STACK_SIZE, priority);
