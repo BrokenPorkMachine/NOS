@@ -3,6 +3,8 @@
 #include "klib/stdlib.h"
 #include "nosfs_pub.h"
 
+void free(void *);   // declaration only; implementation comes from user/libc/libc.c
+
 /* Forward declaration provided by nosfs.c */
 extern int fs_read_all(const char *path, void **out, size_t *out_sz);
 
