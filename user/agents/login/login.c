@@ -20,6 +20,7 @@ __attribute__((weak)) void tty_init(void) {}
 __attribute__((weak)) void tty_clear(void) {}
 __attribute__((weak)) void tty_write(const char *s) { (void)s; }
 __attribute__((weak)) int  tty_getchar(void) { return -1; }
+__attribute__((weak)) void tty_enable_framebuffer(int enable) { (void)enable; }
 __attribute__((weak)) void thread_yield(void) {}
 
 /* NitroShell entry point.  In tests a custom implementation is linked in. */
@@ -76,7 +77,9 @@ void login_server(void *fs_q, uint32_t self_id) {
     (void)fs_q;
     (void)self_id;
 
-    tty_init();
+    /* Console is expected to be initialized by the system before starting the login server. */
+    /* Ensure framebuffer output is used when available to avoid touching VGA memory. */
+    tty_enable_framebuffer(1);
     tty_clear();
     kprintf("[login] server starting\n");
     put_str("[login] server starting\n");

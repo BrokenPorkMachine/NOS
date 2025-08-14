@@ -34,6 +34,14 @@ void tty_init(void) {
     fb_info = NULL;
     fb_cols = 0;
     fb_rows = 0;
+    /* Prefer framebuffer output when available before clearing the screen. */
+    const bootinfo_framebuffer_t *info = video_get_info();
+    if (info) {
+        fb_info = info;
+        fb_cols = fb_info->width / 8;
+        fb_rows = fb_info->height / 16;
+        use_fb = 1;
+    }
     tty_clear();
 }
 
