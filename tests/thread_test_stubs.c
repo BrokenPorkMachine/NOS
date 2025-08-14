@@ -17,3 +17,7 @@ int api_puts(const char *s) { (void)s; return 0; }
 int api_fs_read_all(const char *path, void *buf, size_t len, size_t *outlen) { (void)path; (void)buf; (void)len; if (outlen) *outlen = 0; return -1; }
 int api_regx_load(const char *name, const char *arg, uint32_t *out) { (void)name; (void)arg; if (out) *out = 0; return -1; }
 void api_yield(void) {}
+
+uint64_t *paging_kernel_pml4(void) { return NULL; }
+void paging_switch(uint64_t *new_pml4) { (void)new_pml4; }
+uint64_t *paging_new_context(void) { return NULL; }
