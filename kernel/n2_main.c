@@ -139,6 +139,13 @@ static void storage_init_thread(void) {
     hal_register(&d_sata, 0);
 }
 
+static void net_poll_thread(void) {
+    for (;;) {
+        net_poll();
+        thread_yield();
+    }
+}
+
 static void net_init_thread(void) {
     net_init();
     hal_descriptor_t d_net = {
@@ -148,6 +155,7 @@ static void net_init_thread(void) {
         .abi = "hw",
     };
     hal_register(&d_net, 0);
+    thread_create(net_poll_thread);
 }
 
 static void start_timer_interrupts(void) {

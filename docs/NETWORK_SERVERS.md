@@ -12,9 +12,10 @@ brief overview of the stack and how current servers make use of it follows.
 - **Purpose**: Provide a minimal, message-oriented networking layer for
   user-space services.
 - **Status**: Supports a loopback device with port multiplexing, a fixed IPv4
-  address and rudimentary ARP replies.
-- **Future work**: Introduce UDP/TCP modules and hardware NIC drivers so that
-  the existing servers can communicate beyond the emulator.
+  address, rudimentary ARP replies, and background polling of an e1000 NIC for
+  real packets.
+- **Future work**: Expand UDP/TCP handling and higher-level protocols so the
+  existing servers can communicate beyond the emulator.
 
 ## VNC Server
 

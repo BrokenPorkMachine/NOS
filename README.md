@@ -24,9 +24,9 @@
 - Mach-style IPC message passing (prototype queue implementation)
 - Simple secure heap allocator for user-space memory
 - Device drivers run in dedicated Ring 1/2 tasks; filesystems and networking remain user-mode agents
-- Minimal network stack with loopback support, IPv4 addressing and ARP replies
 - Credential-driven login agent that prints the current IP before launching NitroShell (nsh)
-- Stub VNC, SSH(SCP), and FTP agents that ride on the loopback stack and store files in NOSFS (no real networking yet)
+- Minimal network stack with loopback support, IPv4 addressing, ARP replies, and background polling for an e1000 NIC
+- Stub VNC, SSH(SCP), and FTP agents that ride on the loopback stack and store files in NOSFS; hardware packets now flow through the NIC but the services remain simplistic
 - Experimental copy-on-write paging and basic demand paging
 - Early NUMA node enumeration from bootloader memory map
 - IPC shared memory channels with rights masks
