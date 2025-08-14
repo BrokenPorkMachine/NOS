@@ -34,7 +34,7 @@ static void _put64(uint64_t x){
 }
 
 /* Dump a small window around entry, but *only* within [load_base, load_base+span). */
-static void safe_dump_window(const uint8_t* load_base, uint64_t span, const uint8_t* entry_ptr) {
+static __attribute__((unused)) void safe_dump_window(const uint8_t* load_base, uint64_t span, const uint8_t* entry_ptr) {
     const uintptr_t base = (uintptr_t)load_base;
     const uintptr_t end  = base + (uintptr_t)align_up_u64(span, PAGE_SIZE);
     const uintptr_t p    = (uintptr_t)entry_ptr;
@@ -226,27 +226,37 @@ static int elf_map_and_spawn(const void *img, size_t sz, const char *path, int p
     const uint8_t *entry_ptr = (const uint8_t *)runtime_entry;
     serial_printf("[loader] entry first bytes: %02x %02x %02x %02x\n",
                   entry_ptr[0], entry_ptr[1], entry_ptr[2], entry_ptr[3]);
-    safe_dump_window(load_base, span, entry_ptr);
+
+    /*
+     * Dumping a window around the entry point is useful when debugging
+     * loader issues, but the byte-wise probing used by safe_dump_window()
+     * can fault if the surrounding pages are not mapped yet.  Skip the
+     * dump so the agent continues booting.
+     */
+    (void)load_base; (void)span; (void)entry_ptr; // silence unused vars when disabled
 
     // Notify RegX (if configured)
     agent_gate_fn gate = agent_loader_get_gate();
-    if (gate) {
+    if (gate && path) {
         char name[32] = {0};
-        if (path && *path) {
-            const char *b = path, *p = path;
-            while (*p) { if (*p == '/' || *p == '\\') b = p + 1; ++p; }
-            size_t i = 0;
-            while (b[i] && b[i] != '.' && i < sizeof(name) - 1) { name[i] = b[i]; ++i; }
-            if (i == 0) snprintf(name, sizeof(name), "(elf)");
-        } else {
-            snprintf(name, sizeof(name), "(elf)");
+        const char *b = path, *p = path;
+        while (*p) { if (*p == '/' || *p == '\\') b = p + 1; ++p; }
+        size_t i = 0;
+        while (b[i] && b[i] != '.' && i < sizeof(name) - 1) { name[i] = b[i]; ++i; }
+        if (i == 0) {
+            const char def[] = "(elf)";
+            for (i = 0; def[i] && i < sizeof(name) - 1; ++i) name[i] = def[i];
+            name[i] = '\0';
         }
         const char *entry_sym = "agent_main";
-        char entry_hex[32]; snprintf(entry_hex, sizeof(entry_hex), "%p", (void *)runtime_entry);
+        char entry_hex[17];
+        for (int j = 0; j < 16; ++j)
+            entry_hex[j] = _hx((runtime_entry >> (4*(15 - j))) & 0xF);
+        entry_hex[16] = '\0';
         const char *caps = "";
         serial_printf("[loader] gate: name=\"%s\" entry=\"%s\" @ %s caps=\"%s\" path=\"%s\"\n",
-                      name, entry_sym, entry_hex, caps, path ? path : "(null)");
-        gate(name, entry_sym, entry_hex, caps, path ? path : "(null)");
+                      name, entry_sym, entry_hex, caps, path);
+        gate(name, entry_sym, entry_hex, caps, path);
     }
 
     // Spawn via bridge provided by agent_loader_pub.c
