@@ -6,6 +6,7 @@
 void tty_init(void);
 void tty_enable_framebuffer(int enable);
 void tty_clear(void);
+void tty_use_vga(int enable);
 void tty_putc(char c);
 void tty_write(const char *s);
 int tty_getchar(void);

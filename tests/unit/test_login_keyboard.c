@@ -55,6 +55,7 @@ void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_
 }
 
 int main(void) {
+    tty_use_vga(0);
     tty_init();
     tty_enable_framebuffer(1);
     ipc_queue_t q; (void)q;

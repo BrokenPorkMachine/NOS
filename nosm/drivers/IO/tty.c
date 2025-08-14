@@ -13,6 +13,7 @@ static int row = 0, col = 0;
 static const bootinfo_framebuffer_t *fb_info = NULL;
 static uint32_t fb_cols = 0, fb_rows = 0;
 static int use_fb = 0;
+static int use_vga = 1;
 
 static void draw_char_fb(char c, int r, int cpos) {
     if (!fb_info) return;
@@ -27,6 +28,10 @@ static void draw_char_fb(char c, int r, int cpos) {
             video_draw_pixel(px, py + 1, color);
         }
     }
+}
+
+void tty_use_vga(int enable) {
+    use_vga = enable;
 }
 
 void tty_init(void) {
@@ -58,10 +63,12 @@ void tty_enable_framebuffer(int enable) {
 void tty_clear(void) {
     if (use_fb && fb_info) {
         video_clear(0);
-    } else {
+    } else if (use_vga) {
         volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF;
         for (int i = 0; i < VGA_COLS * VGA_ROWS; ++i)
             vga[i] = (0x0F << 8) | ' ';
+    } else {
+        /* VGA disabled: nothing to clear */
     }
     row = 0;
     col = 0;
@@ -89,7 +96,7 @@ void tty_putc(char c) {
             if (++row >= (int)fb_rows)
                 row = 0;
         }
-    } else {
+    } else if (use_vga) {
         volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF;
         if (c == '\n') {
             col = 0;
@@ -109,6 +116,23 @@ void tty_putc(char c) {
             col = 0;
             if (++row >= VGA_ROWS - 1)
                 row = VGA_ROWS - 2;
+        }
+    } else {
+        /* VGA disabled: output only to serial */
+        if (c == '\n') {
+            col = 0;
+            if (++row >= VGA_ROWS - 1)
+                row = VGA_ROWS - 2;
+        } else if (c == '\b') {
+            if (col > 0) {
+                --col;
+            }
+        } else {
+            if (++col >= VGA_COLS) {
+                col = 0;
+                if (++row >= VGA_ROWS - 1)
+                    row = VGA_ROWS - 2;
+            }
         }
     }
 }
