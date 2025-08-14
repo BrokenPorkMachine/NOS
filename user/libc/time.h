@@ -17,6 +17,11 @@ struct tm {
     int tm_isdst; /* daylight savings flag */
 };
 
+struct timespec {
+    time_t tv_sec;  /* seconds */
+    long   tv_nsec; /* nanoseconds */
+};
+
 time_t time(time_t *t);
 
 #endif

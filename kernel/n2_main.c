@@ -21,6 +21,7 @@
 #include "VM/pmm.h"
 #include "VM/heap.h"
 #include "VM/paging_adv.h"
+#include "VM/numa.h"
 #include "arch/APIC/lapic.h"
 #include "arch/CPU/irq.h"
 #include "uaccess.h"
