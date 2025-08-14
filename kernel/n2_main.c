@@ -274,10 +274,6 @@ void n2_main(bootinfo_t *bootinfo) {
     threads_init();
     vprint("[N2] Launching core service threads\r\n");
 
-    /* Start the registry early so it can launch init (and login) as soon as
-       the filesystem is populated. */
-    regx_start();
-
     timer_ready = 1;
 
     /* Allow the NOSFS server to run and mark itself ready before loading
@@ -297,6 +293,14 @@ void n2_main(bootinfo_t *bootinfo) {
 
     for (uint32_t i = 0; i < bootinfo->module_count; ++i) load_module(&bootinfo->modules[i]);
     nosfs_save_device(&nosfs_root, 0);
+
+    /* With the filesystem populated, launch the registry so it can start
+       core agents like init and login. */
+    regx_start();
+
+    /* Give the registry thread a chance to spawn init before entering the
+       main scheduler loop. */
+    thread_yield();
 
     scheduler_loop();
 }
