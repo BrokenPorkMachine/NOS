@@ -3,7 +3,7 @@ CFLAGS=-Wall -Wextra -std=gnu11 \
     -I../include -I../kernel -I../kernel/VM -I../boot/include \
     -I../user/agents/nosfs -I../user/agents/login -I../user/agents/ftp \
     -I../user/libc -I../nosm/drivers/IO -I../nosm/drivers/Audio \
-    -I../nosm/drivers/Net -I../kernel/arch/GDT
+    -I../nosm/drivers/Net -I../kernel/arch/GDT -I../src/agents/regx
 
 LIBC_SRC=../user/libc/libc.c thread_stub.c smp_stub.c gdt_stub.c kprintf_stub.c vmm_stub.c ../kernel/uaccess.c
 

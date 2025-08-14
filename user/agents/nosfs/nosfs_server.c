@@ -2,6 +2,7 @@
 #include "nosfs.h"
 #include <string.h>
 #include <stdatomic.h>
+#include "regx_key.h"
 
 // Optional boot logging from kernel
 extern int kprintf(const char *fmt, ...);
@@ -25,6 +26,11 @@ static void nosfs_debug_list_all(void) {
 // sequentially and the response is sent back on the same queue.
 void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     (void)self_id;
+
+    if (regx_verify_launch_key(REGX_LAUNCH_KEY) != 0) {
+        kprintf("[nosfs] invalid launch key\n");
+        return;
+    }
 
     // Initialise filesystem; attempt to load existing NOSFS from block device.
     nosfs_init(&nosfs_root);

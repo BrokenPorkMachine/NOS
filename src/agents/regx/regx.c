@@ -7,6 +7,8 @@
 #include "../../../kernel/agent_loader.h"
 #include "../../../user/agents/nosfs/nosfs_server.h"
 #include "../../../user/libc/string_guard.h"
+#include "regx_key.h"
+#include <string.h>
 
 // Kernel console
 extern int kprintf(const char *fmt, ...);
@@ -38,6 +40,10 @@ static int _regx_load_agent(const char *path, const char *arg, uint32_t *out) {
 
 int regx_load(const char *name, const char *arg, uint32_t *out) {
     return _regx_load_agent(name, arg, out);
+}
+
+int regx_verify_launch_key(const char *key) {
+    return (key && strcmp(key, REGX_LAUNCH_KEY) == 0) ? 0 : -1;
 }
 
 // --- utils ---
