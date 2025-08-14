@@ -59,7 +59,7 @@ KERNEL_OBJS := \
     $(patsubst %.S,$(BUILD_DIR)/%.o,$(KERNEL_ASM_S)) \
     $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(KERNEL_ASM_ASM))
 
-AGENT_DIRS := user/agents/init user/agents/login
+AGENT_DIRS := user/agents/init user/agents/login user/agents/nosfs
 AGENT_NAMES := $(notdir $(AGENT_DIRS))
 
 # Generate per-agent build rules so each agent's objects are explicitly
@@ -107,7 +107,7 @@ boot:
 
 kernel: $(KERNEL_OBJS)
 	@mkdir -p $(OUT_DIR)
-	$(LD) -T kernel/n2.ld -Map $(OUT_DIR)/kernel.map $(KERNEL_OBJS) -o kernel.bin
+	$(LD) --no-relax -T kernel/n2.ld -Map $(OUT_DIR)/kernel.map $(KERNEL_OBJS) -o kernel.bin
 	cp kernel.bin n2.bin
 	$(CC) $(O2_CFLAGS) -static -nostdlib -pie kernel/O2.c -fPIE -o O2.elf 
 	$(OBJCOPY) -O binary --remove-section=.note.gnu.build-id --remove-section=.note.gnu.property O2.elf O2.bin
