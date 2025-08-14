@@ -20,6 +20,7 @@
 #include "arch_x86_64/gdt_tss.h"
 #include "VM/numa.h"
 #include "VM/pmm_buddy.h"
+#include "VM/pmm.h"
 #include "VM/vmm.h"
 #include "VM/heap.h"
 #include "VM/paging_adv.h"
@@ -259,11 +260,11 @@ void n2_main(bootinfo_t *bootinfo) {
         hal_register(&d, 0);
     }
 
-    /* Launch storage and network init in parallel to shorten boot time */
-    thread_t *t_storage = thread_create(storage_init_thread);
-    thread_t *t_net     = thread_create(net_init_thread);
-    thread_join(t_storage);
-    thread_join(t_net);
+    /* Launch storage and network init in parallel but don't block on them.
+       Some environments lack the hardware these threads probe and they may
+       never return, stalling boot.  Let them run asynchronously instead. */
+    thread_create(storage_init_thread);
+    thread_create(net_init_thread);
 
     vprint("[N2] Starting Agent Registry\r\n");
 
