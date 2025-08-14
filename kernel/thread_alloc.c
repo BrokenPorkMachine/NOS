@@ -1,17 +1,21 @@
 #include <stdint.h>
 #include <stddef.h>
-#include "libc.h"
+#include <string.h>
+#include "VM/heap.h"
 #include "VM/paging_adv.h"
 
 extern size_t thread_struct_size;
 
 void *alloc_thread_struct(void) {
-    return calloc(1, thread_struct_size);
+    void *mem = kalloc(thread_struct_size);
+    if (mem)
+        memset(mem, 0, thread_struct_size);
+    return mem;
 }
 
 void *alloc_stack(size_t size, int user_mode) {
     size_t pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-    uint8_t *mem = malloc((pages + 2) * PAGE_SIZE + PAGE_SIZE);
+    uint8_t *mem = kalloc((pages + 2) * PAGE_SIZE + PAGE_SIZE);
     if (!mem)
         return NULL;
     uintptr_t aligned = ((uintptr_t)mem + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
