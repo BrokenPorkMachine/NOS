@@ -1,4 +1,7 @@
 #include "login.h"
+#include "../../../nosm/drivers/IO/tty.h"
+#include "../../../kernel/Task/thread.h"
+#include "../nsh/nsh.h"
 
 extern int kprintf(const char *fmt, ...);
 
@@ -12,22 +15,6 @@ static const char manifest[] =
 "  \"version\": \"1.0.0\",\n"
 "  \"entry\": \"login_server\"\n"
 "}\n";
-
-/* Provide weak stubs for the minimal services the login agent relies on.
- * In standalone unit tests these will be overridden by test-specific
- * implementations. */
-__attribute__((weak)) void tty_init(void) {}
-__attribute__((weak)) void tty_clear(void) {}
-__attribute__((weak)) void tty_write(const char *s) { (void)s; }
-__attribute__((weak)) int  tty_getchar(void) { return -1; }
-__attribute__((weak)) void thread_yield(void) {}
-
-/* NitroShell entry point.  In tests a custom implementation is linked in. */
-__attribute__((weak)) void nsh_main(void *fs_q, void *pkg_q, void *upd_q,
-                                    uint32_t self_id) {
-    (void)fs_q; (void)pkg_q; (void)upd_q; (void)self_id;
-    for (;;) thread_yield();
-}
 
 volatile login_session_t current_session = {0};
 
