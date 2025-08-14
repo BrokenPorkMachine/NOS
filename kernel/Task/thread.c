@@ -148,10 +148,9 @@ void threads_early_init(void){
     memset(&main_thread,0,sizeof(main_thread));
     main_thread.magic=THREAD_MAGIC; main_thread.id=0; main_thread.state=THREAD_RUNNING; main_thread.started=1;
     main_thread.priority=MIN_PRIORITY; main_thread.next=&main_thread;
-    main_thread.pml4 = paging_kernel_pml4;
     uint64_t rsp; __asm__ volatile("mov %%rsp,%0":"=r"(rsp));
     main_thread.rsp=rsp;
-    main_thread.pml4=paging_kernel_pml4();
+    main_thread.pml4 = paging_kernel_pml4();
     current_cpu[0]=tail_cpu[0]=&main_thread;
 }
 

@@ -54,8 +54,9 @@ uint64_t *vmm_create_pml4(void) {
     int node = current_cpu_node();
     uint64_t *new_pml4 = alloc_table(node);
     if (!new_pml4) return NULL;
+    uint64_t *kernel_pml4 = paging_kernel_pml4();
     for (int i = 256; i < 512; ++i)
-        new_pml4[i] = paging_kernel_pml4[i];
+        new_pml4[i] = kernel_pml4[i];
     return new_pml4;
 }
 
