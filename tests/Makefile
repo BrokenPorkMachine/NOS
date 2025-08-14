@@ -5,7 +5,7 @@ CFLAGS=-Wall -Wextra -std=gnu11 \
     -I../user/libc -I../nosm/drivers/IO -I../nosm/drivers/Audio \
     -I../nosm/drivers/Net -I../kernel/arch/GDT
 
-LIBC_SRC=../user/libc/libc.c thread_stub.c smp_stub.c gdt_stub.c kprintf_stub.c ../kernel/uaccess.c
+LIBC_SRC=../user/libc/libc.c thread_stub.c smp_stub.c gdt_stub.c kprintf_stub.c vmm_stub.c ../kernel/uaccess.c
 
 UNIT_TESTS=test_ipc test_pmm test_login test_ftp test_login_keyboard test_net test_gdt test_nosm test_nosfs test_regx test_thread test_nitroheap test_hal
 
@@ -15,7 +15,7 @@ all: $(UNIT_TESTS)
 test_ipc: unit/test_ipc.c ../kernel/IPC/ipc.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
-test_pmm: unit/test_pmm.c ../kernel/VM/pmm_buddy.c ../kernel/VM/numa.c $(LIBC_SRC)
+test_pmm: unit/test_pmm.c ../kernel/VM/pmm.c ../kernel/VM/pmm_buddy.c ../kernel/VM/numa.c $(LIBC_SRC)
 	$(CC) $(CFLAGS) $^ -o $@
 
 test_login: unit/test_login.c ../user/agents/login/login.c $(LIBC_SRC) ../kernel/IPC/ipc.c ../kernel/agent.c
