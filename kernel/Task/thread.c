@@ -12,6 +12,7 @@
 #include <kernel/api.h>
 #include "VM/vmm.h"
 #include "../VM/paging_adv.h"
+#include "regx_key.h"
 
 extern int kprintf(const char *fmt, ...);
 
@@ -455,6 +456,11 @@ void threads_init(void){
 
     agent_loader_set_read(agentfs_read_all, agentfs_free);
     __agent_loader_spawn_fn = loader_spawn_bridge;
+
+    if (regx_verify_launch_key(REGX_LAUNCH_KEY) != 0) {
+        kprintf("[boot] regx launch key check failed\n");
+        return;
+    }
 
     // Bring up NOSFS before other core agents so init.mo2 can be served.
     thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, MAX_PRIORITY);
