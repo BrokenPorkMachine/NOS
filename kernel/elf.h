@@ -29,6 +29,7 @@
 
 /* x86_64 relocations */
 #define R_X86_64_NONE      0
+#define R_X86_64_64        1
 #define R_X86_64_RELATIVE  8
 
 /* extractors for r_info */
