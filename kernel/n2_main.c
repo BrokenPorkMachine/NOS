@@ -305,7 +305,12 @@ void n2_main(bootinfo_t *bootinfo) {
                   (rflags >> 9) & 1, cr0, cr3, cr4);
     serial_printf("[N2] runqueue len cpu0=%d\n", thread_runqueue_length(0));
 
-    for (uint32_t i = 0; i < bootinfo->module_count; ++i)
+    uint32_t module_count = bootinfo->module_count;
+    if (module_count > 16) {
+        kprintf("[N2] module_count %u exceeds max 16; clamping\n", module_count);
+        module_count = 16;
+    }
+    for (uint32_t i = 0; i < module_count; ++i)
         load_module(&bootinfo->modules[i]);
 
     if (nosfs_is_ready())

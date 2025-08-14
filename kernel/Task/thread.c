@@ -281,9 +281,13 @@ __attribute__((noreturn,used)) static void thread_start(void (*f)(void)){
     }
 
     kprintf("[thread] id=%u about to jump to entry @ %p\n", tid, (void*)entry);
-    arm_init_watchdog(1000); /* ~N ms depending on timer freq */
+    /* The previous implementation armed a watchdog for every thread
+     * and only disarmed it after the entry function returned.  Long-lived
+     * agents like the registry or filesystem never return, causing the
+     * watchdog to fire and reboot the system before userland (e.g. the
+     * login agent) could start.  Drop the watchdog so threads that run
+     * indefinitely no longer trigger spurious resets. */
     entry(&k_agent_api, tid);
-    arm_init_watchdog(0);
     kprintf("[thread] id=%u returned from entry\n", tid);
     thread_exit();
 }
