@@ -156,9 +156,24 @@ thread_t *thread_current(void){ return current_cpu[smp_cpu_index()]; }
 uint32_t  thread_self(void){ thread_t *t=thread_current(); return t? t->id:0; }
 
 static void add_to_zombie_list(thread_t *t){ uint64_t rf=irq_save_disable(); t->next=zombie_list; zombie_list=t; irq_restore(rf); }
+/*
+ * Reclaim zombie threads and return their descriptors to the pool.
+ * Stacks are wiped to prevent stale data from influencing future tasks
+ * or leaking sensitive information between threads.
+ */
 static void thread_reap(void){
-    uint64_t rf=irq_save_disable(); thread_t *list=zombie_list; zombie_list=NULL; irq_restore(rf);
-    for(thread_t *t=list;t;){ thread_t *n=t->next; memset(t,0,sizeof(thread_t)); t=n; }
+    uint64_t rf=irq_save_disable();
+    thread_t *list = zombie_list;
+    zombie_list = NULL;
+    irq_restore(rf);
+
+    for (thread_t *t = list; t; ) {
+        thread_t *n = t->next;
+        if (t->stack)
+            memset(t->stack, 0, STACK_SIZE);
+        memset(t, 0, sizeof(thread_t));
+        t = n;
+    }
 }
 
 static thread_t *pick_next(int cpu){
