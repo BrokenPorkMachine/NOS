@@ -17,8 +17,7 @@
 #include "arch/GDT/gdt_selectors.h"
 #include "arch/IDT/idt.h"
 #include "arch_x86_64/gdt_tss.h"
-#include "VM/numa.h"
-#include "VM/pmm_buddy.h"
+#include "VM/pmm.h"
 #include "VM/heap.h"
 #include "arch/APIC/lapic.h"
 #include "arch/CPU/irq.h"
@@ -161,8 +160,7 @@ void n2_main(bootinfo_t *bootinfo) {
     print_framebuffer(bootinfo);
     print_mmap(bootinfo);
 
-    numa_init(bootinfo);
-    buddy_init(bootinfo);
+    pmm_init(bootinfo);
     kheap_parse_bootarg(bootinfo->cmdline);
     kheap_init();
 
