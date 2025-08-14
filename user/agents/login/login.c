@@ -51,8 +51,12 @@ static void read_line(char *buf, size_t sz, int echo_asterisk) {
 void login_server(void *fs_q, uint32_t self_id) {
     (void)fs_q;
     (void)self_id;
-    /* TTY initialization is expected to be done by the caller.
-     * Clear any existing output before starting. */
+    /* Ensure the TTY is ready even if the caller skipped initialization.
+     * Login previously assumed another agent would prepare the TTY which
+     * meant early boot sequences that launched login directly produced no
+     * visible output.  Initialising it here makes the server self‑contained
+     * and guarantees the prompt appears. */
+    tty_init();
     tty_clear();
     kprintf("[login] server starting\n");
     put_str("[login] server starting\n");
