@@ -68,7 +68,7 @@ out:
     // failed allocation, nothing mapped
 done:
     
-  _UNLOCK();
+    PAGING_UNLOCK();
 }
 
 void paging_unmap_adv(uint64_t virt) {

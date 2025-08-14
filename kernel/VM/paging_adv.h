@@ -23,7 +23,6 @@ extern "C" {
 #define PAGE_HUGE_1GB 0x200ULL
 #define PAGE_SIZE_2MB  PAGE_HUGE_2MB
 
-extern uint64_t paging_kernel_pml4[512];
 
 // Map a virtual address to a physical one on a preferred NUMA node.
 void paging_map_adv(uint64_t virt, uint64_t phys, uint64_t flags, uint32_t order, int numa_node);
