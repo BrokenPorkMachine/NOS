@@ -351,9 +351,11 @@ thread_t *thread_create_with_priority(void(*func)(void), int priority){
     t->started=0;
     t->priority=priority;
     t->next=NULL;
-    t->pml4=vmm_create_pml4();
-    if(!t->pml4){
-        t->magic=0;
+    uint64_t *new_pml4 = vmm_create_pml4();
+    if (new_pml4)
+        t->pml4 = new_pml4;
+    if (!t->pml4) {
+        t->magic = 0;
         return NULL;
     }
 
