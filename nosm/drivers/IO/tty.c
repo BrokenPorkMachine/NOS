@@ -35,10 +35,20 @@ void tty_use_vga(int enable) {
 }
 
 void tty_init(void) {
-    use_fb = 0;
-    fb_info = NULL;
-    fb_cols = 0;
-    fb_rows = 0;
+    /* Prefer a linear framebuffer if one is available so unit tests and
+     * early boot environments without legacy VGA memory can still emit
+     * output safely.  Fallback to the traditional VGA text buffer only when
+     * no framebuffer information is present. */
+    fb_info = video_get_info();
+    if (fb_info) {
+        fb_cols = fb_info->width / 8;
+        fb_rows = fb_info->height / 16;
+        use_fb = 1;
+    } else {
+        use_fb = 0;
+        fb_cols = 0;
+        fb_rows = 0;
+    }
     tty_clear();
 }
 
