@@ -4,6 +4,7 @@
 #include "libc.h"
 #include "../boot/include/bootinfo.h"
 #include "agent.h"
+#include "agent_loader.h"
 #include "drivers/IO/serial.h"
 #include "drivers/IO/video.h"
 #include "drivers/IO/tty.h"
@@ -314,14 +315,15 @@ void n2_main(bootinfo_t *bootinfo) {
        core agents like init and login. */
     regx_start();
 
-    /* Emit init/login markers even if the actual agents fail to launch so
-       that the boot sequence remains observable. */
-    vprint("[init] stub\r\n");
-    vprint("[login] stub\r\n");
-
-    /* Give the registry thread a chance to spawn init before entering the
-       main scheduler loop. */
-    thread_yield();
+    /* Allow the registry a moment to spawn init/login.  If they never
+       register, fall back to launching init directly so the login prompt
+       still becomes available. */
+    for (int i = 0; i < 1000 && !n2_agent_get("login"); ++i)
+        thread_yield();
+    if (!n2_agent_get("login")) {
+        int tid = agent_loader_run_from_path("/agents/init.mo2", MAX_PRIORITY);
+        serial_printf("[N2] fallback init launch tid=%d\n", tid);
+    }
 
     scheduler_loop();
 }
