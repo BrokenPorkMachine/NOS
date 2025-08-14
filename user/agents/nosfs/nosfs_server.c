@@ -32,14 +32,16 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
         return;
     }
 
-    // Initialise filesystem; attempt to load existing NOSFS from block device.
+    // Initialise filesystem and mark it ready immediately so boot can
+    // continue even if device loading is slow. Then attempt to load from
+    // disk in the background.
     nosfs_init(&nosfs_root);
+    atomic_store(&nosfs_ready, 1);
+    kprintf("[nosfs] server ready\n");
     if (nosfs_load_device(&nosfs_root, 0) == 0)
         kprintf("[nosfs] loaded filesystem from disk\n");
     else
         kprintf("[nosfs] formatting new filesystem\n");
-    atomic_store(&nosfs_ready, 1);
-    kprintf("[nosfs] server ready\n");
 
     // Optional one-time debug listing (uncomment if needed)
     nosfs_debug_list_all();
