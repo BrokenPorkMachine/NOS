@@ -107,6 +107,10 @@ static void load_module(const void *m)
     if (!mod || !mod->base || !mod->name)
         return;
 
+    serial_printf("[N2] loading module name=%s size=%lu\n",
+                  mod->name ? mod->name : "(null)",
+                  (unsigned long)mod->size);
+
     /* Wait a bit for NOSFS to come up; skip if it never does. */
     for (int i = 0; i < 1000 && !nosfs_is_ready(); ++i)
         thread_yield();
@@ -120,8 +124,14 @@ static void load_module(const void *m)
         name += 7;
 
     int h = nosfs_create(&nosfs_root, name, (uint32_t)mod->size, 0);
-    if (h >= 0)
-        (void)nosfs_write(&nosfs_root, h, 0, mod->base, (uint32_t)mod->size);
+    if (h >= 0) {
+        if (nosfs_write(&nosfs_root, h, 0, mod->base, (uint32_t)mod->size) == 0)
+            serial_printf("[N2] staged %s\n", name);
+        else
+            serial_printf("[N2] write failed for %s\n", name);
+    } else {
+        serial_printf("[N2] create failed for %s\n", name);
+    }
 }
 static void scheduler_loop(void) { while (1) schedule(); }
 
@@ -306,12 +316,23 @@ void n2_main(bootinfo_t *bootinfo) {
     serial_printf("[N2] runqueue len cpu0=%d\n", thread_runqueue_length(0));
 
     uint32_t module_count = bootinfo->module_count;
+    serial_printf("[N2] bootinfo module_count=%u\n", module_count);
     if (module_count > 16) {
         kprintf("[N2] module_count %u exceeds max 16; clamping\n", module_count);
         module_count = 16;
     }
+    /* Stage all boot modules into the in-memory NOSFS instance before
+       enabling interrupts.  Timer interrupts could otherwise preempt this
+       loop and allow the NOSFS server thread to run with only a subset of
+       the modules loaded (typically just n2.bin).  That left essential
+       userland agents like init and login absent from the filesystem and
+       prevented NitroShell from launching.  Disabling interrupts around the
+       staging loop guarantees the entire module set is present when the
+       server starts. */
+    __asm__ volatile("cli");
     for (uint32_t i = 0; i < module_count; ++i)
         load_module(&bootinfo->modules[i]);
+    __asm__ volatile("sti");
 
     if (nosfs_is_ready())
         nosfs_save_device(&nosfs_root, 0);
