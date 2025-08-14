@@ -30,10 +30,15 @@ static void draw_char_fb(char c, int r, int cpos) {
 }
 
 void tty_init(void) {
-    use_fb = 0;
-    fb_info = NULL;
-    fb_cols = 0;
-    fb_rows = 0;
+    fb_info = video_get_info();
+    if (fb_info) {
+        use_fb = 1;
+        fb_cols = fb_info->width / 8;
+        fb_rows = fb_info->height / 16;
+    } else {
+        use_fb = 0;
+        fb_cols = fb_rows = 0;
+    }
     tty_clear();
 }
 
