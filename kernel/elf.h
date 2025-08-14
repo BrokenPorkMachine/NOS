@@ -23,13 +23,17 @@
 
 /* dynamic tags */
 #define DT_NULL     0
+#define DT_SYMTAB   6
 #define DT_RELA     7
 #define DT_RELASZ   8
 #define DT_RELAENT  9
+#define DT_SYMENT   11
 
 /* x86_64 relocations */
 #define R_X86_64_NONE      0
 #define R_X86_64_64        1
+#define R_X86_64_GLOB_DAT  6
+#define R_X86_64_JUMP_SLOT 7
 #define R_X86_64_RELATIVE  8
 
 /* extractors for r_info */
@@ -77,5 +81,14 @@ typedef struct {
     uint64_t r_info;
     int64_t  r_addend;
 } Elf64_Rela;
+
+typedef struct {
+    uint32_t      st_name;
+    unsigned char st_info;
+    unsigned char st_other;
+    uint16_t      st_shndx;
+    uint64_t      st_value;
+    uint64_t      st_size;
+} Elf64_Sym;
 
 #endif /* NOS_ELF_H */

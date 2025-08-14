@@ -108,11 +108,18 @@ static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
         const Elf64_Dyn *dyn_end = dyn + (ph[i].p_filesz / sizeof(Elf64_Dyn));
 
         uint64_t rela_off = 0, rela_sz = 0, rela_ent = sizeof(Elf64_Rela);
+        uint64_t sym_off = 0,  sym_ent = sizeof(Elf64_Sym);
         for (const Elf64_Dyn *d = dyn; d < dyn_end; ++d) {
-            if (d->d_tag == DT_RELA)      rela_off = d->d_un.d_ptr;
+            if (d->d_tag == DT_RELA)       rela_off = d->d_un.d_ptr;
             else if (d->d_tag == DT_RELASZ) rela_sz = d->d_un.d_val;
             else if (d->d_tag == DT_RELAENT) rela_ent = d->d_un.d_val;
+            else if (d->d_tag == DT_SYMTAB) sym_off = d->d_un.d_ptr;
+            else if (d->d_tag == DT_SYMENT) sym_ent = d->d_un.d_val;
         }
+
+        const Elf64_Sym *symtab = NULL;
+        if (sym_off)
+            symtab = (const Elf64_Sym *)((const uint8_t *)img + (sym_off - base_adj));
 
         if (rela_off && rela_sz) {
             const Elf64_Rela *rela =
@@ -129,11 +136,19 @@ static size_t apply_relocations_rela(uint8_t* load_base, uint64_t lo_for_exec,
                     applied++;
                     break;
                 case R_X86_64_64:
-                    if (ELF64_R_SYM(rela[r].r_info) == 0) {
+                case R_X86_64_GLOB_DAT:
+                case R_X86_64_JUMP_SLOT: {
+                    uint32_t sym = ELF64_R_SYM(rela[r].r_info);
+                    if (symtab && sym != 0) {
+                        const Elf64_Sym *s = (const Elf64_Sym *)((const uint8_t *)symtab + sym * sym_ent);
+                        *where = (uint64_t)(load_base + s->st_value + rela[r].r_addend);
+                        applied++;
+                    } else if (sym == 0) {
                         *where = (uint64_t)(load_base + rela[r].r_addend);
                         applied++;
                     }
                     break;
+                }
                 default:
                     break;
                 }
