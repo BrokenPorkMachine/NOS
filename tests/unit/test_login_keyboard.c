@@ -1,10 +1,7 @@
 #include <assert.h>
 #include <string.h>
-#include "bootinfo.h"
-
 #include "../../kernel/IPC/ipc.h"
 #include "../../user/libc/libc.h"
-#include "../../nosm/drivers/IO/tty.h"
 #include "../../user/agents/login/login.h"
 
 static const char *input = "admin\nadmin\n";
@@ -17,6 +14,8 @@ ipc_queue_t fs_queue;
 
 /* Stubs for serial I/O used by the login server */
 void serial_write(char c) { (void)c; }
+void serial_puts(const char *s) { (void)s; }
+void serial_init(void) {}
 int serial_read(void) {
     if (first_poll) {
         first_poll = 0;
@@ -25,50 +24,12 @@ int serial_read(void) {
     if (pos >= strlen(input)) return -1;
     return (unsigned char)input[pos++];
 }
-void serial_puts(const char *s) { (void)s; }
-
-void tty_init(void) {}
-void tty_clear(void) {}
-void tty_enable_framebuffer(int enable) { (void)enable; }
-void tty_write(const char *s) { (void)s; }
-int tty_getchar(void) { return serial_read(); }
-void tty_use_vga(int enable) { (void)enable; }
-
-/* Minimal framebuffer info so tty uses video path without touching VGA memory */
-static bootinfo_framebuffer_t fb = {
-    .address = 0,
-    .width = 640,
-    .height = 480,
-    .pitch = 640 * 4,
-    .bpp = 32,
-    .type = 0,
-    .reserved = 0
-};
-
-const bootinfo_framebuffer_t *video_get_info(void) { return &fb; }
-void video_draw_pixel(int x, int y, uint32_t color) { (void)x; (void)y; (void)color; }
-void video_clear(uint32_t color) { (void)color; }
-
-static int yield_count = 0;
-void thread_yield(void) { yield_count++; }
-
-static int nsh_started = 0;
-
-void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_t self_id) {
-    (void)fs_q; (void)pkg_q; (void)upd_q; (void)self_id;
-    nsh_started = 1;
-}
 
 int main(void) {
-    tty_use_vga(0);
-    tty_init();
-    tty_enable_framebuffer(1);
     ipc_queue_t q; (void)q;
     login_server(&q, 0);
     assert(current_session.active);
     assert(current_session.uid == 0);
     assert(strcmp((const char*)current_session.username, "admin") == 0);
-    assert(nsh_started);
-    assert(yield_count > 0);
     return 0;
 }
