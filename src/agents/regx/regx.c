@@ -27,13 +27,24 @@ extern int  agent_loader_run_from_path(const char *path, int prio);
 
 static int _regx_load_agent(const char *path, const char *arg, uint32_t *out) {
     (void)arg;
-    int tid = agent_loader_run_from_path(path, MAX_PRIORITY);
+
+    /*
+     * The agent loader expects paths relative to the root of the boot image.
+     * Many callers naturally supply an absolute path (e.g. "/agents/login.mo2"),
+     * which previously caused the lookup to fail.  Strip a leading '/' so both
+     * styles are accepted.
+     */
+    const char *clean = path;
+    if (clean && clean[0] == '/')
+        clean++;
+
+    int tid = agent_loader_run_from_path(clean, MAX_PRIORITY);
     if (tid >= 0) {
-        kprintf("[regx] launched %s tid=%d prio=%d\n", path ? path : "(null)", tid, MAX_PRIORITY);
+        kprintf("[regx] launched %s tid=%d prio=%d\n", clean ? clean : "(null)", tid, MAX_PRIORITY);
         if (out)
             *out = (uint32_t)tid;
     } else {
-        kprintf("[regx] failed to launch %s rc=%d\n", path ? path : "(null)", tid);
+        kprintf("[regx] failed to launch %s rc=%d\n", clean ? clean : "(null)", tid);
     }
     return tid;
 }
