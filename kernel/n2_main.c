@@ -19,6 +19,7 @@
 #include "arch_x86_64/gdt_tss.h"
 #include "VM/pmm.h"
 #include "VM/heap.h"
+#include "VM/paging_adv.h"
 #include "arch/APIC/lapic.h"
 #include "arch/CPU/irq.h"
 #include "uaccess.h"
@@ -56,6 +57,28 @@ static void print_modules(const bootinfo_t *b) { (void)b; }
 static void print_framebuffer(const bootinfo_t *b) { (void)b; }
 static void print_mmap(const bootinfo_t *b) { (void)b; }
 extern void thread_yield(void);
+
+static void setup_high_half_vm(const bootinfo_t *b) {
+    uint64_t phys = b->kernel_load_base;
+    uint64_t size = b->kernel_load_size;
+    for (uint64_t off = 0; off < size; off += 0x200000ULL) {
+        paging_map_adv(KERNEL_BASE + off, phys + off,
+                       PAGE_PRESENT | PAGE_WRITABLE, 9,
+                       current_cpu_node());
+    }
+
+    uint64_t va = NOSM_BASE;
+    for (uint32_t i = 0; i < b->module_count; ++i) {
+        uint64_t mphys = (uint64_t)b->modules[i].base;
+        uint64_t msize = (b->modules[i].size + 0x1FFFFFULL) & ~0x1FFFFFULL;
+        for (uint64_t off = 0; off < msize; off += 0x200000ULL) {
+            paging_map_adv(va + off, mphys + off,
+                           PAGE_PRESENT | PAGE_WRITABLE, 9,
+                           current_cpu_node());
+        }
+        va += msize;
+    }
+}
 
 static void load_module(const void *m)
 {
@@ -163,6 +186,8 @@ void n2_main(bootinfo_t *bootinfo) {
     pmm_init(bootinfo);
     kheap_parse_bootarg(bootinfo->cmdline);
     kheap_init();
+
+    setup_high_half_vm(bootinfo);
 
     hal_init();
 
