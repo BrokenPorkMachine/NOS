@@ -51,7 +51,7 @@ KERNEL_SRCS := $(filter-out kernel/O2.c,$(shell find kernel loader src/agents/re
                nosm/drivers/IO/mouse.c nosm/drivers/IO/ps2.c \
                nosm/drivers/IO/block.c nosm/drivers/IO/sata.c \
                nosm/drivers/IO/pci.c nosm/drivers/IO/pic.c \
-               nosm/drivers/IO/i2c.c \
+               nosm/drivers/IO/i2c.c nosm/drivers/IO/virtio.c \
                nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
                user/libc/libc.c
 KERNEL_ASM_S   := $(shell find kernel -name '*.S')
