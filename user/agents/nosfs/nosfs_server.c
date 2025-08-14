@@ -41,10 +41,17 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
         atomic_store(&nosfs_ready, 1);
     }
     kprintf("[nosfs] server ready\n");
-    if (nosfs_load_device(&nosfs_root, 0) == 0)
+
+    /* If the kernel staged boot modules into the filesystem before this server
+       started, preserve them instead of overwriting with whatever is on disk. */
+    if (nosfs_root.file_count > 0) {
+        kprintf("[nosfs] using preloaded filesystem (%u files)\n",
+                nosfs_root.file_count);
+    } else if (nosfs_load_device(&nosfs_root, 0) == 0) {
         kprintf("[nosfs] loaded filesystem from disk\n");
-    else
+    } else {
         kprintf("[nosfs] formatting new filesystem\n");
+    }
 
     // Optional one-time debug listing (uncomment if needed)
     nosfs_debug_list_all();
