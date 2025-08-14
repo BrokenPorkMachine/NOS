@@ -82,7 +82,8 @@ static void spawn_init_once(void) {
 
     for (;;) {
         kprintf("[regx] launching init (boot:init:regx)\n");
-        int rc = agent_loader_run_from_path("/agents/init.mo2", MAX_PRIORITY);
+        /* Boot modules are saved without directory prefixes. */
+        int rc = agent_loader_run_from_path("init.mo2", MAX_PRIORITY);
         if (rc >= 0) {
             kprintf("[regx] init agent launched rc=%d\n", rc);
             break;
