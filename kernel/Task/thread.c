@@ -458,7 +458,7 @@ void threads_init(void){
         return;
     }
 
-    // Bring up NOSFS before other core agents so init.mo2 can be served.
+    // Bring up NOSFS before other core agents so agents/init.mo2 can be served.
     thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, MAX_PRIORITY);
 
     // Then bring up other helpers (security gate started later once FS populated)
@@ -493,5 +493,5 @@ void regx_start(void){
     thread_t *t_regx = thread_create_with_priority(regx_thread_wrapper, 220);
     if(!t_regx){ kprintf("[boot] failed to spawn regx\n"); for(;;)__asm__ volatile("hlt"); }
     ipc_grant(&regx_queue, t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);
-    ipc_grant(&fs_queue,   t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);   // regx needs FS to load /agents/init.mo2
+    ipc_grant(&fs_queue,   t_regx->id, IPC_CAP_SEND | IPC_CAP_RECV);   // regx needs FS to load agents/init.mo2
 }
