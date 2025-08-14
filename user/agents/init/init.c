@@ -13,7 +13,7 @@ static const char manifest[] =
 "  \"name\": \"init\",\n"
 "  \"type\": 4,\n"
 "  \"version\": \"1.0.0\",\n"
-"  \"entry\": \"init_main\"\n"
+"  \"entry\": \"_start\"\n"
 "}\n";
 
 /* Entry point for the init agent.  It now acts as a userspace agent loader

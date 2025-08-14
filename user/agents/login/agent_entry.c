@@ -1,4 +1,5 @@
 #include "../../libc/libc.h"
+#include "../../rt/agent_abi.h"
 #include "login.h"
 
 // Real entry implemented in login.c
@@ -15,9 +16,10 @@ static const char mo2_manifest[] =
 "  \"entry\": \"_start\"\n"
 "}\n";
 
-// Single entry point expected by the loader
-void agent_main(void) {
-    login_server(NULL, 0);
+// Runtime entry expected by rt0_user.S
+void _agent_main(const AgentAPI *api, uint32_t self_id) {
+    (void)api; // API currently unused by the login server
+    login_server(NULL, self_id);
     for (;;) thread_yield();
 }
 
