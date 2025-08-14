@@ -282,10 +282,14 @@ void n2_main(bootinfo_t *bootinfo) {
 
     timer_ready = 1;
 
+
     /* Give the filesystem server a moment to come online but avoid an
        indefinite stall if it never does. */
     for (int i = 0; i < 1000 && !nosfs_is_ready(); ++i)
         thread_yield();
+
+    /* Avoid stalling boot if the NOSFS server fails to report readiness. */
+
     if (!nosfs_is_ready())
         vprint("[N2] NOSFS not ready, continuing boot\r\n");
 
