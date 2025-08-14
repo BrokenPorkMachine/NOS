@@ -296,7 +296,7 @@ void *sbrk(long inc) { return (void *)syscall3(SYS_SBRK, inc, 0, 0); }
 // ================== THREADING: RECURSIVE MUTEX ===================
 
 // ================== MALLOC FAMILY: THREAD-SAFE ===================
-#define HEAP_SIZE (128 * 1024)  // reduced to fit within early kernel heap
+#define HEAP_SIZE (512 * 1024)  // expanded to stage multiple boot modules
 #define HEAP_MAGIC 0xC0DECAFE
 
 typedef struct block_header {

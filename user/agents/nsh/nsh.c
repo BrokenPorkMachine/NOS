@@ -8,6 +8,7 @@
 #include "../../include/nosfs.h"
 #include "../nosfs/nosfs_server.h"
 #include "../../../nosm/drivers/IO/tty.h"
+#include "../../../nosm/drivers/IO/serial.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -453,6 +454,7 @@ void nsh_main(ipc_queue_t *fs_q, ipc_queue_t *pkg_q, ipc_queue_t *upd_q, uint32_
     tty_clear();
     puts_out("NitroShell ready\n");
     puts_out("type 'help' for commands\n");
+    serial_puts("[nsh] launch complete\n");
     char line[128], *argv[8];
     for (;;) {
         render_prompt();
