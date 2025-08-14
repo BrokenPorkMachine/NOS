@@ -1,28 +1,29 @@
 #include "login.h"
-#include "../../../nosm/drivers/IO/tty.h"
-#include "../../../kernel/Task/thread.h"
-#include "../nsh/nsh.h"
+#ifndef LOGIN_UNIT_TEST
+#include "../../../nosm/drivers/IO/serial.c"
+#else
+#include "../../../nosm/drivers/IO/serial.h"
+#endif
 
-extern int kprintf(const char *fmt, ...);
+#include <stdint.h>
 
 volatile login_session_t current_session = {0};
 
 /* Simple output helper (no stdio). */
-static void put_str(const char *s) { tty_write(s); }
+static void put_str(const char *s) { serial_puts(s); }
 
-/* Block until a character is available from the TTY.  While waiting we
- * yield so the scheduler can run other work. */
+/* Block until a character is available from the serial port. */
 static char getchar_block(void) {
     int ch;
     for (;;) {
-        ch = tty_getchar();
+        ch = serial_read();
         if (ch >= 0) return (char)ch;
-        thread_yield();
+        for (volatile int i = 0; i < 10000; ++i)
+            __asm__ __volatile__("pause");
     }
 }
 
-/* Read a line of text from the TTY.  The caller decides whether characters
- * are echoed back or replaced with asterisks (for passwords). */
+/* Read a line of text from the serial port. */
 static void read_line(char *buf, size_t sz, int echo_asterisk) {
     size_t n = 0;
     for (;;) {
@@ -46,19 +47,11 @@ static void read_line(char *buf, size_t sz, int echo_asterisk) {
     buf[n] = 0;
 }
 
-/* Public entry point for the login server.  fs_q is currently unused but
- * kept for ABI compatibility with the real system. */
+/* Public entry point for the login server. */
 void login_server(void *fs_q, uint32_t self_id) {
-    (void)fs_q;
-    (void)self_id;
-    /* Ensure the TTY is ready even if the caller skipped initialization.
-     * Login previously assumed another agent would prepare the TTY which
-     * meant early boot sequences that launched login directly produced no
-     * visible output.  Initialising it here makes the server self‑contained
-     * and guarantees the prompt appears. */
-    tty_init();
-    tty_clear();
-    kprintf("[login] server starting\n");
+    (void)fs_q; (void)self_id;
+
+    serial_init();
     put_str("[login] server starting\n");
 
     char user[32];
@@ -90,11 +83,11 @@ void login_server(void *fs_q, uint32_t self_id) {
         break;
     }
 
-    /* Start NitroShell; queues are not yet wired up so NULLs are passed. */
-    nsh_main(NULL, NULL, NULL, self_id);
-
 #ifndef LOGIN_UNIT_TEST
-    for (;;) thread_yield();
+    for (;;) {
+        for (volatile int i = 0; i < 200000; ++i)
+            __asm__ __volatile__("pause");
+    }
 #endif
 }
 
