@@ -1,6 +1,9 @@
-#include <stdlib.h>
+#include <stddef.h>
 #include <hal.h>
 #include "Task/thread.h"
+
+void *malloc(size_t size);
+void free(void *ptr);
 
 typedef enum {
     HAL_TASK_REG,
