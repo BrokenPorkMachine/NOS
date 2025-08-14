@@ -49,7 +49,7 @@ int nosfs_fsck(nosfs_fs_t *fs) {
 static void* nosfs_flush_worker(void *arg) {
     nosfs_fs_t *fs = (nosfs_fs_t*)arg;
     pthread_mutex_lock(&fs->mutex);
-    // ... flush dirty buffers/journal to disk/device ...
+    nosfs_save_device(fs, 0);
     pthread_mutex_unlock(&fs->mutex);
     return NULL;
 }
@@ -61,7 +61,7 @@ void nosfs_flush_async(nosfs_fs_t *fs) {
 
 void nosfs_flush_sync(nosfs_fs_t *fs) {
     pthread_mutex_lock(&fs->mutex);
-    // ... flush everything immediately ...
+    nosfs_save_device(fs, 0);
     pthread_mutex_unlock(&fs->mutex);
 }
 
