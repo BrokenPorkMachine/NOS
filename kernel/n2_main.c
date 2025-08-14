@@ -263,6 +263,12 @@ void n2_main(bootinfo_t *bootinfo) {
 
     timer_ready = 1;
 
+    /* Allow the NOSFS server to run and mark itself ready before loading
+       modules that depend on it.  The scheduler hasn't run yet, so manually
+       schedule until the filesystem reports readiness. */
+    while (!nosfs_is_ready())
+        schedule();
+
     uint64_t rflags, cr0, cr3, cr4;
     __asm__ volatile("pushfq; pop %0" : "=r"(rflags));
     __asm__ volatile("mov %%cr0,%0" : "=r"(cr0));
