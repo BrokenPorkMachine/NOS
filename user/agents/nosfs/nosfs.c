@@ -462,41 +462,40 @@ int nosfs_load_device(nosfs_fs_t *fs, uint32_t start_lba) {
 int nosfs_journal_undo_last(nosfs_fs_t *fs) { (void)fs; return -1; }
 
 // Helper for the kernel agent loader: fetch entire file contents
-// into a newly allocated buffer.  Accept both "/agents/foo" and "agents/foo".
+// into a newly allocated buffer. Accepts paths with or without an
+// optional "/agents/" prefix.
 int fs_read_all(const char *path, void **out, size_t *out_sz) {
     if (!atomic_load(&nosfs_ready) || !path || !out || !out_sz)
         return -1;
 
-    const char *original = path;
-    const char *normalized = (*path == '/') ? path + 1 : path;
+    // Normalise caller's path: drop any leading slash or "agents/" prefix
+    const char *normalized = path;
+    if (*normalized == '/')
+        normalized++;
+    if (strncmp(normalized, "agents/", 7) == 0)
+        normalized += 7;
 
     pthread_mutex_lock(&nosfs_root.mutex);
 
-    // First try WITHOUT leading slash (canonical in our store)
     for (size_t i = 0; i < nosfs_root.file_count; ++i) {
         nosfs_file_t *f = &nosfs_root.files[i];
-        if (strcmp(f->name, normalized) == 0) {
+        const char *fname = f->name;
+        if (*fname == '/')
+            fname++;
+        if (strncmp(fname, "agents/", 7) == 0)
+            fname += 7;
+
+        if (strcmp(fname, normalized) == 0) {
             void *buf = malloc(f->size);
-            if (!buf) { pthread_mutex_unlock(&nosfs_root.mutex); return -1; }
+            if (!buf) {
+                pthread_mutex_unlock(&nosfs_root.mutex);
+                return -1;
+            }
             memcpy(buf, f->data, f->size);
-            *out = buf; *out_sz = f->size;
+            *out = buf;
+            *out_sz = f->size;
             pthread_mutex_unlock(&nosfs_root.mutex);
             return 0;
-        }
-    }
-
-    // If caller passed a name WITHOUT slash while the store has WITH slash (unlikely but safe):
-    if (normalized == original) { // there was no leading slash in input
-        for (size_t i = 0; i < nosfs_root.file_count; ++i) {
-            nosfs_file_t *f = &nosfs_root.files[i];
-            if (f->name[0] == '/' && strcmp(f->name + 1, normalized) == 0) {
-                void *buf = malloc(f->size);
-                if (!buf) { pthread_mutex_unlock(&nosfs_root.mutex); return -1; }
-                memcpy(buf, f->data, f->size);
-                *out = buf; *out_sz = f->size;
-                pthread_mutex_unlock(&nosfs_root.mutex);
-                return 0;
-            }
         }
     }
 
