@@ -447,13 +447,21 @@ void threads_init(void){
     __agent_loader_spawn_fn = loader_spawn_bridge;
 
     // Bring up NOSFS before other core agents so init.mo2 can be served.
-    thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, 230);
+    thread_t *t_nosfs = thread_create_with_priority(nosfs_thread_wrapper, MAX_PRIORITY);
 
     // Then bring up other helpers (security gate started later once FS populated)
-    thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, 210);
+    thread_t *t_nosm  = thread_create_with_priority(nosm_thread_wrapper, MAX_PRIORITY);
 
-    if(!t_nosfs) kprintf("[boot] failed to spawn nosfs\n");
-    if(!t_nosm)  kprintf("[boot] failed to spawn nosm\n");
+    if(t_nosfs) {
+        kprintf("[boot] launched nosfs tid=%u prio=%d\n", t_nosfs->id, t_nosfs->priority);
+    } else {
+        kprintf("[boot] failed to spawn nosfs\n");
+    }
+    if(t_nosm) {
+        kprintf("[boot] launched nosm tid=%u prio=%d\n", t_nosm->id, t_nosm->priority);
+    } else {
+        kprintf("[boot] failed to spawn nosm\n");
+    }
 
     // Capabilities: ensure clients that need the FS queue have access
     if (t_nosfs){

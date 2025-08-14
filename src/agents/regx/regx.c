@@ -25,9 +25,13 @@ extern int  agent_loader_run_from_path(const char *path, int prio);
 
 static int _regx_load_agent(const char *path, const char *arg, uint32_t *out) {
     (void)arg;
-    int tid = agent_loader_run_from_path(path, 200);
-    if (tid >= 0 && out) {
-        *out = (uint32_t)tid;
+    int tid = agent_loader_run_from_path(path, MAX_PRIORITY);
+    if (tid >= 0) {
+        kprintf("[regx] launched %s tid=%d prio=%d\n", path ? path : "(null)", tid, MAX_PRIORITY);
+        if (out)
+            *out = (uint32_t)tid;
+    } else {
+        kprintf("[regx] failed to launch %s rc=%d\n", path ? path : "(null)", tid);
     }
     return tid;
 }
@@ -62,7 +66,7 @@ static void spawn_init_once(void) {
 
     for (;;) {
         kprintf("[regx] launching init (boot:init:regx)\n");
-        int rc = agent_loader_run_from_path("/agents/init.mo2", 200);
+        int rc = agent_loader_run_from_path("/agents/init.mo2", MAX_PRIORITY);
         if (rc >= 0) {
             kprintf("[regx] init agent launched rc=%d\n", rc);
             break;
