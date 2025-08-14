@@ -79,6 +79,38 @@ static void load_module(const void *m)
 }
 static void scheduler_loop(void) { while (1) schedule(); }
 
+/* Asynchronous hardware setup helpers */
+static void storage_init_thread(void) {
+    block_init();
+    hal_descriptor_t d_block = {
+        .type = REGX_TYPE_DRIVER,
+        .name = "block",
+        .version = "1.0",
+        .abi = "hw",
+    };
+    hal_register(&d_block, 0);
+
+    sata_init();
+    hal_descriptor_t d_sata = {
+        .type = REGX_TYPE_BUS,
+        .name = "sata",
+        .version = "1.0",
+        .abi = "hw",
+    };
+    hal_register(&d_sata, 0);
+}
+
+static void net_init_thread(void) {
+    net_init();
+    hal_descriptor_t d_net = {
+        .type = REGX_TYPE_DRIVER,
+        .name = "net",
+        .version = "1.0",
+        .abi = "hw",
+    };
+    hal_register(&d_net, 0);
+}
+
 static void start_timer_interrupts(void) {
     uint64_t f0 = read_rflags();
     kprintf("[init] RFLAGS.IF before: %u\n", (unsigned)((f0 >> 9) & 1));
@@ -164,38 +196,12 @@ void n2_main(bootinfo_t *bootinfo) {
         hal_register(&d, 0);
     }
 
-    block_init();
-    {
-        hal_descriptor_t d = {
-            .type = REGX_TYPE_DRIVER,
-            .name = "block",
-            .version = "1.0",
-            .abi = "hw",
-        };
-        hal_register(&d, 0);
-    }
+    /* Launch storage and network init in parallel to shorten boot time */
+    thread_t *t_storage = thread_create(storage_init_thread);
+    thread_t *t_net     = thread_create(net_init_thread);
+    thread_join(t_storage);
+    thread_join(t_net);
 
-    sata_init();
-    {
-        hal_descriptor_t d = {
-            .type = REGX_TYPE_BUS,
-            .name = "sata",
-            .version = "1.0",
-            .abi = "hw",
-        };
-        hal_register(&d, 0);
-    }
-
-    net_init();
-    {
-        hal_descriptor_t d = {
-            .type = REGX_TYPE_DRIVER,
-            .name = "net",
-            .version = "1.0",
-            .abi = "hw",
-        };
-        hal_register(&d, 0);
-    }
     vprint("[N2] Starting Agent Registry\r\n");
 
     n2_agent_registry_reset();
