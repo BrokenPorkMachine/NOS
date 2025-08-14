@@ -41,12 +41,13 @@ KERNEL_SRCS := $(filter-out kernel/O2.c,$(shell find kernel loader src/agents/re
 	       user/agents/nosm/nosm.c \
 	       nosm/drivers/IO/serial.c nosm/drivers/IO/usb.c \
 	       nosm/drivers/IO/usbkbd.c nosm/drivers/IO/video.c \
-	       nosm/drivers/IO/tty.c nosm/drivers/IO/keyboard.c \
-	       nosm/drivers/IO/mouse.c nosm/drivers/IO/ps2.c \
-	       nosm/drivers/IO/block.c nosm/drivers/IO/sata.c \
-	       nosm/drivers/IO/pci.c nosm/drivers/IO/pic.c \
-	       nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
-	       user/libc/libc.c
+               nosm/drivers/IO/tty.c nosm/drivers/IO/keyboard.c \
+               nosm/drivers/IO/mouse.c nosm/drivers/IO/ps2.c \
+               nosm/drivers/IO/block.c nosm/drivers/IO/sata.c \
+               nosm/drivers/IO/pci.c nosm/drivers/IO/pic.c \
+               nosm/drivers/IO/i2c.c \
+               nosm/drivers/Net/netstack.c nosm/drivers/Net/e1000.c \
+               user/libc/libc.c
 KERNEL_ASM_S   := $(shell find kernel -name '*.S')
 KERNEL_ASM_ASM := $(shell find kernel -name '*.asm')
 # Convert each source type to its object path without leaving the original
