@@ -73,14 +73,14 @@ AGENT_NAMES := $(notdir $(AGENT_DIRS))
 # named "*.o" which prevented all sources from being included.
 define BUILD_AGENT
 AGENT_$1_SRCS := $(wildcard user/agents/$1/*.c)
-AGENT_$1_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(AGENT_$1_SRCS))
+AGENT_$1_OBJS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(wildcard user/agents/$1/*.c))
 
 $(OUT_DIR)/agents/$1.elf: $(BUILD_DIR)/user/rt/rt0_user.o \
 	$(BUILD_DIR)/user/rt/rt_stubs.o $(BUILD_DIR)/user/libc/libc.o \
 	$$(AGENT_$1_OBJS)
   
 	@mkdir -p $$(@D)
-	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,$(LDFLAGS) -Wl,-pie -Wl,-e,_start $$^ -o $$@
+	$(CC) $(AGENT_CFLAGS) -nostdlib -Wl,$(LDFLAGS) -Wl,-pie -Wl,--unresolved-symbols=ignore-in-object-files -Wl,-e,_start $$^ -o $$@
 endef
 
 AGENT_RULES := $(foreach agent,$(AGENT_NAMES),$(eval $(call BUILD_AGENT,$(agent))))
