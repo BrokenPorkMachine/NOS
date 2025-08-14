@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "elf.h"
 #include "agent_loader.h"
