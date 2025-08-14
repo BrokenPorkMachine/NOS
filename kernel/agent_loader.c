@@ -68,10 +68,10 @@ static void* kalloc_aligned_or_arena(size_t bytes, size_t align) {
         // Fallback arena: single static buffer used only when the heap is not
         // yet ready.  This is intentionally small but sufficient for early
         // boot agents.
-        /* Fallback arena used before the heap is online.  Enlarged to 1 MiB
-           so early userland agents like init and login can load without
-           exhausting the buffer. */
-        static uint8_t arena[1024 * 1024];
+        /* Fallback arena used before the heap is online.  Enlarged to 2 MiB
+           so multiple early userland agents like init and login can load
+           without exhausting the buffer. */
+        static uint8_t arena[2 * 1024 * 1024];
         static size_t arena_off = 0;
         uintptr_t base = (uintptr_t)arena;
         uintptr_t p = (base + arena_off + (align - 1)) & ~(uintptr_t)(align - 1);
