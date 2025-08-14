@@ -10,10 +10,15 @@ static volatile int page_lock = 0;
 #define PAGING_LOCK()   while(__sync_lock_test_and_set(&page_lock,1)){}
 #define PAGING_UNLOCK() __sync_lock_release(&page_lock)
 
-// Static page tables (identity map first 4GB as in legacy paging)
-static uint64_t __attribute__((aligned(PAGE_SIZE))) pml4[512];
+// Static kernel page tables (identity map first 4GB as in legacy paging)
+static uint64_t __attribute__((aligned(PAGE_SIZE))) kernel_pml4[512];
 static uint64_t __attribute__((aligned(PAGE_SIZE), unused)) pdpt[512];
 static uint64_t __attribute__((aligned(PAGE_SIZE), unused)) pd[4][512];
+
+// Pointer to the page table of the currently running task.  By default we
+// operate on the kernel's bootstrap page table until a task switches in a
+// private PML4.
+static uint64_t *current_pml4 = kernel_pml4;
 
 static uint64_t *alloc_table(int numa_node) {
     void *page = buddy_alloc(0, numa_node, 0);
@@ -40,7 +45,7 @@ void paging_map_adv(uint64_t virt, uint64_t phys, uint64_t flags, uint32_t order
     uint64_t pd_i   = (virt >> 21) & 0x1FF;
     uint64_t pt_i   = (virt >> 12) & 0x1FF;
 
-    uint64_t *pdpt_t = get_or_create(pml4, pml4_i, PAGE_USER, numa_node);
+    uint64_t *pdpt_t = get_or_create(current_pml4, pml4_i, PAGE_USER, numa_node);
     if (!pdpt_t) goto out;
     uint64_t *pd_t = get_or_create(pdpt_t, pdpt_i, PAGE_USER, numa_node);
     if (!pd_t) goto out;
@@ -59,7 +64,6 @@ void paging_map_adv(uint64_t virt, uint64_t phys, uint64_t flags, uint32_t order
 out:
     // failed allocation, nothing mapped
 done:
-    paging_flush_tlb(virt);
     PAGING_UNLOCK();
 }
 
@@ -70,8 +74,8 @@ void paging_unmap_adv(uint64_t virt) {
     uint64_t pd_i   = (virt >> 21) & 0x1FF;
     uint64_t pt_i   = (virt >> 12) & 0x1FF;
 
-    if (!(pml4[pml4_i] & PAGE_PRESENT)) goto out;
-    uint64_t *pdpt_t = (uint64_t *)(pml4[pml4_i] & ~0xFFFULL);
+    if (!(current_pml4[pml4_i] & PAGE_PRESENT)) goto out;
+    uint64_t *pdpt_t = (uint64_t *)(current_pml4[pml4_i] & ~0xFFFULL);
     if (!(pdpt_t[pdpt_i] & PAGE_PRESENT)) goto out;
     uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
     if (!(pd_t[pd_i] & PAGE_PRESENT)) goto out;
@@ -85,7 +89,6 @@ void paging_unmap_adv(uint64_t virt) {
     pt_t[pt_i] = 0;
 
 done:
-    paging_flush_tlb(virt);
 out:
     PAGING_UNLOCK();
 }
@@ -97,8 +100,8 @@ uint64_t paging_virt_to_phys_adv(uint64_t virt) {
     uint64_t pd_i   = (virt >> 21) & 0x1FF;
     uint64_t pt_i   = (virt >> 12) & 0x1FF;
 
-    if (!(pml4[pml4_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
-    uint64_t *pdpt_t = (uint64_t *)(pml4[pml4_i] & ~0xFFFULL);
+    if (!(current_pml4[pml4_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
+    uint64_t *pdpt_t = (uint64_t *)(current_pml4[pml4_i] & ~0xFFFULL);
     if (!(pdpt_t[pdpt_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
     uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
     if (!(pd_t[pd_i] & PAGE_PRESENT)) { PAGING_UNLOCK(); return 0; }
@@ -125,8 +128,8 @@ int paging_lookup_adv(uint64_t virt, uint64_t *phys, uint64_t *flags) {
     uint64_t pd_i   = (virt >> 21) & 0x1FF;
     uint64_t pt_i   = (virt >> 12) & 0x1FF;
 
-    if (!(pml4[pml4_i] & PAGE_PRESENT)) goto out;
-    uint64_t *pdpt_t = (uint64_t *)(pml4[pml4_i] & ~0xFFFULL);
+    if (!(current_pml4[pml4_i] & PAGE_PRESENT)) goto out;
+    uint64_t *pdpt_t = (uint64_t *)(current_pml4[pml4_i] & ~0xFFFULL);
     if (!(pdpt_t[pdpt_i] & PAGE_PRESENT)) goto out;
     uint64_t *pd_t = (uint64_t *)(pdpt_t[pdpt_i] & ~0xFFFULL);
     if (!(pd_t[pd_i] & PAGE_PRESENT)) goto out;
@@ -147,6 +150,30 @@ int paging_lookup_adv(uint64_t virt, uint64_t *phys, uint64_t *flags) {
 out:
     PAGING_UNLOCK();
     return ret;
+}
+
+// Allocate a new PML4 for a task, cloning the kernel's higher-half mappings.
+uint64_t *paging_new_context(void) {
+    uint64_t *pml4 = alloc_table(current_cpu_node());
+    if (!pml4)
+        return NULL;
+    // Copy kernel space (upper half) mappings so the task can access the kernel.
+    memcpy(pml4 + 256, kernel_pml4 + 256, 256 * sizeof(uint64_t));
+    return pml4;
+}
+
+// Switch to a new page table and update the active pointer. Reloading CR3
+// implicitly flushes the TLB, so we avoid per-page shootdowns.
+void paging_switch(uint64_t *new_pml4) {
+    if (!new_pml4)
+        new_pml4 = kernel_pml4;
+    current_pml4 = new_pml4;
+    asm volatile("mov %0, %%cr3" :: "r"(new_pml4) : "memory");
+}
+
+// Expose the kernel's bootstrap PML4 for threads that run in kernel space.
+uint64_t *paging_kernel_pml4(void) {
+    return kernel_pml4;
 }
 
 

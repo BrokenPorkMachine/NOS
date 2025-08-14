@@ -51,6 +51,21 @@ extern uint8_t _kernel_stack_top[];
 #define vprint(s) (void)0
 #endif
 
+/* Enable NX, SMEP and SMAP so that user mappings cannot execute or
+   access privileged memory. */
+static void enable_cpu_protections(void) {
+    uint64_t cr4;
+    __asm__ volatile("mov %%cr4,%0" : "=r"(cr4));
+    cr4 |= (1ULL<<20) | (1ULL<<21); /* SMEP | SMAP */
+    __asm__ volatile("mov %0,%%cr4" :: "r"(cr4));
+
+    uint32_t lo, hi;
+    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(0xC0000080));
+    uint64_t efer = ((uint64_t)hi << 32) | lo;
+    efer |= (1ULL << 11); /* NXE */
+    __asm__ volatile("wrmsr" :: "c"(0xC0000080), "a"((uint32_t)efer), "d"((uint32_t)(efer >> 32)));
+}
+
 static void print_acpi_info(const bootinfo_t *b) { (void)b; }
 static void print_cpu_topology(const bootinfo_t *b) { (void)b; }
 static void print_modules(const bootinfo_t *b) { (void)b; }
@@ -99,6 +114,7 @@ void n2_main(bootinfo_t *bootinfo) {
 
     threads_early_init();
     serial_init();
+    enable_cpu_protections();
     vprint("\r\n[N2] NitrOS agent kernel booting...\r\n");
     vprint("[N2] Booted by: ");
     const char *bl = bootinfo->bootloader_name;

@@ -37,6 +37,7 @@ typedef struct THREAD_ALIGNED(64) thread {
     uint64_t       rsp;       // Stack pointer for context switching
     void         (*func)(void); // Entry function
     char          *stack;     // Kernel stack base (from static pool)
+    uint64_t      *pml4;      // Root page table for this task
     int            id;        // Thread ID (unique)
     thread_state_t state;     // Current state
     int            started;   // Has thread begun execution
