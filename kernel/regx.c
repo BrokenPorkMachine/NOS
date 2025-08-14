@@ -2,6 +2,27 @@
 #include <string.h>
 #include "Task/thread.h"
 #include "uaccess.h"
+#include <stdarg.h>
+
+static void klog(const char *fmt, ...) {
+    (void)fmt;
+}
+
+static bool regx_has_key(const char *module_name, const char *key) {
+    (void)module_name;
+    (void)key;
+    return true;
+}
+
+static void regx_add_key(const char *module_name, const char *key, bool value) {
+    (void)module_name;
+    (void)key;
+    (void)value;
+}
+
+static void regx_create_entry_storage(const char *module_name) {
+    (void)module_name;
+}
 
 extern int kprintf(const char *fmt, ...);
 
@@ -10,7 +31,7 @@ typedef struct {
     uint32_t owner;
 } regx_lock_t;
 
-static regx_lock_t regx_lock = {0, 0};
+static regx_lock_t regx_lock_obj = {0, 0};
 
 static inline uint64_t rdtsc(void) {
     uint32_t lo, hi;
@@ -20,21 +41,29 @@ static inline uint64_t rdtsc(void) {
 
 static void lock_acquire(const char *name) {
     uint64_t start = rdtsc();
-    while (__sync_lock_test_and_set(&regx_lock.locked, 1)) {
+    while (__sync_lock_test_and_set(&regx_lock_obj.locked, 1)) {
         if (rdtsc() - start > 100000000ULL) {
             kprintf("[regx] wait on %s by %u\n", name, thread_self());
             start = rdtsc();
         }
         __asm__ volatile("pause");
     }
-    regx_lock.owner = thread_self();
-    kprintf("[regx] lock %s acquired by %u\n", name, regx_lock.owner);
+    regx_lock_obj.owner = thread_self();
+    kprintf("[regx] lock %s acquired by %u\n", name, regx_lock_obj.owner);
 }
 
 static void lock_release(const char *name) {
     kprintf("[regx] lock %s released by %u\n", name, thread_self());
-    regx_lock.owner = 0;
-    __sync_lock_release(&regx_lock.locked);
+    regx_lock_obj.owner = 0;
+    __sync_lock_release(&regx_lock_obj.locked);
+}
+
+static void regx_lock(void) {
+    lock_acquire("registry");
+}
+
+static void regx_unlock(void) {
+    lock_release("registry");
 }
 
 // ---- Public hooks you likely already have ----
