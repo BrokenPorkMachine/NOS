@@ -1,6 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
+#include "klib/stdlib.h"
 #include "nosfs_pub.h"
 
 /* Forward declaration provided by nosfs.c */
