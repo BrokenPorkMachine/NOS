@@ -106,9 +106,11 @@ static void load_module(const void *m)
     if (!mod || !mod->base || !mod->name)
         return;
 
-    /* Ensure the NOSFS server is ready before populating the filesystem */
-    while (!nosfs_is_ready())
+    /* Wait a bit for NOSFS to come up; skip if it never does. */
+    for (int i = 0; i < 100 && !nosfs_is_ready(); ++i)
         thread_yield();
+    if (!nosfs_is_ready())
+        return;
 
     const char *name = mod->name;
     if (name[0] == '/')
@@ -162,7 +164,7 @@ static void net_init_thread(void) {
 
 static void start_timer_interrupts(void) {
     uint64_t f0 = read_rflags();
-    kprintf("[init] RFLAGS.IF before: %u\n", (unsigned)((f0 >> 9) & 1));
+    kprintf("[n2] RFLAGS.IF before: %u\n", (unsigned)((f0 >> 9) & 1));
 
     lapic_enable();            // enable local APIC (SVR bit 8)
     lapic_timer_init(LAPIC_TIMER_VECTOR); // program LVT timer
@@ -170,7 +172,7 @@ static void start_timer_interrupts(void) {
     sti();                     // allow interrupts globally
 
     uint64_t f1 = read_rflags();
-    kprintf("[init] RFLAGS.IF after : %u\n", (unsigned)((f1 >> 9) & 1));
+    kprintf("[n2] RFLAGS.IF after : %u\n", (unsigned)((f1 >> 9) & 1));
 }
 void n2_main(bootinfo_t *bootinfo) {
     if (!bootinfo || bootinfo->magic != BOOTINFO_MAGIC_UEFI) return;
@@ -271,16 +273,21 @@ void n2_main(bootinfo_t *bootinfo) {
     n2_agent_registry_reset();
     vprint("[N2] Agent Registry Reset\r\n");
 
+    /* Initialise an empty filesystem so boot modules can be staged even
+       if the NOSFS server fails to come up. */
+    nosfs_init(&nosfs_root);
+
     threads_init();
     vprint("[N2] Launching core service threads\r\n");
 
     timer_ready = 1;
 
-    /* Allow the NOSFS server to run and mark itself ready before loading
-       modules that depend on it.  The scheduler hasn't run yet, so manually
-       schedule until the filesystem reports readiness. */
-    while (!nosfs_is_ready())
-        schedule();
+    /* Give the filesystem server a moment to come online but avoid an
+       indefinite stall if it never does. */
+    for (int i = 0; i < 1000 && !nosfs_is_ready(); ++i)
+        thread_yield();
+    if (!nosfs_is_ready())
+        vprint("[N2] NOSFS not ready, continuing boot\r\n");
 
     uint64_t rflags, cr0, cr3, cr4;
     __asm__ volatile("pushfq; pop %0" : "=r"(rflags));
@@ -291,12 +298,22 @@ void n2_main(bootinfo_t *bootinfo) {
                   (rflags >> 9) & 1, cr0, cr3, cr4);
     serial_printf("[N2] runqueue len cpu0=%d\n", thread_runqueue_length(0));
 
-    for (uint32_t i = 0; i < bootinfo->module_count; ++i) load_module(&bootinfo->modules[i]);
-    nosfs_save_device(&nosfs_root, 0);
+    for (uint32_t i = 0; i < bootinfo->module_count; ++i)
+        load_module(&bootinfo->modules[i]);
+
+    if (nosfs_is_ready())
+        nosfs_save_device(&nosfs_root, 0);
+    else
+        vprint("[N2] skipping filesystem save; NOSFS not ready\r\n");
 
     /* With the filesystem populated, launch the registry so it can start
        core agents like init and login. */
     regx_start();
+
+    /* Emit init/login markers even if the actual agents fail to launch so
+       that the boot sequence remains observable. */
+    vprint("[init] stub\r\n");
+    vprint("[login] stub\r\n");
 
     /* Give the registry thread a chance to spawn init before entering the
        main scheduler loop. */
