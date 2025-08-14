@@ -163,12 +163,12 @@ run: disk.img fs.img
 	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
 	    -drive file=fs.img,format=raw \
 	    -m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
-	    -device i8042 -serial stdio -display sdl
+            -device i8042 -device qemu-xhci -device usb-kbd -serial stdio -display sdl
 
 runmac: disk.img fs.img
 	qemu-system-x86_64 -cpu max -bios OVMF.fd -drive file=disk.img,format=raw \
 	-drive file=fs.img,format=raw \
-	-m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
-	-device i8042 -serial stdio -display cocoa
+        -m 512M -netdev user,id=n0 -device e1000,netdev=n0 \
+        -device i8042 -device qemu-xhci -device usb-kbd -serial stdio -display cocoa
 
 .PHONY: boot
