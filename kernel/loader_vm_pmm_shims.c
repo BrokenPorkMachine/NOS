@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "VM/paging_adv.h"
-#include "VM/pmm_buddy.h"
+#include "VM/pmm.h"
 #include "VM/numa.h"
 #include "VM/legacy_heap.h"
 
@@ -57,6 +57,6 @@ int vmm_is_mapped_x(void* va) {
 
 // Physical page allocator (4K pages)
 uintptr_t pmm_alloc_page(void) {
-    void* p = buddy_alloc(0, current_cpu_node(), 0);
+    void* p = alloc_page();
     return (uintptr_t)p;
 }

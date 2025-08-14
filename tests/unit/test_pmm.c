@@ -1,6 +1,6 @@
 #include <assert.h>
+#include "../../kernel/VM/pmm.h"
 #include "../../kernel/VM/pmm_buddy.h"
-#include "../../kernel/VM/numa.h"
 #include "../../boot/include/bootinfo.h"
 #include "../../user/libc/libc.h"
 #ifndef PAGE_SIZE
@@ -15,21 +15,20 @@ int main(void) {
     bootinfo_t bi = {0};
     bi.mmap = mmap;
     bi.mmap_entries = 1;
-    numa_init(&bi);
-    buddy_init(&bi);
+    pmm_init(&bi);
     assert(buddy_free_frames_total() == 128);
 
-    void *p1 = buddy_alloc(6, 0, 0); // 64-page block
+    void *p1 = alloc_page();
     assert(p1);
-    assert(buddy_free_frames_total() == 64);
+    assert(buddy_free_frames_total() == 127);
 
-    void *p2 = buddy_alloc(5, 0, 0); // 32-page block
+    void *p2 = alloc_page();
     assert(p2);
-    assert(buddy_free_frames_total() == 32);
+    assert(buddy_free_frames_total() == 126);
 
-    buddy_free(p1, 6, 0);
-    assert(buddy_free_frames_total() == 96);
-    buddy_free(p2, 5, 0);
+    free_page(p1);
+    assert(buddy_free_frames_total() == 127);
+    free_page(p2);
     assert(buddy_free_frames_total() == 128);
 
     return 0;
