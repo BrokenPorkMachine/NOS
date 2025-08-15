@@ -1,5 +1,6 @@
 #include "nitroheap.h"
 #include "classes.h"
+#include "nitroheap_sys.h"
 #include "../pmm_buddy.h"
 #include "../../arch/CPU/smp.h"
 #include <string.h>
@@ -418,5 +419,50 @@ void nitro_kheap_trim(void) {
         }
         nh_large_freelists[o] = NULL;
     }
+}
+
+static inline size_t nh_extract_align(nh_flags_t flags) {
+    nh_flags_t f = flags & NH_ALIGN_MASK;
+    if (!f) return 0;
+    return (size_t)1 << (f >> NH_ALIGN_LOG2_SHIFT);
+}
+
+int sys_nh_alloc(const nh_alloc_req* in, nh_alloc_resp* out) {
+    if (!in || !out) return -1;
+    size_t align = nh_extract_align(in->flags);
+    void* p = nitro_kmalloc(in->size, align);
+    if (!p) return -1;
+    out->ptr = p;
+    return 0;
+}
+
+int sys_nh_free(const nh_free_req* in) {
+    if (!in) return -1;
+    nitro_kfree(in->ptr);
+    return 0;
+}
+
+int sys_nh_realloc(const nh_realloc_req* in, nh_alloc_resp* out) {
+    if (!in || !out) return -1;
+    size_t align = nh_extract_align(in->flags);
+    void* p = nitro_krealloc(in->ptr, in->new_size, align);
+    if (!p && in->new_size) return -1;
+    out->ptr = p;
+    return 0;
+}
+
+int sys_nh_halloc(const nh_halloc_req* in, nh_halloc_resp* out) {
+    (void)in; (void)out;
+    return -1;
+}
+
+int sys_nh_hptr(const nh_hptr_req* in, nh_alloc_resp* out) {
+    (void)in; (void)out;
+    return -1;
+}
+
+int sys_nh_hfree(const nh_hfree_req* in) {
+    (void)in;
+    return -1;
 }
 
