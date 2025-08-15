@@ -4,8 +4,10 @@ This short guide explains how to capture kernel logs over the COM1 serial port.
 
 ## Overview
 
-The kernel initializes a basic driver for the first serial port at boot.
-All log messages printed to the VGA console are also sent to COM1.
+NitrOS now uses the `/dev/console` device as the primary display for kernel
+logs and the login agent.  The first serial port still mirrors console output,
+providing a convenient way to capture logs remotely or when no framebuffer is
+available.
 The port runs at **38400** baud using 8 data bits, no parity, and one stop bit (8N1).
 
 ## Using QEMU
