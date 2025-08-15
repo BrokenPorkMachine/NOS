@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdatomic.h>
 #include "regx_key.h"
+#include "../../../nosm/drivers/IO/block.h"
 
 // Optional boot logging from kernel
 extern int kprintf(const char *fmt, ...);
@@ -32,6 +33,10 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
         return;
     }
 
+    // Initialise block layer and attempt to switch to real disk hardware.
+    block_init();
+    block_use_sata();
+
     // Initialise filesystem on first launch and mark it ready immediately so
     // boot can continue even if device loading is slow.  If the kernel already
     // staged modules into an existing instance (e.g. before this server
@@ -47,10 +52,11 @@ void nosfs_server(ipc_queue_t *q, uint32_t self_id) {
     if (nosfs_root.file_count > 0) {
         kprintf("[nosfs] using preloaded filesystem (%u files)\n",
                 nosfs_root.file_count);
-    } else if (nosfs_load_device(&nosfs_root, 0) == 0) {
+    } else if (nosfs_load_device(&nosfs_root, 1) == 0) {
         kprintf("[nosfs] loaded filesystem from disk\n");
     } else {
         kprintf("[nosfs] formatting new filesystem\n");
+        nosfs_save_device(&nosfs_root, 1);
     }
 
     // Optional one-time debug listing (uncomment if needed)
