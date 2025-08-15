@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "io.h"
 #include "serial.h"
+#include "tty.h"
 #include <stdarg.h>
 
 #define COM1 0x3F8
@@ -38,6 +39,7 @@ void serial_write(char c) {
         ;
     }
     outb(COM1, c);
+    tty_putc_noserial(c);
 }
 
 void serial_puts(const char *s) {
