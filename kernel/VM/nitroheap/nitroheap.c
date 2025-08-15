@@ -443,6 +443,15 @@ void nitro_kheap_trim(void) {
     }
 }
 
+static size_t nh_count_list(nh_free_node_t* head) {
+    size_t count = 0;
+    while (head) {
+        count++;
+        head = head->next;
+    }
+    return count;
+}
+
 int sys_heapctl(nh_heapctl_op op, const void* args, size_t args_len) {
     if (op != NH_HEAPCTL_GET_STATS)
         return -1; // only GET_STATS supported for now
@@ -465,6 +474,18 @@ int sys_heapctl(nh_heapctl_op op, const void* args, size_t args_len) {
     s.frees = atomic_load(&nh_stat_frees);
     s.guard_sample_rate = 0;
     s.reuse_epoch_ticks = NH_REUSE_DELAY;
+
+    uint64_t q_backlog = 0;
+    for (size_t cpu = 0; cpu < NH_MAX_CPUS; ++cpu)
+        q_backlog += nh_count_list(nh_quarantine[cpu].head);
+    uint64_t r_backlog = 0;
+    for (size_t i = 0; i < nh_size_class_count; ++i)
+        for (size_t cpu = 0; cpu < NH_MAX_CPUS; ++cpu)
+            r_backlog += nh_count_list(atomic_load(&nh_classes[i].remote[cpu]));
+    for (size_t cpu = 0; cpu < NH_MAX_CPUS; ++cpu)
+        r_backlog += nh_count_list(atomic_load(&nh_large_remote[cpu]));
+    s.quarantine_backlog = q_backlog;
+    s.remote_free_backlog = r_backlog;
 
     memcpy(a->user_buf, &s, sizeof(s));
     return 0;
