@@ -24,6 +24,11 @@ static void put_str(const char *s) {
     if (console) {
         fwrite(s, 1, strlen(s), console);
         fflush(console);
+    } else {
+        /* Prefer the graphical TTY when no /dev/console handle is available. */
+        tty_write(s);
+        if (NOS && NOS->puts)
+            NOS->puts(s);
     }
 }
 
