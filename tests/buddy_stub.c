@@ -7,7 +7,9 @@ void* buddy_alloc(uint32_t order, int preferred_node, int strict) {
     (void)preferred_node;
     (void)strict;
     size_t bytes = ((size_t)1 << order) * 4096;
-    void* p = malloc(bytes);
+    void* p = NULL;
+    if (posix_memalign(&p, 4096, bytes) != 0)
+        p = NULL;
     if (p) buddy_allocs++;
     return p;
 }
