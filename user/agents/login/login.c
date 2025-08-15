@@ -57,7 +57,11 @@ static void read_line(char *buf, size_t sz, int echo_asterisk) {
 /* Public entry point for the login server. */
 void login_server(void *fs_q, uint32_t self_id) {
     (void)fs_q; (void)self_id;
-
+    /* Ensure the TTY is initialized and prefer the linear framebuffer so the
+     * login prompt is always visible even when legacy VGA text memory is
+     * absent. */
+    tty_init();
+    tty_enable_framebuffer(1);
     tty_clear();
     put_str("[login] server starting\n");
 

@@ -17,6 +17,8 @@ ipc_queue_t upd_queue;
 ipc_queue_t fs_queue;
 
 /* Stubs for TTY input/output used by the login server */
+void tty_init(void) {}
+void tty_enable_framebuffer(int enable) { (void)enable; }
 void tty_clear(void) {}
 void tty_putc_noserial(char c) { (void)c; }
 int tty_getchar(void) {
