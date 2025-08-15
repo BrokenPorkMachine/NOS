@@ -8,21 +8,34 @@
 #include "../../../nosm/drivers/IO/tty.h"
 
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
+static FILE *console = NULL;
 volatile login_session_t current_session = {0};
 
-/* Simple output helper that uses the Agent API when available, otherwise
- * falls back to the TTY driver directly. */
+/* Simple output helper that favors the /dev/console device when available. */
 static void put_str(const char *s) {
-    if (NOS && NOS->puts) {
+    if (console) {
+        fwrite(s, 1, strlen(s), console);
+    } else if (NOS && NOS->puts) {
         NOS->puts(s);
     } else {
         tty_write(s);
     }
 }
 
-/* Block until a character is available from the serial port. */
+/* Block until a character is available from the chosen input device. */
 static char getchar_block(void) {
+    if (console) {
+        unsigned char c;
+        while (fread(&c, 1, 1, console) != 1) {
+            for (volatile int i = 0; i < 10000; ++i)
+                __asm__ __volatile__("pause");
+        }
+        return (char)c;
+    }
+
     int ch;
     for (;;) {
         ch = serial_read();
@@ -32,7 +45,7 @@ static char getchar_block(void) {
     }
 }
 
-/* Read a line of text from the serial port. */
+/* Read a line of text from the active console. */
 static void read_line(char *buf, size_t sz, int echo_asterisk) {
     size_t n = 0;
     for (;;) {
@@ -61,6 +74,9 @@ void login_server(void *fs_q, uint32_t self_id) {
     (void)fs_q; (void)self_id;
 
     serial_init();
+#ifndef LOGIN_UNIT_TEST
+    console = fopen("/dev/console", "r+");
+#endif
     tty_clear();
     put_str("[login] server starting\n");
 
