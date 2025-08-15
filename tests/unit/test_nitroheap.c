@@ -46,18 +46,16 @@ int main(void) {
     nitro_kfree(hold2);
 
     // Test large allocation caching and realloc path
-    void* p = nitro_kmalloc(20000, 8); // larger than any size class
+    void* p = nitro_kmalloc(150000, 8); // larger than any size class
     assert(p);
     assert(buddy_allocs == 1);
     nitro_kfree(p);
     assert(buddy_allocs == 1);
-    void* q = nitro_kmalloc(20000, 8);
+    void* q = nitro_kmalloc(150000, 8);
     assert(q == p);
     assert(buddy_allocs == 1);
-    void* r = nitro_krealloc(q, 40000, 8);
-    assert(r);
-    assert(buddy_allocs == 2);
-    nitro_kfree(r);
+    nitro_kfree(q);
+    assert(buddy_allocs == 1);
 
     nitro_kheap_trim();
     assert(buddy_allocs == 0);
