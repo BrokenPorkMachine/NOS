@@ -12,6 +12,10 @@ void __chkstk(void) {}
 #define FBINFO_MAGIC 0xF00DBA66
 #define BOOTINFO_MAGIC_UEFI 0x4F324255
 
+#define EVT_TIMER 0x80000000
+#define TPL_CALLBACK 8
+#define TimerRelative 2
+
 #ifndef VERBOSE
 #define VERBOSE 1
 #endif
@@ -118,8 +122,41 @@ static UINTN show_menu(EFI_SYSTEM_TABLE *st, menu_entry_t *entries, UINTN count)
         vprint_dec(st, i+1); vprint_ascii(st, ": ");
         vprint_ascii(st, entries[i].title); vprint_ascii(st, "\r\n");
     }
-    // Auto-select the first entry to enable unattended boot
-    return 0;
+    vprint_ascii(st, "Select option (default 1 in 10s): \r\n");
+
+    EFI_EVENT timer;
+    EFI_STATUS (*CreateEventFn)(UINT32, UINTN, VOID *, VOID *, EFI_EVENT *) =
+        (EFI_STATUS (*)(UINT32, UINTN, VOID *, VOID *, EFI_EVENT *))st->BootServices->CreateEvent;
+    EFI_STATUS (*SetTimerFn)(EFI_EVENT, UINTN, UINT64) =
+        (EFI_STATUS (*)(EFI_EVENT, UINTN, UINT64))st->BootServices->SetTimer;
+    EFI_STATUS (*WaitForEventFn)(UINTN, EFI_EVENT *, UINTN *) =
+        (EFI_STATUS (*)(UINTN, EFI_EVENT *, UINTN *))st->BootServices->WaitForEvent;
+    EFI_STATUS (*CloseEventFn)(EFI_EVENT) =
+        (EFI_STATUS (*)(EFI_EVENT))st->BootServices->CloseEvent;
+
+    if (EFI_ERROR(CreateEventFn(EVT_TIMER, TPL_CALLBACK, NULL, NULL, &timer)))
+        return 0;
+    SetTimerFn(timer, TimerRelative, 10 * 10000000); // 10 seconds
+
+    EFI_EVENT events[2] = { st->ConIn->WaitForKey, timer };
+    UINTN index;
+    while (1) {
+        WaitForEventFn(2, events, &index);
+        if (index == 0) {
+            EFI_INPUT_KEY key;
+            if (!EFI_ERROR(st->ConIn->ReadKeyStroke(st->ConIn, &key))) {
+                if (key.UnicodeChar >= L'1' && key.UnicodeChar <= (CHAR16)(L'0' + count)) {
+                    CloseEventFn(timer);
+                    return (UINTN)(key.UnicodeChar - L'1');
+                }
+            }
+        } else {
+            break; // Timer expired
+        }
+    }
+
+    CloseEventFn(timer);
+    return 0; // default to first entry
 }
 
 // --- EFI File read helper ---
