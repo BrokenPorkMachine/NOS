@@ -1,6 +1,7 @@
 #include "nosfs.h"
 #include "../../../nosm/drivers/IO/block.h"
 #include <stdatomic.h>
+#include <string.h>
 
 // Global in-memory filesystem used by both the server thread and
 // the fs_read_all() helper for the agent loader.
@@ -441,19 +442,39 @@ int nosfs_load_blocks(nosfs_fs_t *fs, const uint8_t *blocks, size_t blocks_cnt) 
 }
 
 int nosfs_save_device(nosfs_fs_t *fs, uint32_t start_lba) {
+    /* Write superblock first */
+    uint8_t sb_block[NOSFS_BLOCK_SIZE];
+    memset(sb_block, 0, sizeof(sb_block));
+    nosfs_superblock_t *sb = (nosfs_superblock_t *)sb_block;
+    sb->magic         = NOSFS_MAGIC;
+    sb->version_major = 1;
+    sb->version_minor = 0;
+    sb->journal_lba   = start_lba + 1; /* journal unused for now */
+    sb->manifest_lba  = 0;
+    if (block_write(start_lba, sb_block, 1) < 0)
+        return -1;
+
+    /* Now write filesystem payload after the superblock */
     size_t bytes = sizeof(uint32_t);
     for (size_t i = 0; i < fs->file_count; ++i)
         bytes += NOSFS_NAME_LEN + sizeof(uint32_t) * 2 + fs->files[i].size;
     size_t blocks = (bytes + NOSFS_BLOCK_SIZE - 1) / NOSFS_BLOCK_SIZE;
     if (nosfs_save_blocks(fs, nosfs_io_buffer, blocks) < 0 ||
-        block_write(start_lba, nosfs_io_buffer, blocks) < 0)
+        block_write(start_lba + 1, nosfs_io_buffer, blocks) < 0)
         return -1;
-    return (int)blocks;
+    return (int)(blocks + 1);
 }
 
 int nosfs_load_device(nosfs_fs_t *fs, uint32_t start_lba) {
-    size_t total_blocks = BLOCK_DEVICE_BLOCKS;
-    if (block_read(start_lba, nosfs_io_buffer, total_blocks) < 0)
+    uint8_t sb_block[NOSFS_BLOCK_SIZE];
+    if (block_read(start_lba, sb_block, 1) < 0)
+        return -1;
+    nosfs_superblock_t *sb = (nosfs_superblock_t *)sb_block;
+    if (sb->magic != NOSFS_MAGIC)
+        return -1;
+
+    size_t total_blocks = BLOCK_DEVICE_BLOCKS - 1;
+    if (block_read(start_lba + 1, nosfs_io_buffer, total_blocks) < 0)
         return -1;
     nosfs_load_blocks(fs, nosfs_io_buffer, total_blocks);
     return 0;

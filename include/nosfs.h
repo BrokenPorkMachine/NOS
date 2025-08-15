@@ -101,5 +101,6 @@ int    nosfs_load_device(nosfs_fs_t *fs, uint32_t start_lba);
 
 extern int block_read(uint32_t lba, uint8_t *buf, size_t count);
 extern int block_write(uint32_t lba, const uint8_t *buf, size_t count);
+extern int block_use_sata(void);
 
 #endif // NOSFS_H

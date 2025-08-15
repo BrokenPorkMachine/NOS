@@ -36,6 +36,11 @@ int main(void) {
 
     /* Save to mock device and reload */
     assert(nosfs_save_device(&fs, 0) > 0);
+    uint8_t sb[NOSFS_BLOCK_SIZE];
+    assert(block_read(0, sb, 1) == 1);
+    nosfs_superblock_t *super = (nosfs_superblock_t *)sb;
+    assert(super->magic == NOSFS_MAGIC);
+
     nosfs_fs_t fs2;
     assert(nosfs_load_device(&fs2, 0) == 0);
     char buf2[4];

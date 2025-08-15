@@ -109,10 +109,35 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     sector[511] = 0xAA;
 
     status = bio->WriteBlocks(bio, bio->Media->MediaId, 0, 512, sector);
-    if (EFI_ERROR(status))
+    if (EFI_ERROR(status)) {
         print_ascii(SystemTable, "Write failed\r\n");
-    else
-        print_ascii(SystemTable, "Disk formatted with single partition\r\n");
+        return EFI_SUCCESS;
+    }
+
+    /* Write NOSFS superblock at LBA 1 */
+    typedef struct {
+        UINT32 magic;
+        UINT16 version_major;
+        UINT16 version_minor;
+        UINT32 journal_lba;
+        UINT32 manifest_lba;
+    } nosfs_superblock_t;
+    const UINT32 NOSFS_MAGIC = 0x4E495452; // 'NITR'
+    UINT8 fs_sector[512];
+    for (UINTN i = 0; i < 512; ++i) fs_sector[i] = 0;
+    nosfs_superblock_t *sb = (nosfs_superblock_t*)fs_sector;
+    sb->magic = NOSFS_MAGIC;
+    sb->version_major = 1;
+    sb->version_minor = 0;
+    sb->journal_lba = 2;
+    sb->manifest_lba = 0;
+    bio->WriteBlocks(bio, bio->Media->MediaId, 1, 512, fs_sector);
+
+    /* Empty filesystem block with file_count=0 */
+    for (UINTN i = 0; i < 512; ++i) fs_sector[i] = 0;
+    bio->WriteBlocks(bio, bio->Media->MediaId, 2, 512, fs_sector);
+
+    print_ascii(SystemTable, "Disk formatted with NOSFS\r\n");
 
     return EFI_SUCCESS;
 }

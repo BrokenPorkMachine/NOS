@@ -9,6 +9,7 @@
 #define BLOCK_DEVICE_BLOCKS 2048
 
 void block_init(void);
+int  block_use_sata(void);
 int  block_read(uint32_t lba, uint8_t *buf, size_t count);
 int  block_write(uint32_t lba, const uint8_t *buf, size_t count);
 
