@@ -16,11 +16,10 @@ ipc_queue_t pkg_queue;
 ipc_queue_t upd_queue;
 ipc_queue_t fs_queue;
 
-/* Stubs for serial I/O used by the login server */
-void serial_write(char c) { (void)c; }
-void serial_puts(const char *s) { (void)s; }
-void serial_init(void) {}
-int serial_read(void) {
+/* Stubs for TTY input/output used by the login server */
+void tty_clear(void) {}
+void tty_putc_noserial(char c) { (void)c; }
+int tty_getchar(void) {
     if (first_poll) {
         first_poll = 0;
         return -1; /* simulate initial lack of input */
@@ -28,10 +27,6 @@ int serial_read(void) {
     if (pos >= strlen(input)) return -1;
     return (unsigned char)input[pos++];
 }
-
-/* Stubs for TTY output used by the login server */
-void tty_clear(void) {}
-void tty_write(const char *s) { (void)s; }
 
 int main(void) {
     ipc_queue_t q; (void)q;
