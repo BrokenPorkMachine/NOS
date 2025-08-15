@@ -32,6 +32,7 @@
 #include "printf.h"
 #include "nosfs.h"
 #include "hal.h"
+#include "syscall.h"
 extern int nosfs_is_ready(void);
 extern nosfs_fs_t nosfs_root;
 extern void regx_start(void);
@@ -254,6 +255,7 @@ void n2_main(bootinfo_t *bootinfo) {
     const bootinfo_framebuffer_t *fb = (const bootinfo_framebuffer_t *)&bootinfo->fb;
     video_init(fb);
     tty_init();
+    devfs_init();
     ps2_init();
     {
         hal_descriptor_t d = {

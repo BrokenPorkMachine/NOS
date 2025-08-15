@@ -5,10 +5,12 @@ global isr_stub_table
 global isr_ud_stub
 global isr_timer_stub
 global isr_i2c_stub
+global isr_syscall_stub
 
 extern lapic_eoi
 extern isr_timer_handler   ; void isr_timer_handler(const void *hw_frame)
 extern isr_i2c_handler     ; void isr_i2c_handler(const void *hw_frame)
+extern isr_syscall_handler ; uint64_t isr_syscall_handler(uint64_t *regs)
 
 section .text
 
@@ -74,6 +76,36 @@ isr_i2c_stub:
     pop rax
     iretq
 
+; Syscall stub for int 0x80
+; Saves general purpose registers, passes pointer to saved regs
+; to C handler, stores return value in saved RAX slot
+isr_syscall_stub:
+    push rax
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    push r11
+
+    mov rdi, rsp            ; rdi = pointer to saved regs
+    call isr_syscall_handler
+
+    mov [rsp + 8*8], rax    ; place return value into saved rax
+
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rax
+    iretq
+
 section .rodata
 align 8
 isr_stub_table:
@@ -84,6 +116,8 @@ isr_stub_table:
     dq isr_timer_stub
 %elif i = I2C_VEC
     dq isr_i2c_stub
+%elif i = 0x80
+    dq isr_syscall_stub
 %else
     dq isr_ud_stub
 %endif
