@@ -14,5 +14,9 @@ typedef struct {
     uint64_t r11;
 } syscall_regs_t;
 
+typedef long (*syscall_fn_t)(syscall_regs_t *regs);
+
+int  n2_syscall_register(uint32_t num, syscall_fn_t fn);
+void syscalls_init(void);
 long isr_syscall_handler(syscall_regs_t *regs);
 void devfs_init(void);
