@@ -255,6 +255,7 @@ void n2_main(bootinfo_t *bootinfo) {
     const bootinfo_framebuffer_t *fb = (const bootinfo_framebuffer_t *)&bootinfo->fb;
     video_init(fb);
     tty_init();
+    syscalls_init();
     devfs_init();
     ps2_init();
     {
