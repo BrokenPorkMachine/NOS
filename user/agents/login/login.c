@@ -18,6 +18,7 @@ volatile login_session_t current_session = {0};
 static void put_str(const char *s) {
     if (console) {
         fwrite(s, 1, strlen(s), console);
+        fflush(console);
     } else if (NOS && NOS->puts) {
         NOS->puts(s);
     } else {

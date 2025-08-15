@@ -527,6 +527,11 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
     return (size_t)ret / (size ? size : 1);
 }
 
+int fflush(FILE *stream) {
+    (void)stream;
+    return 0;
+}
+
 int fclose(FILE *stream) {
     if (!stream)
         return -1;
