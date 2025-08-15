@@ -34,6 +34,17 @@ int main(void) {
     nitro_kfree(c);
     nitro_kfree(hold);
 
+    // Cross-CPU free should return to home CPU
+    void* hold2 = nitro_kmalloc(32, 8); // keep span alive
+    void* x = nitro_kmalloc(32, 8);     // allocate on CPU 0
+    smp_stub_set_cpu_index(1);
+    nitro_kfree(x);                     // free on CPU 1
+    smp_stub_set_cpu_index(0);
+    void* y = nitro_kmalloc(32, 8);     // CPU 0 should reclaim
+    assert(y == x);
+    nitro_kfree(y);
+    nitro_kfree(hold2);
+
     // Test large allocation caching and realloc path
     void* p = nitro_kmalloc(20000, 8); // larger than any size class
     assert(p);
