@@ -2,6 +2,7 @@
 #include "io.h"
 #include "serial.h"
 #include "tty.h"
+#include <stdbool.h>
 #include <stdarg.h>
 
 #define COM1 0x3F8
@@ -34,12 +35,17 @@ static int serial_empty(void) {
     return inb(COM1 + 5) & 0x20;
 }
 
+static bool mirror_to_tty = true;
+
+void serial_set_mirror_to_tty(int enable) { mirror_to_tty = (enable != 0); }
+
 void serial_write(char c) {
     while (!serial_empty()) {
         ;
     }
     outb(COM1, c);
-    tty_putc_noserial(c);
+    if (mirror_to_tty)
+        tty_putc_noserial(c);
 }
 
 void serial_puts(const char *s) {

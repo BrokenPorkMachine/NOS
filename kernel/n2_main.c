@@ -354,17 +354,29 @@ void n2_main(bootinfo_t *bootinfo) {
         thread_yield();
 
     if (!n2_agent_get("login")) {
-        for (uint32_t i = 0; i < bootinfo->module_count; ++i) {
-            const char *m = bootinfo->modules[i].name;
-            if (!m) continue;
-            if (!strcmp(m, "login.mo2") || !strcmp(m, "agents/login.mo2")) {
-                load_agent(bootinfo->modules[i].base,
-                           bootinfo->modules[i].size,
-                           m, MAX_PRIORITY);
-                break;
+        /* Prefer loading the login agent from the filesystem so custom
+           builds in user/agents take effect even if boot modules are
+           stale. */
+        int tid = agent_loader_run_from_path("agents/login.mo2", MAX_PRIORITY);
+        if (tid < 0)
+            tid = agent_loader_run_from_path("login.mo2", MAX_PRIORITY);
+        if (tid < 0) {
+            /* Fall back to any copy bundled as a boot module. */
+            for (uint32_t i = 0; i < bootinfo->module_count; ++i) {
+                const char *m = bootinfo->modules[i].name;
+                if (!m) continue;
+                if (!strcmp(m, "login.mo2") || !strcmp(m, "agents/login.mo2")) {
+                    load_agent(bootinfo->modules[i].base,
+                               bootinfo->modules[i].size,
+                               m, MAX_PRIORITY);
+                    break;
+                }
             }
         }
     }
+
+    /* Hand over the display to userland once login is launched. */
+    serial_set_mirror_to_tty(0);
 
     /* If login still isn't available, fall back to launching init from the
        filesystem so the user at least gets a prompt. */

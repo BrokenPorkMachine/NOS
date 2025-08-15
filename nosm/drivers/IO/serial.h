@@ -12,3 +12,4 @@ void serial_puthex(uint32_t value);
 void serial_vprintf(const char *fmt, va_list ap);
 void serial_printf(const char *fmt, ...);
 int serial_read(void);
+void serial_set_mirror_to_tty(int enable);
