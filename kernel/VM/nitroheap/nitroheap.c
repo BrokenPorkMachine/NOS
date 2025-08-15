@@ -57,6 +57,11 @@ static nh_quarantine_t nh_quarantine[NH_MAX_CPUS];
 static _Atomic(nh_free_node_t*) nh_large_remote[NH_MAX_CPUS];
 static uint64_t nh_epoch[NH_MAX_CPUS];
 
+// simple handle table for NH_MOVABLE allocations
+#define NH_HANDLE_LIMIT 1024
+static _Atomic(uint64_t) nh_handle_next = 1;
+static void* nh_handle_table[NH_HANDLE_LIMIT];
+
 // basic statistics for the default heap partition
 static _Atomic(uint64_t) nh_stat_allocs;
 static _Atomic(uint64_t) nh_stat_frees;
@@ -522,17 +527,39 @@ int sys_nh_realloc(const nh_realloc_req* in, nh_alloc_resp* out) {
 }
 
 int sys_nh_halloc(const nh_halloc_req* in, nh_halloc_resp* out) {
-    (void)in; (void)out;
-    return -1;
+    if (!in || !out) return -1;
+    size_t align = nh_extract_align(in->flags);
+    void* p = nitro_kmalloc(in->size, align);
+    if (!p) return -1;
+    uint64_t h = atomic_fetch_add(&nh_handle_next, 1);
+    if (h >= NH_HANDLE_LIMIT) {
+        atomic_fetch_sub(&nh_handle_next, 1);
+        nitro_kfree(p);
+        return -1;
+    }
+    nh_handle_table[h] = p;
+    out->handle = h;
+    return 0;
 }
 
 int sys_nh_hptr(const nh_hptr_req* in, nh_alloc_resp* out) {
-    (void)in; (void)out;
-    return -1;
+    if (!in || !out) return -1;
+    uint64_t h = in->handle;
+    if (h == 0 || h >= NH_HANDLE_LIMIT) return -1;
+    void* p = nh_handle_table[h];
+    if (!p) return -1;
+    out->ptr = p;
+    return 0;
 }
 
 int sys_nh_hfree(const nh_hfree_req* in) {
-    (void)in;
-    return -1;
+    if (!in) return -1;
+    uint64_t h = in->handle;
+    if (h == 0 || h >= NH_HANDLE_LIMIT) return -1;
+    void* p = nh_handle_table[h];
+    if (!p) return -1;
+    nh_handle_table[h] = NULL;
+    nitro_kfree(p);
+    return 0;
 }
 
