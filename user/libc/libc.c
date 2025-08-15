@@ -471,9 +471,6 @@ struct FILE {
     int fd;
 };
 
-/* Magic fd for the in-kernel console device. */
-#define FD_CONSOLE (-1)
-
 #define O_RDONLY 0
 #define O_WRONLY 1
 #define O_RDWR   2
@@ -486,14 +483,6 @@ struct FILE {
 #define SEEK_END 2
 
 FILE *fopen(const char *path, const char *mode) {
-    if (path && strcmp(path, "/dev/console") == 0) {
-        FILE *f = (FILE *)malloc(sizeof(FILE));
-        if (!f)
-            return NULL;
-        f->fd = FD_CONSOLE;
-        return f;
-    }
-
     int flags = 0;
     if (mode && mode[0] == 'r') {
         flags = O_RDONLY;
@@ -521,19 +510,6 @@ FILE *fopen(const char *path, const char *mode) {
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     if (!stream)
         return 0;
-    if (stream->fd == FD_CONSOLE) {
-        size_t total = size * nmemb;
-        unsigned char *p = (unsigned char *)ptr;
-        size_t i = 0;
-        for (; i < total; ++i) {
-            int ch = tty_getchar();
-            if (ch < 0)
-                break;
-            p[i] = (unsigned char)ch;
-        }
-        return size ? i / size : 0;
-    }
-
     size_t total = size * nmemb;
     long ret = syscall3(SYS_READ, stream->fd, (long)ptr, total);
     if (ret < 0)
@@ -544,14 +520,6 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
     if (!stream)
         return 0;
-    if (stream->fd == FD_CONSOLE) {
-        size_t total = size * nmemb;
-        const unsigned char *p = (const unsigned char *)ptr;
-        for (size_t i = 0; i < total; ++i)
-            tty_putc((char)p[i]);
-        return size ? total / size : 0;
-    }
-
     size_t total = size * nmemb;
     long ret = syscall3(SYS_WRITE, stream->fd, (long)ptr, total);
     if (ret < 0)
@@ -562,10 +530,6 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
 int fclose(FILE *stream) {
     if (!stream)
         return -1;
-    if (stream->fd == FD_CONSOLE) {
-        free(stream);
-        return 0;
-    }
     int fd = stream->fd;
     free(stream);
     return (int)syscall3(SYS_CLOSE, fd, 0, 0);
@@ -578,15 +542,11 @@ int rename(const char *old, const char *new) {
 long ftell(FILE *stream) {
     if (!stream)
         return -1;
-    if (stream->fd == FD_CONSOLE)
-        return 0;
     return syscall3(SYS_LSEEK, stream->fd, 0, SEEK_CUR);
 }
 
 int fseek(FILE *stream, long offset, int whence) {
     if (!stream)
-        return -1;
-    if (stream->fd == FD_CONSOLE)
         return -1;
     long ret = syscall3(SYS_LSEEK, stream->fd, offset, whence);
     return ret < 0 ? -1 : 0;
