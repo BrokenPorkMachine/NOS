@@ -16,12 +16,24 @@ const nh_size_class_t nh_size_classes[] = {
 const size_t nh_size_class_count = sizeof(nh_size_classes)/sizeof(nh_size_classes[0]);
 
 int nh_class_from_size(size_t sz, size_t align) {
-    for (size_t i = 0; i < nh_size_class_count; ++i) {
-        size_t csz = nh_size_classes[i].size;
-        size_t cal = nh_size_classes[i].align;
-        if (csz >= sz && cal >= align)
+    if (align == 0) align = 1;
+
+    // Binary search for the first size class whose size >= sz
+    size_t lo = 0, hi = nh_size_class_count;
+    while (lo < hi) {
+        size_t mid = (lo + hi) / 2;
+        if (nh_size_classes[mid].size < sz)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+
+    // Walk forward until the alignment requirement is also satisfied
+    for (size_t i = lo; i < nh_size_class_count; ++i) {
+        if (nh_size_classes[i].align >= align)
             return (int)i;
     }
+
     return -1;
 }
 
