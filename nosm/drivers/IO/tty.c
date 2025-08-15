@@ -4,6 +4,7 @@
 #include "video.h"
 #include "font8x8_basic.h"
 #include <stddef.h>
+#include <string.h>
 
 #define VGA_TEXT_BUF 0xB8000
 #define VGA_COLS 80
@@ -14,6 +15,25 @@ static const bootinfo_framebuffer_t *fb_info = NULL;
 static uint32_t fb_cols = 0, fb_rows = 0;
 static int use_fb = 0;
 static int use_vga = 1;
+
+static void tty_scroll_screen(void) {
+    if (use_fb && fb_info) {
+        uint32_t *base = (uint32_t *)(uintptr_t)fb_info->address;
+        size_t line_bytes = fb_info->pitch * 16; // 16 pixels per char row
+        size_t total = fb_info->pitch * fb_info->height;
+        memmove(base, (uint8_t *)base + line_bytes, total - line_bytes);
+        video_fill_rect(0, fb_info->height - 16, fb_info->width, 16, 0x000000);
+    } else if (use_vga) {
+        volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF;
+        for (int r = 0; r < VGA_ROWS - 1; ++r)
+            for (int c = 0; c < VGA_COLS; ++c)
+                vga[r * VGA_COLS + c] = vga[(r + 1) * VGA_COLS + c];
+        for (int c = 0; c < VGA_COLS; ++c)
+            vga[(VGA_ROWS - 1) * VGA_COLS + c] = (0x0F << 8) | ' ';
+    }
+    if (row > 0)
+        --row;
+}
 
 static void draw_char_fb(char c, int r, int cpos) {
     if (!fb_info) return;
@@ -38,7 +58,7 @@ static void tty_putc_screen(char c) {
         if (c == '\n') {
             col = 0;
             if (++row >= (int)fb_rows)
-                row = 0;
+                tty_scroll_screen();
             return;
         }
         if (c == '\b') {
@@ -52,14 +72,14 @@ static void tty_putc_screen(char c) {
         if (++col >= (int)fb_cols) {
             col = 0;
             if (++row >= (int)fb_rows)
-                row = 0;
+                tty_scroll_screen();
         }
     } else if (use_vga) {
         volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF;
         if (c == '\n') {
             col = 0;
-            if (++row >= VGA_ROWS - 1)
-                row = VGA_ROWS - 2;
+            if (++row >= VGA_ROWS)
+                tty_scroll_screen();
             return;
         }
         if (c == '\b') {
@@ -72,23 +92,23 @@ static void tty_putc_screen(char c) {
         vga[row * VGA_COLS + col] = (0x0F << 8) | c;
         if (++col >= VGA_COLS) {
             col = 0;
-            if (++row >= VGA_ROWS - 1)
-                row = VGA_ROWS - 2;
+            if (++row >= VGA_ROWS)
+                tty_scroll_screen();
         }
     } else {
         /* VGA disabled: track cursor for serial-only environments */
         if (c == '\n') {
             col = 0;
-            if (++row >= VGA_ROWS - 1)
-                row = VGA_ROWS - 2;
+            if (++row >= VGA_ROWS)
+                tty_scroll_screen();
         } else if (c == '\b') {
             if (col > 0)
                 --col;
         } else {
             if (++col >= VGA_COLS) {
                 col = 0;
-                if (++row >= VGA_ROWS - 1)
-                    row = VGA_ROWS - 2;
+                if (++row >= VGA_ROWS)
+                    tty_scroll_screen();
             }
         }
     }
