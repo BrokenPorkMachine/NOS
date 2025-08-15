@@ -3,6 +3,7 @@
 #include "nitroheap_sys.h"
 #include "../pmm_buddy.h"
 #include "../../arch/CPU/smp.h"
+#include "nitroheap_stats.h"
 #include <string.h>
 #include <printf.h>
 #include <stdatomic.h>
@@ -55,6 +56,21 @@ typedef struct { nh_free_node_t* head; } nh_quarantine_t;
 static nh_quarantine_t nh_quarantine[NH_MAX_CPUS];
 static _Atomic(nh_free_node_t*) nh_large_remote[NH_MAX_CPUS];
 static uint64_t nh_epoch[NH_MAX_CPUS];
+
+// basic statistics for the default heap partition
+static _Atomic(uint64_t) nh_stat_allocs;
+static _Atomic(uint64_t) nh_stat_frees;
+static _Atomic(uint64_t) nh_stat_bytes_inuse;
+
+static inline void nh_stats_alloc(size_t sz) {
+    atomic_fetch_add(&nh_stat_allocs, 1);
+    atomic_fetch_add(&nh_stat_bytes_inuse, sz);
+}
+
+static inline void nh_stats_free(size_t sz) {
+    atomic_fetch_add(&nh_stat_frees, 1);
+    atomic_fetch_sub(&nh_stat_bytes_inuse, sz);
+}
 
 static void nh_quarantine_push(uint32_t cpu, nh_free_node_t* node) {
     node->next = nh_quarantine[cpu].head;
@@ -209,6 +225,9 @@ void nitroheap_init(void) {
     memset(nh_epoch, 0, sizeof(nh_epoch));
     for (size_t i = 0; i < NH_MAX_CPUS; ++i)
         atomic_store(&nh_large_remote[i], NULL);
+    atomic_store(&nh_stat_allocs, 0);
+    atomic_store(&nh_stat_frees, 0);
+    atomic_store(&nh_stat_bytes_inuse, 0);
 }
 
 void* nitro_kmalloc(size_t sz, size_t align) {
@@ -238,6 +257,7 @@ void* nitro_kmalloc(size_t sz, size_t align) {
         bh->order = order;
         bh->home_cpu = cpu;
         bh->reuse_epoch = 0;
+        nh_stats_alloc(bh->size);
         return bh + 1;
     }
 
@@ -265,10 +285,11 @@ void* nitro_kmalloc(size_t sz, size_t align) {
     mag->head = node->next;
     mag->count--;
     nh_block_header_t* bh = ((nh_block_header_t*)node) - 1;
-    bh->span->free_blocks--;
-    bh->home_cpu = cpu;
-    bh->reuse_epoch = 0;
-    return node;
+      bh->span->free_blocks--;
+      bh->home_cpu = cpu;
+      bh->reuse_epoch = 0;
+      nh_stats_alloc(bh->size);
+      return node;
 }
 
 void nitro_kfree(void* p) {
@@ -277,6 +298,7 @@ void nitro_kfree(void* p) {
     if (cpu >= NH_MAX_CPUS) cpu = 0;
     nh_epoch[cpu]++;
     nh_block_header_t* bh = ((nh_block_header_t*)p) - 1;
+    nh_stats_free(bh->size);
     uint32_t home = bh->home_cpu;
     if (home >= NH_MAX_CPUS) home = 0;
     nh_free_node_t* node = (nh_free_node_t*)p;
@@ -419,6 +441,33 @@ void nitro_kheap_trim(void) {
         }
         nh_large_freelists[o] = NULL;
     }
+}
+
+int sys_heapctl(nh_heapctl_op op, const void* args, size_t args_len) {
+    if (op != NH_HEAPCTL_GET_STATS)
+        return -1; // only GET_STATS supported for now
+    if (!args || args_len < sizeof(nh_heapctl_get_stats_args))
+        return -1;
+
+    const nh_heapctl_get_stats_args* a = args;
+    if (!a->user_buf || a->user_buf_len < sizeof(nh_part_stats_summary))
+        return -1;
+    if (a->part_id != 0)
+        return -1; // only default partition
+
+    nh_part_stats_summary s;
+    memset(&s, 0, sizeof(s));
+    s.part_id = 0;
+    strncpy(s.name, "default", sizeof(s.name) - 1);
+    s.bytes_inuse = atomic_load(&nh_stat_bytes_inuse);
+    s.bytes_committed = s.bytes_inuse;
+    s.allocs = atomic_load(&nh_stat_allocs);
+    s.frees = atomic_load(&nh_stat_frees);
+    s.guard_sample_rate = 0;
+    s.reuse_epoch_ticks = NH_REUSE_DELAY;
+
+    memcpy(a->user_buf, &s, sizeof(s));
+    return 0;
 }
 
 static inline size_t nh_extract_align(nh_flags_t flags) {
