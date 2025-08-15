@@ -22,6 +22,7 @@ typedef struct nh_block_header {
     size_t     size;   // class size or big allocation size
     uint32_t   order;  // buddy order for big allocations
     uint32_t   home_cpu;
+    uint64_t   reuse_epoch; // epoch when block may be reused
 } nh_block_header_t;
 
 typedef struct nh_free_node {
@@ -31,6 +32,7 @@ typedef struct nh_free_node {
 #define NH_CLASS_LIMIT 64
 #define NH_MAG_SIZE    16
 #define NH_MAX_CPUS    32
+#define NH_REUSE_DELAY 1
 
 typedef struct {
     nh_free_node_t* head;
@@ -47,6 +49,65 @@ static nh_class_state_t nh_classes[NH_CLASS_LIMIT];
 
 #define NH_LARGE_ORDERS 32
 static nh_free_node_t* nh_large_freelists[NH_LARGE_ORDERS];
+
+typedef struct { nh_free_node_t* head; } nh_quarantine_t;
+static nh_quarantine_t nh_quarantine[NH_MAX_CPUS];
+static _Atomic(nh_free_node_t*) nh_large_remote[NH_MAX_CPUS];
+static uint64_t nh_epoch[NH_MAX_CPUS];
+
+static void nh_quarantine_push(uint32_t cpu, nh_free_node_t* node) {
+    node->next = nh_quarantine[cpu].head;
+    nh_quarantine[cpu].head = node;
+}
+
+static void nh_quarantine_enqueue(uint32_t cpu, nh_free_node_t* node) {
+    nh_block_header_t* bh = ((nh_block_header_t*)node) - 1;
+    bh->reuse_epoch = nh_epoch[cpu] + NH_REUSE_DELAY;
+    nh_quarantine_push(cpu, node);
+}
+
+static void nh_quarantine_harvest_large(uint32_t cpu) {
+    nh_free_node_t* r = atomic_exchange(&nh_large_remote[cpu], NULL);
+    while (r) {
+        nh_free_node_t* next = r->next;
+        r->next = nh_quarantine[cpu].head;
+        nh_quarantine[cpu].head = r;
+        r = next;
+    }
+}
+
+static void nh_quarantine_drain(uint32_t cpu) {
+    nh_free_node_t** cur = &nh_quarantine[cpu].head;
+    uint64_t now = nh_epoch[cpu];
+    while (*cur) {
+        nh_block_header_t* bh = ((nh_block_header_t*)(*cur)) - 1;
+        if (bh->reuse_epoch > now) {
+            cur = &(*cur)->next;
+            continue;
+        }
+        nh_free_node_t* node = *cur;
+        *cur = node->next;
+        if (bh->span) {
+            nh_class_state_t* cs = &nh_classes[bh->span->class_idx];
+            nh_magazine_t* mag = &cs->magazines[cpu];
+            if (mag->count >= NH_MAG_SIZE) {
+                node->next = cs->freelist;
+                cs->freelist = node;
+            } else {
+                node->next = mag->head;
+                mag->head = node;
+                mag->count++;
+            }
+        } else {
+            if (bh->order < NH_LARGE_ORDERS) {
+                node->next = nh_large_freelists[bh->order];
+                nh_large_freelists[bh->order] = node;
+            } else {
+                buddy_free(bh, bh->order, 0);
+            }
+        }
+    }
+}
 
 static void nh_remove_span_blocks(nh_class_state_t* cs, nh_span_t* sp) {
     nh_free_node_t** cur = &cs->freelist;
@@ -87,6 +148,14 @@ static void nh_remove_span_blocks(nh_class_state_t* cs, nh_span_t* sp) {
                 keep->next = old;
             } while (!atomic_compare_exchange_weak(&cs->remote[cpu], &old, keep));
             keep = next;
+        }
+        nh_free_node_t** qcur = &nh_quarantine[cpu].head;
+        while (*qcur) {
+            nh_block_header_t* qbh = ((nh_block_header_t*)(*qcur)) - 1;
+            if (qbh->span == sp)
+                *qcur = (*qcur)->next;
+            else
+                qcur = &(*qcur)->next;
         }
     }
 }
@@ -135,12 +204,19 @@ static nh_span_t* nh_alloc_span(int cls) {
 void nitroheap_init(void) {
     memset(nh_classes, 0, sizeof(nh_class_state_t) * NH_CLASS_LIMIT);
     memset(nh_large_freelists, 0, sizeof(nh_large_freelists));
+    memset(nh_quarantine, 0, sizeof(nh_quarantine));
+    memset(nh_epoch, 0, sizeof(nh_epoch));
+    for (size_t i = 0; i < NH_MAX_CPUS; ++i)
+        atomic_store(&nh_large_remote[i], NULL);
 }
 
 void* nitro_kmalloc(size_t sz, size_t align) {
     int cls = nh_class_from_size(sz, align);
     uint32_t cpu = smp_cpu_index();
     if (cpu >= NH_MAX_CPUS) cpu = 0;
+    nh_epoch[cpu]++;
+    nh_quarantine_harvest_large(cpu);
+    nh_quarantine_drain(cpu);
     if (cls < 0) {
         size_t total = sizeof(nh_block_header_t) + sz;
         size_t alloc_bytes = PAGE_SIZE;
@@ -160,6 +236,7 @@ void* nitro_kmalloc(size_t sz, size_t align) {
         bh->size = sz;
         bh->order = order;
         bh->home_cpu = cpu;
+        bh->reuse_epoch = 0;
         return bh + 1;
     }
 
@@ -168,16 +245,10 @@ void* nitro_kmalloc(size_t sz, size_t align) {
     nh_free_node_t* rem = atomic_exchange(&cs->remote[cpu], NULL);
     while (rem) {
         nh_free_node_t* next = rem->next;
-        if (mag->count >= NH_MAG_SIZE) {
-            rem->next = cs->freelist;
-            cs->freelist = rem;
-        } else {
-            rem->next = mag->head;
-            mag->head = rem;
-            mag->count++;
-        }
+        nh_quarantine_push(cpu, rem);
         rem = next;
     }
+    nh_quarantine_drain(cpu);
     if (!mag->head) {
         if (!cs->freelist && !nh_alloc_span(cls))
             return NULL;
@@ -195,47 +266,42 @@ void* nitro_kmalloc(size_t sz, size_t align) {
     nh_block_header_t* bh = ((nh_block_header_t*)node) - 1;
     bh->span->free_blocks--;
     bh->home_cpu = cpu;
+    bh->reuse_epoch = 0;
     return node;
 }
 
 void nitro_kfree(void* p) {
     if (!p) return;
+    uint32_t cpu = smp_cpu_index();
+    if (cpu >= NH_MAX_CPUS) cpu = 0;
+    nh_epoch[cpu]++;
     nh_block_header_t* bh = ((nh_block_header_t*)p) - 1;
+    uint32_t home = bh->home_cpu;
+    if (home >= NH_MAX_CPUS) home = 0;
+    nh_free_node_t* node = (nh_free_node_t*)p;
     if (!bh->span) {
-        if (bh->order < NH_LARGE_ORDERS) {
-            nh_free_node_t* node = (nh_free_node_t*)p;
-            node->next = nh_large_freelists[bh->order];
-            nh_large_freelists[bh->order] = node;
+        if (home != cpu && home < NH_MAX_CPUS) {
+            bh->reuse_epoch = nh_epoch[home] + NH_REUSE_DELAY;
+            nh_free_node_t* head;
+            do {
+                head = atomic_load(&nh_large_remote[home]);
+                node->next = head;
+            } while (!atomic_compare_exchange_weak(&nh_large_remote[home], &head, node));
         } else {
-            buddy_free(bh, bh->order, 0);
+            nh_quarantine_enqueue(home, node);
         }
         return;
     }
     nh_class_state_t* cs = &nh_classes[bh->span->class_idx];
-    uint32_t cpu = smp_cpu_index();
-    if (cpu >= NH_MAX_CPUS) cpu = 0;
-    uint32_t home = bh->home_cpu;
-    nh_free_node_t* node = (nh_free_node_t*)p;
     if (home != cpu && home < NH_MAX_CPUS) {
+        bh->reuse_epoch = nh_epoch[home] + NH_REUSE_DELAY;
         nh_free_node_t* head;
         do {
             head = atomic_load(&cs->remote[home]);
             node->next = head;
         } while (!atomic_compare_exchange_weak(&cs->remote[home], &head, node));
     } else {
-        nh_magazine_t* mag = &cs->magazines[cpu];
-        if (mag->count >= NH_MAG_SIZE) {
-            while (mag->head) {
-                nh_free_node_t* n = mag->head;
-                mag->head = n->next;
-                n->next = cs->freelist;
-                cs->freelist = n;
-            }
-            mag->count = 0;
-        }
-        node->next = mag->head;
-        mag->head = node;
-        mag->count++;
+        nh_quarantine_enqueue(home, node);
     }
     bh->span->free_blocks++;
     if (bh->span->free_blocks == bh->span->total_blocks) {
@@ -292,6 +358,42 @@ void nitro_kheap_dump_stats(const char* tag) {
 }
 
 void nitro_kheap_trim(void) {
+    for (size_t cpu = 0; cpu < NH_MAX_CPUS; ++cpu) {
+        for (size_t i = 0; i < nh_size_class_count; ++i) {
+            nh_class_state_t* cs = &nh_classes[i];
+            nh_free_node_t* r = atomic_exchange(&cs->remote[cpu], NULL);
+            while (r) {
+                nh_free_node_t* next = r->next;
+                nh_quarantine_push(cpu, r);
+                r = next;
+            }
+        }
+        nh_free_node_t* lr = atomic_exchange(&nh_large_remote[cpu], NULL);
+        while (lr) {
+            nh_free_node_t* next = lr->next;
+            nh_quarantine_push(cpu, lr);
+            lr = next;
+        }
+        nh_free_node_t* q = nh_quarantine[cpu].head;
+        nh_quarantine[cpu].head = NULL;
+        while (q) {
+            nh_free_node_t* next = q->next;
+            nh_block_header_t* bh = ((nh_block_header_t*)q) - 1;
+            if (bh->span) {
+                nh_class_state_t* cs = &nh_classes[bh->span->class_idx];
+                q->next = cs->freelist;
+                cs->freelist = q;
+            } else {
+                if (bh->order < NH_LARGE_ORDERS) {
+                    q->next = nh_large_freelists[bh->order];
+                    nh_large_freelists[bh->order] = q;
+                } else {
+                    buddy_free(bh, bh->order, 0);
+                }
+            }
+            q = next;
+        }
+    }
     for (size_t i = 0; i < nh_size_class_count; ++i) {
         nh_class_state_t* cs = &nh_classes[i];
         nh_span_t* sp = cs->spans;
