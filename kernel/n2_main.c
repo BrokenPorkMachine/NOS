@@ -375,6 +375,9 @@ void n2_main(bootinfo_t *bootinfo) {
         }
     }
 
+    /* Hand over the display to userland once login is launched. */
+    serial_set_mirror_to_tty(0);
+
     /* If login still isn't available, fall back to launching init from the
        filesystem so the user at least gets a prompt. */
     if (!n2_agent_get("login")) {
