@@ -2,6 +2,7 @@
 #include "../../libc/libc.h"
 #include "dyld2.h"
 #include "regx_key.h"
+#include "../../../nosm/drivers/IO/tty.h"
 
 /* Minimal manifest so the loader can discover the entry point when the
  * agent is packaged as a Mach-O2 binary. */
@@ -30,6 +31,9 @@ void init_main(const AgentAPI *api, uint32_t self_tid)
         api->puts("[init] starting with dyld2\n");
 
     dyld2_init(api);
+
+    /* Prepare a clean console for the upcoming login agent */
+    tty_clear();
 
     const char *login_path = "agents/login.mo2";
     if (api->puts)
