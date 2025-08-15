@@ -35,7 +35,12 @@ static int serial_empty(void) {
     return inb(COM1 + 5) & 0x20;
 }
 
-static bool mirror_to_tty = true;
+/*
+ * Mirror kernel serial output to the on-screen TTY by default.  The kernel
+ * now reserves the TTY for userland so disable mirroring unless explicitly
+ * enabled.
+ */
+static bool mirror_to_tty = false;
 
 void serial_set_mirror_to_tty(int enable) { mirror_to_tty = (enable != 0); }
 

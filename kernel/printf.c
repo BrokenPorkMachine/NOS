@@ -1,6 +1,5 @@
 #include <stdarg.h>
 #include "drivers/IO/serial.h"
-#include "drivers/IO/tty.h"
 #include "klib/stdio.h"
 #include "panic.h"
 
@@ -11,7 +10,9 @@
  * and avoids duplicate symbol definitions when linking.
  */
 void kcons_putc(int c) {
-    tty_putc((char)c);
+    if (c == '\n')
+        serial_write('\r');
+    serial_write((char)c);
 }
 
 int kprintf(const char *fmt, ...) {
