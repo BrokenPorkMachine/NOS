@@ -30,6 +30,70 @@ static void draw_char_fb(char c, int r, int cpos) {
     }
 }
 
+/* Helper that writes a character to the display without touching the
+ * serial port.  Used by both the TTY front-end and the low level serial
+ * driver to keep the framebuffer and VGA text buffer in sync. */
+static void tty_putc_screen(char c) {
+    if (use_fb && fb_info) {
+        if (c == '\n') {
+            col = 0;
+            if (++row >= (int)fb_rows)
+                row = 0;
+            return;
+        }
+        if (c == '\b') {
+            if (col > 0) {
+                --col;
+                draw_char_fb(' ', row, col);
+            }
+            return;
+        }
+        draw_char_fb(c, row, col);
+        if (++col >= (int)fb_cols) {
+            col = 0;
+            if (++row >= (int)fb_rows)
+                row = 0;
+        }
+    } else if (use_vga) {
+        volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF;
+        if (c == '\n') {
+            col = 0;
+            if (++row >= VGA_ROWS - 1)
+                row = VGA_ROWS - 2;
+            return;
+        }
+        if (c == '\b') {
+            if (col > 0) {
+                --col;
+                vga[row * VGA_COLS + col] = (0x0F << 8) | ' ';
+            }
+            return;
+        }
+        vga[row * VGA_COLS + col] = (0x0F << 8) | c;
+        if (++col >= VGA_COLS) {
+            col = 0;
+            if (++row >= VGA_ROWS - 1)
+                row = VGA_ROWS - 2;
+        }
+    } else {
+        /* VGA disabled: track cursor for serial-only environments */
+        if (c == '\n') {
+            col = 0;
+            if (++row >= VGA_ROWS - 1)
+                row = VGA_ROWS - 2;
+        } else if (c == '\b') {
+            if (col > 0)
+                --col;
+        } else {
+            if (++col >= VGA_COLS) {
+                col = 0;
+                if (++row >= VGA_ROWS - 1)
+                    row = VGA_ROWS - 2;
+            }
+        }
+    }
+}
+
 void tty_use_vga(int enable) {
     use_vga = enable;
 }
@@ -86,65 +150,11 @@ void tty_clear(void) {
 
 void tty_putc(char c) {
     serial_write(c);
-    if (use_fb && fb_info) {
-        if (c == '\n') {
-            col = 0;
-            if (++row >= (int)fb_rows)
-                row = 0;
-            return;
-        }
-        if (c == '\b') {
-            if (col > 0) {
-                --col;
-                draw_char_fb(' ', row, col);
-            }
-            return;
-        }
-        draw_char_fb(c, row, col);
-        if (++col >= (int)fb_cols) {
-            col = 0;
-            if (++row >= (int)fb_rows)
-                row = 0;
-        }
-    } else if (use_vga) {
-        volatile uint16_t *vga = (uint16_t *)VGA_TEXT_BUF;
-        if (c == '\n') {
-            col = 0;
-            if (++row >= VGA_ROWS - 1)
-                row = VGA_ROWS - 2;
-            return;
-        }
-        if (c == '\b') {
-            if (col > 0) {
-                --col;
-                vga[row * VGA_COLS + col] = (0x0F << 8) | ' ';
-            }
-            return;
-        }
-        vga[row * VGA_COLS + col] = (0x0F << 8) | c;
-        if (++col >= VGA_COLS) {
-            col = 0;
-            if (++row >= VGA_ROWS - 1)
-                row = VGA_ROWS - 2;
-        }
-    } else {
-        /* VGA disabled: output only to serial */
-        if (c == '\n') {
-            col = 0;
-            if (++row >= VGA_ROWS - 1)
-                row = VGA_ROWS - 2;
-        } else if (c == '\b') {
-            if (col > 0) {
-                --col;
-            }
-        } else {
-            if (++col >= VGA_COLS) {
-                col = 0;
-                if (++row >= VGA_ROWS - 1)
-                    row = VGA_ROWS - 2;
-            }
-        }
-    }
+}
+
+/* Write directly to the display without emitting on the serial port. */
+void tty_putc_noserial(char c) {
+    tty_putc_screen(c);
 }
 
 void tty_write(const char *s) {

@@ -3,6 +3,10 @@
 #include "../../kernel/IPC/ipc.h"
 #include "../../user/libc/libc.h"
 #include "../../user/agents/login/login.h"
+#include "../../user/rt/agent_abi.h"
+
+const AgentAPI *NOS = NULL;
+uint32_t NOS_TID = 0;
 
 static const char *input = "admin\nadmin\n";
 static size_t pos = 0;
@@ -24,6 +28,10 @@ int serial_read(void) {
     if (pos >= strlen(input)) return -1;
     return (unsigned char)input[pos++];
 }
+
+/* Stubs for TTY output used by the login server */
+void tty_clear(void) {}
+void tty_write(const char *s) { (void)s; }
 
 int main(void) {
     ipc_queue_t q; (void)q;
