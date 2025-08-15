@@ -14,15 +14,16 @@
 static FILE *console = NULL;
 volatile login_session_t current_session = {0};
 
-/* Simple output helper that favors the /dev/console device when available. */
+/* Always emit output through the TTY so the login prompt is visible even
+ * when /dev/console is a non-graphical handle.  Also mirror to the kernel's
+ * puts hook when available for debugging. */
 static void put_str(const char *s) {
+    tty_write(s);
+    if (NOS && NOS->puts)
+        NOS->puts(s);
     if (console) {
         fwrite(s, 1, strlen(s), console);
         fflush(console);
-    } else if (NOS && NOS->puts) {
-        NOS->puts(s);
-    } else {
-        tty_write(s);
     }
 }
 
@@ -76,7 +77,8 @@ void login_server(void *fs_q, uint32_t self_id) {
 
     serial_init();
 #ifndef LOGIN_UNIT_TEST
-    console = fopen("/dev/console", "r+");
+    /* Open the console only for input and rely on the TTY for output. */
+    console = fopen("/dev/console", "r");
 #endif
     tty_clear();
     put_str("[login] server starting\n");
