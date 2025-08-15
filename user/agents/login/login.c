@@ -13,7 +13,6 @@ volatile login_session_t current_session = {0};
 static void put_str(const char *s) {
     const char *p = s;
     while (*p)
-        tty_putc_noserial(*p++);
     if (NOS && NOS->puts)
         NOS->puts(s);
 }
