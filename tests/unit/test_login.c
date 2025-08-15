@@ -29,6 +29,10 @@ int serial_read(void) {
     return (unsigned char)input[pos++];
 }
 
+/* Stubs for TTY output used by the login server */
+void tty_clear(void) {}
+void tty_write(const char *s) { (void)s; }
+
 int main(void) {
     ipc_queue_t q; (void)q;
     login_server(&q, 0);

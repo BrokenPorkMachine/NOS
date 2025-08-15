@@ -5,14 +5,20 @@
 #else
 #include "../../../nosm/drivers/IO/serial.h"
 #endif
+#include "../../../nosm/drivers/IO/tty.h"
 
 #include <stdint.h>
 
 volatile login_session_t current_session = {0};
 
-/* Simple output helper that routes through the Agent API when available. */
+/* Simple output helper that uses the Agent API when available, otherwise
+ * falls back to the TTY driver directly. */
 static void put_str(const char *s) {
-    if (NOS && NOS->puts) NOS->puts(s);
+    if (NOS && NOS->puts) {
+        NOS->puts(s);
+    } else {
+        tty_write(s);
+    }
 }
 
 /* Block until a character is available from the serial port. */
@@ -55,6 +61,7 @@ void login_server(void *fs_q, uint32_t self_id) {
     (void)fs_q; (void)self_id;
 
     serial_init();
+    tty_clear();
     put_str("[login] server starting\n");
 
     char user[32];
