@@ -1,4 +1,5 @@
 #include "login.h"
+#include "../../rt/agent_abi.h"
 #ifndef LOGIN_UNIT_TEST
 #include "../../../nosm/drivers/IO/serial.c"
 #else
@@ -9,8 +10,10 @@
 
 volatile login_session_t current_session = {0};
 
-/* Simple output helper (no stdio). */
-static void put_str(const char *s) { serial_puts(s); }
+/* Simple output helper that routes through the Agent API when available. */
+static void put_str(const char *s) {
+    if (NOS && NOS->puts) NOS->puts(s);
+}
 
 /* Block until a character is available from the serial port. */
 static char getchar_block(void) {
