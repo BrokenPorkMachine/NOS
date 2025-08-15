@@ -10,8 +10,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
-static FILE *console = NULL;
 volatile login_session_t current_session = {0};
 
 /* Always emit output through the TTY so the login prompt is visible even
@@ -21,7 +19,8 @@ static void put_str(const char *s) {
     tty_write(s);
     if (NOS && NOS->puts)
         NOS->puts(s);
-    if (console) {
+
+  if (console) {
         fwrite(s, 1, strlen(s), console);
         fflush(console);
     } else {
@@ -34,17 +33,10 @@ static void put_str(const char *s) {
 
 /* Block until a character is available from the chosen input device. */
 static char getchar_block(void) {
-    if (console) {
-        unsigned char c;
-        while (fread(&c, 1, 1, console) != 1) {
-            for (volatile int i = 0; i < 10000; ++i)
-                __asm__ __volatile__("pause");
-        }
-        return (char)c;
-    }
-
     int ch;
     for (;;) {
+        ch = tty_getchar();
+        if (ch >= 0) return (char)ch;
         ch = serial_read();
         if (ch >= 0) return (char)ch;
         for (volatile int i = 0; i < 10000; ++i)
@@ -81,10 +73,6 @@ void login_server(void *fs_q, uint32_t self_id) {
     (void)fs_q; (void)self_id;
 
     serial_init();
-#ifndef LOGIN_UNIT_TEST
-    /* Open the console only for input and rely on the TTY for output. */
-    console = fopen("/dev/console", "r");
-#endif
     tty_clear();
     put_str("[login] server starting\n");
 
