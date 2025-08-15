@@ -1,10 +1,5 @@
 #include "login.h"
 #include "../../rt/agent_abi.h"
-#ifndef LOGIN_UNIT_TEST
-#include "../../../nosm/drivers/IO/serial.c"
-#else
-#include "../../../nosm/drivers/IO/serial.h"
-#endif
 #include "../../../nosm/drivers/IO/tty.h"
 
 #include <stdint.h>
@@ -12,11 +7,12 @@
 #include <string.h>
 volatile login_session_t current_session = {0};
 
-/* Always emit output through the TTY so the login prompt is visible even
- * when /dev/console is a non-graphical handle.  Also mirror to the kernel's
- * puts hook when available for debugging. */
+/* Always emit output directly to the display so the login prompt is visible
+ * even on systems lacking a UART.  Mirror to the kernel's puts hook when
+ * available for serial debugging. */
 static void put_str(const char *s) {
-    tty_write(s);
+    const char *p = s;
+    while (*p)
     if (NOS && NOS->puts)
         NOS->puts(s);
 }
@@ -26,9 +22,8 @@ static char getchar_block(void) {
     int ch;
     for (;;) {
         ch = tty_getchar();
-        if (ch >= 0) return (char)ch;
-        ch = serial_read();
-        if (ch >= 0) return (char)ch;
+        if (ch >= 0)
+            return (char)ch;
         for (volatile int i = 0; i < 10000; ++i)
             __asm__ __volatile__("pause");
     }
@@ -62,7 +57,6 @@ static void read_line(char *buf, size_t sz, int echo_asterisk) {
 void login_server(void *fs_q, uint32_t self_id) {
     (void)fs_q; (void)self_id;
 
-    serial_init();
     tty_clear();
     put_str("[login] server starting\n");
 
