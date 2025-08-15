@@ -4,6 +4,7 @@
 #include "../../arch/CPU/smp.h"
 #include <string.h>
 #include <printf.h>
+#include <stdatomic.h>
 
 // Simple production-ready NitroHeap implementation.
 // Provides size-class-based caching directly atop the buddy allocator.
@@ -20,6 +21,7 @@ typedef struct nh_block_header {
     nh_span_t* span;   // NULL for big allocations
     size_t     size;   // class size or big allocation size
     uint32_t   order;  // buddy order for big allocations
+    uint32_t   home_cpu;
 } nh_block_header_t;
 
 typedef struct nh_free_node {
@@ -36,9 +38,10 @@ typedef struct {
 } nh_magazine_t;
 
 typedef struct {
-    nh_free_node_t* freelist;      // central freelist
-    nh_span_t*      spans;
-    nh_magazine_t   magazines[NH_MAX_CPUS]; // per-CPU magazines
+    _Atomic(nh_free_node_t*) remote[NH_MAX_CPUS]; // cross-CPU frees
+    nh_free_node_t*          freelist;           // central freelist
+    nh_span_t*               spans;
+    nh_magazine_t            magazines[NH_MAX_CPUS]; // per-CPU magazines
 } nh_class_state_t;
 static nh_class_state_t nh_classes[NH_CLASS_LIMIT];
 
@@ -65,6 +68,25 @@ static void nh_remove_span_blocks(nh_class_state_t* cs, nh_span_t* sp) {
             } else {
                 mcur = &(*mcur)->next;
             }
+        }
+        nh_free_node_t* rhead = atomic_exchange(&cs->remote[cpu], NULL);
+        nh_free_node_t* keep = NULL;
+        while (rhead) {
+            nh_free_node_t* next = rhead->next;
+            nh_block_header_t* bh = ((nh_block_header_t*)rhead) - 1;
+            if (bh->span != sp) {
+                rhead->next = keep;
+                keep = rhead;
+            }
+            rhead = next;
+        }
+        while (keep) {
+            nh_free_node_t* next = keep->next;
+            nh_free_node_t* old = atomic_load(&cs->remote[cpu]);
+            do {
+                keep->next = old;
+            } while (!atomic_compare_exchange_weak(&cs->remote[cpu], &old, keep));
+            keep = next;
         }
     }
 }
@@ -117,6 +139,8 @@ void nitroheap_init(void) {
 
 void* nitro_kmalloc(size_t sz, size_t align) {
     int cls = size_class_for(sz, align);
+    uint32_t cpu = smp_cpu_index();
+    if (cpu >= NH_MAX_CPUS) cpu = 0;
     if (cls < 0) {
         size_t total = sizeof(nh_block_header_t) + sz;
         size_t alloc_bytes = PAGE_SIZE;
@@ -135,13 +159,25 @@ void* nitro_kmalloc(size_t sz, size_t align) {
         bh->span = NULL;
         bh->size = sz;
         bh->order = order;
+        bh->home_cpu = cpu;
         return bh + 1;
     }
 
     nh_class_state_t* cs = &nh_classes[cls];
-    uint32_t cpu = smp_cpu_index();
-    if (cpu >= NH_MAX_CPUS) cpu = 0;
     nh_magazine_t* mag = &cs->magazines[cpu];
+    nh_free_node_t* rem = atomic_exchange(&cs->remote[cpu], NULL);
+    while (rem) {
+        nh_free_node_t* next = rem->next;
+        if (mag->count >= NH_MAG_SIZE) {
+            rem->next = cs->freelist;
+            cs->freelist = rem;
+        } else {
+            rem->next = mag->head;
+            mag->head = rem;
+            mag->count++;
+        }
+        rem = next;
+    }
     if (!mag->head) {
         if (!cs->freelist && !nh_alloc_span(cls))
             return NULL;
@@ -158,6 +194,7 @@ void* nitro_kmalloc(size_t sz, size_t align) {
     mag->count--;
     nh_block_header_t* bh = ((nh_block_header_t*)node) - 1;
     bh->span->free_blocks--;
+    bh->home_cpu = cpu;
     return node;
 }
 
@@ -177,20 +214,29 @@ void nitro_kfree(void* p) {
     nh_class_state_t* cs = &nh_classes[bh->span->class_idx];
     uint32_t cpu = smp_cpu_index();
     if (cpu >= NH_MAX_CPUS) cpu = 0;
-    nh_magazine_t* mag = &cs->magazines[cpu];
+    uint32_t home = bh->home_cpu;
     nh_free_node_t* node = (nh_free_node_t*)p;
-    if (mag->count >= NH_MAG_SIZE) {
-        while (mag->head) {
-            nh_free_node_t* n = mag->head;
-            mag->head = n->next;
-            n->next = cs->freelist;
-            cs->freelist = n;
+    if (home != cpu && home < NH_MAX_CPUS) {
+        nh_free_node_t* head;
+        do {
+            head = atomic_load(&cs->remote[home]);
+            node->next = head;
+        } while (!atomic_compare_exchange_weak(&cs->remote[home], &head, node));
+    } else {
+        nh_magazine_t* mag = &cs->magazines[cpu];
+        if (mag->count >= NH_MAG_SIZE) {
+            while (mag->head) {
+                nh_free_node_t* n = mag->head;
+                mag->head = n->next;
+                n->next = cs->freelist;
+                cs->freelist = n;
+            }
+            mag->count = 0;
         }
-        mag->count = 0;
+        node->next = mag->head;
+        mag->head = node;
+        mag->count++;
     }
-    node->next = mag->head;
-    mag->head = node;
-    mag->count++;
     bh->span->free_blocks++;
     if (bh->span->free_blocks == bh->span->total_blocks) {
         nh_remove_span_blocks(cs, bh->span);
