@@ -138,7 +138,7 @@ void nitroheap_init(void) {
 }
 
 void* nitro_kmalloc(size_t sz, size_t align) {
-    int cls = size_class_for(sz, align);
+    int cls = nh_class_from_size(sz, align);
     uint32_t cpu = smp_cpu_index();
     if (cpu >= NH_MAX_CPUS) cpu = 0;
     if (cls < 0) {

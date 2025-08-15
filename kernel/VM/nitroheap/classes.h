@@ -9,5 +9,5 @@ typedef struct {
 extern const nh_size_class_t nh_size_classes[];
 extern const size_t nh_size_class_count;
 
-int size_class_for(size_t sz, size_t align);
-size_t class_align(int cls);
+int nh_class_from_size(size_t sz, size_t align);
+size_t nh_class_align(int cls);

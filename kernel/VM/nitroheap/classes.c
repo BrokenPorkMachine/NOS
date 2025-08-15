@@ -9,12 +9,13 @@ const nh_size_class_t nh_size_classes[] = {
     {1280,1024}, {1536,1024}, {1792,1024}, {2048,2048},
     {2560,2048}, {3072,2048}, {3584,2048}, {4096,4096},
     {5120,4096}, {6144,4096}, {7168,4096}, {8192,8192},
-    {12288,8192}, {16384,16384}
+    {12288,8192}, {16384,16384}, {24576,16384}, {32768,32768},
+    {49152,32768}, {65536,65536}, {98304,65536}, {131072,131072}
 };
 
 const size_t nh_size_class_count = sizeof(nh_size_classes)/sizeof(nh_size_classes[0]);
 
-int size_class_for(size_t sz, size_t align) {
+int nh_class_from_size(size_t sz, size_t align) {
     for (size_t i = 0; i < nh_size_class_count; ++i) {
         size_t csz = nh_size_classes[i].size;
         size_t cal = nh_size_classes[i].align;
@@ -24,7 +25,7 @@ int size_class_for(size_t sz, size_t align) {
     return -1;
 }
 
-size_t class_align(int cls) {
+size_t nh_class_align(int cls) {
     if (cls < 0 || (size_t)cls >= nh_size_class_count)
         return 0;
     return nh_size_classes[cls].align;
